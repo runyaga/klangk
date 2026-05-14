@@ -30,6 +30,10 @@ class _ChatPanelState extends State<ChatPanel> {
   late final StreamSubscription<AguiEvent> _eventSub;
   bool _agentRunning = false;
 
+  // Input history navigation
+  int _historyIndex = -1;
+  String _savedInput = '';
+
   // Buffer for streaming assistant text
   String _currentAssistantText = '';
   String? _currentMessageId;
@@ -224,9 +228,60 @@ class _ChatPanelState extends State<ChatPanel> {
     }
   }
 
+  List<String> get _userHistory {
+    return _entries
+        .where((e) => e.type == _EntryType.user)
+        .map((e) => e.content)
+        .toList();
+  }
+
+  void _navigateHistory(int direction) {
+    final history = _userHistory;
+    if (history.isEmpty) return;
+
+    final text = _inputController.text;
+    final selection = _inputController.selection;
+
+    if (direction < 0) {
+      // Up arrow: only if cursor is on the first line
+      final textBeforeCursor = text.substring(0, selection.baseOffset);
+      if (textBeforeCursor.contains('\n')) return; // not at top
+
+      if (_historyIndex == -1) {
+        _savedInput = text;
+        _historyIndex = history.length - 1;
+      } else if (_historyIndex > 0) {
+        _historyIndex--;
+      } else {
+        return;
+      }
+    } else {
+      // Down arrow: only if cursor is on the last line
+      final textAfterCursor = text.substring(selection.baseOffset);
+      if (textAfterCursor.contains('\n')) return; // not at bottom
+
+      if (_historyIndex == -1) return;
+      if (_historyIndex < history.length - 1) {
+        _historyIndex++;
+      } else {
+        // Back to saved input
+        _inputController.text = _savedInput;
+        _inputController.selection = TextSelection.collapsed(offset: _savedInput.length);
+        _historyIndex = -1;
+        return;
+      }
+    }
+
+    _inputController.text = history[_historyIndex];
+    _inputController.selection = TextSelection.collapsed(offset: history[_historyIndex].length);
+  }
+
   void _sendPrompt() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+
+    _historyIndex = -1;
+    _savedInput = '';
 
     setState(() {
       _entries.add(_ChatEntry(type: _EntryType.user, content: text));
@@ -297,6 +352,12 @@ class _ChatPanelState extends State<ChatPanel> {
                         event.logicalKey == LogicalKeyboardKey.enter &&
                         !HardwareKeyboard.instance.isShiftPressed) {
                       _sendPrompt();
+                    } else if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.arrowUp) {
+                      _navigateHistory(-1);
+                    } else if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _navigateHistory(1);
                     }
                   },
                   child: TextField(

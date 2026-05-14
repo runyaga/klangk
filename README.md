@@ -94,6 +94,8 @@ Each workspace gets its own Docker container with a bind-mounted directory. Pi s
 The agent has custom tools registered as Pi extensions that the LLM can call directly:
 - `word_count` — fast file stats (lines, words, characters, size)
 - `pig_latin` — text to Pig Latin converter
+- `celebrate` — triggers a confetti animation in the browser
+- `beep` — plays an audible beep tone in the browser
 
 To add your own: create a TypeScript file in `docker/extensions/`, rebuild the Docker image, and the tool will automatically appear in the LLM's tool list and in the dynamically generated `AGENTS.md`.
 

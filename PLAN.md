@@ -140,6 +140,8 @@ bark/
 - Current extensions:
   - `word_count` — fast file stats (lines, words, characters, size) via Python script
   - `pig_latin` — text to Pig Latin converter (pure TypeScript)
+  - `celebrate` — triggers confetti animation in the browser (frontend detects tool call)
+  - `beep` — plays an audible beep tone via Web Audio API (frontend detects tool call)
 
 ### Chat Interface
 - Markdown rendering for assistant responses (flutter_markdown)
@@ -149,6 +151,8 @@ bark/
 - Enter to send, Shift+Enter for newline
 - Abort button (red when agent running)
 - Conversation history persisted to SQLite and restored on workspace reload
+- Input history navigation (up/down arrow keys cycle through previous prompts)
+- Queued messages shown dimmed with "queued" label, persisted in SQLite
 - Persistent error snackbars with close button
 
 ### File Viewer

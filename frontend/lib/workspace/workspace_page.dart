@@ -10,6 +10,7 @@ import '../auth/auth_service.dart';
 import '../utils/backend_url.dart';
 import '../utils/page_title.dart';
 import '../widgets/bark_logo.dart';
+import '../widgets/beep.dart';
 import '../widgets/confetti.dart';
 import '../file_viewer/file_viewer_panel.dart';
 import '../layout/ide_layout.dart';
@@ -94,6 +95,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
         if (mounted) setState(() => _agentRunning = false);
       } else if (event.type == AguiEventType.toolCallStart && event.toolCallName == 'celebrate') {
         if (mounted) setState(() => _showConfetti = true);
+      } else if (event.type == AguiEventType.toolCallStart && event.toolCallName == 'beep') {
+        playBeep();
       }
     });
 
