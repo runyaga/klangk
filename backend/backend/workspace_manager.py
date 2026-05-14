@@ -12,10 +12,16 @@ def _workspace_path(user_id: str, name: str) -> Path:
     return WORKSPACES_ROOT / user_id / name
 
 
+def _sessions_path(user_id: str, name: str) -> Path:
+    return WORKSPACES_ROOT / user_id / f"{name}-sessions"
+
+
 async def create_workspace(user_id: str, name: str) -> dict:
     workspace = await user_store.create_workspace(user_id, name)
     path = _workspace_path(user_id, name)
     path.mkdir(parents=True, exist_ok=True)
+    sessions = _sessions_path(user_id, name)
+    sessions.mkdir(parents=True, exist_ok=True)
     return workspace
 
 
@@ -37,10 +43,19 @@ async def delete_workspace(workspace_id: str, user_id: str) -> bool:
         path = _workspace_path(user_id, workspace["name"])
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
+        sessions = _sessions_path(user_id, workspace["name"])
+        if sessions.exists():
+            shutil.rmtree(sessions, ignore_errors=True)
     return deleted
 
 
 def get_workspace_host_path(user_id: str, workspace_name: str) -> Path:
     path = _workspace_path(user_id, workspace_name)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_sessions_host_path(user_id: str, workspace_name: str) -> Path:
+    path = _sessions_path(user_id, workspace_name)
     path.mkdir(parents=True, exist_ok=True)
     return path

@@ -85,8 +85,9 @@ async def _start_workspace_container(ws: WebSocket, state: dict, workspace_id: s
     """Start/restart container, connect Pi RPC, start event forwarding, resume session."""
     user = state["user"]
     host_path = str(workspace_manager.get_workspace_host_path(user["id"], workspace["name"]))
+    sessions_path = str(workspace_manager.get_sessions_host_path(user["id"], workspace["name"]))
     container_id, container_status = await container_manager.start_container(
-        workspace_id, host_path, workspace.get("container_id")
+        workspace_id, host_path, sessions_path, workspace.get("container_id")
     )
     state["container_status"] = container_status
 
@@ -280,10 +281,9 @@ async def _resume_pi_session(ws: WebSocket, pi_client: PiRpcClient, workspace_id
     try:
         await asyncio.sleep(1)  # Give Pi a moment to finish startup
 
-        # Find the most recent session file in the workspace's Pi sessions dir
-        host_path = str(workspace_manager.get_workspace_host_path(user_id, workspace_name))
-        sessions_dir = f"{host_path}/.pi/sessions"
-        session_files = sorted(glob.glob(f"{sessions_dir}/**/*.jsonl", recursive=True))
+        # Find the most recent session file in the sessions dir
+        sessions_host = str(workspace_manager.get_sessions_host_path(user_id, workspace_name))
+        session_files = sorted(glob.glob(f"{sessions_host}/**/*.jsonl", recursive=True))
 
         if not session_files:
             logger.info("No Pi sessions to resume for workspace %s", workspace_id)
@@ -292,7 +292,7 @@ async def _resume_pi_session(ws: WebSocket, pi_client: PiRpcClient, workspace_id
         # Resume the most recent session
         most_recent = session_files[-1]
         # Convert host path to container path
-        container_path = most_recent.replace(host_path, "/workspace")
+        container_path = most_recent.replace(sessions_host, "/home/bark/.pi/sessions")
 
         await pi_client.send_command({
             "type": "switch_session",

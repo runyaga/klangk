@@ -62,6 +62,7 @@ async def get_docker() -> aiodocker.Docker:
 async def start_container(
     workspace_id: str,
     host_path: str,
+    sessions_path: str,
     existing_container_id: str | None = None,
 ) -> tuple[str, str]:
     """Start (or restart) a Pi container for a workspace.
@@ -112,7 +113,10 @@ async def start_container(
     config = {
         "Image": IMAGE_NAME,
         "HostConfig": {
-            "Binds": [f"{host_path}:/workspace"],
+            "Binds": [
+                f"{host_path}:/workspace",
+                f"{sessions_path}:/home/bark/.pi/sessions",
+            ],
             "PortBindings": port_bindings,
         },
         "ExposedPorts": exposed_ports,

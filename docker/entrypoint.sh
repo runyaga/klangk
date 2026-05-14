@@ -51,13 +51,10 @@ cat > "$PI_AGENT_DIR/settings.json" << EOF
 }
 EOF
 
-# Ensure workspace session dir exists and is writable
-mkdir -p /workspace/.pi/sessions
-
 # Fix ownership: bark's home + workspace directory
+# /home/bark/.pi/sessions is bind-mounted from the host by container_manager
 chown -R bark:bark /home/bark
 chown bark:bark /workspace
-chown -R bark:bark /workspace/.pi
 
 # Allow bark to use git in /workspace
 su bark -c "git config --global --add safe.directory /workspace" 2>/dev/null
@@ -109,10 +106,17 @@ if [ -d "$PI_AGENT_DIR/extensions" ] && [ "$(ls "$PI_AGENT_DIR/extensions"/*.ts 
   done
 fi
 
-# Remove stale AGENTS.md from workspace if left over from older containers
+# Remove stale AGENTS.md from workspace left over from older containers
 rm -f /workspace/AGENTS.md
+
+# Migrate sessions from old location (/workspace/.pi/sessions) to new bind mount
+if [ -d /workspace/.pi/sessions ] && [ "$(ls /workspace/.pi/sessions/ 2>/dev/null)" ]; then
+  cp -rn /workspace/.pi/sessions/* /home/bark/.pi/sessions/ 2>/dev/null
+  chown -R bark:bark /home/bark/.pi/sessions
+fi
+rm -rf /workspace/.pi
 
 # Drop to bark user and run Pi
 # --no-context-files: don't look for AGENTS.md in workspace
 # --append-system-prompt: inject instructions via system prompt instead
-exec su bark -c "PI_CODING_AGENT_DIR=$PI_AGENT_DIR exec pi --mode rpc --no-context-files --append-system-prompt $SYSTEM_PROMPT_FILE --session-dir /workspace/.pi/sessions"
+exec su bark -c "PI_CODING_AGENT_DIR=$PI_AGENT_DIR exec pi --mode rpc --no-context-files --append-system-prompt $SYSTEM_PROMPT_FILE --session-dir /home/bark/.pi/sessions"
