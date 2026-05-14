@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../auth/auth_service.dart';
 import 'agui_events.dart';
+import '../utils/backend_url.dart';
 
 /// Manages WebSocket connection to the Bark backend, sending commands
 /// and streaming AG-UI events.
@@ -11,7 +12,7 @@ class AguiClient extends ChangeNotifier {
   static String get _wsBaseUrl {
     final loc = Uri.base;
     final wsScheme = loc.scheme == 'https' ? 'wss' : 'ws';
-    return '$wsScheme://${loc.host}:${loc.port}/ws';
+    return '$wsScheme://${loc.host}:${loc.port}$baseUrl/ws';
   }
 
   WebSocketChannel? _channel;

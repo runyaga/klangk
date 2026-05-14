@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../agui/agui_client.dart';
+import '../utils/backend_url.dart';
 import '../agui/agui_events.dart';
 import 'file_upload.dart';
 
@@ -23,7 +24,7 @@ class FileViewerPanel extends StatefulWidget {
 }
 
 class _FileViewerPanelState extends State<FileViewerPanel> {
-  static const _baseUrl = '';
+  String get _baseUrl => baseUrl;
   List<Map<String, dynamic>> _entries = [];
   String _currentPath = '.';
   String? _selectedFile;

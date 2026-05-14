@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../agui/agui_client.dart';
 import '../agui/agui_events.dart';
 import '../auth/auth_service.dart';
+import '../utils/backend_url.dart';
 import '../utils/page_title.dart';
 import '../widgets/bark_logo.dart';
 import '../file_viewer/file_viewer_panel.dart';
@@ -24,7 +25,7 @@ class WorkspacePage extends StatefulWidget {
 }
 
 class _WorkspacePageState extends State<WorkspacePage> {
-  static const _baseUrl = '';
+  String get _baseUrl => baseUrl;
   bool _connecting = true;
   String? _error;
   String _workspaceName = '';

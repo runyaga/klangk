@@ -6,6 +6,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_highlight/themes/monokai-sublime.dart';
 import 'package:highlight/highlight.dart' show highlight, Node;
 import 'package:http/http.dart' as http;
+import '../utils/backend_url.dart';
 import '../agui/agui_client.dart';
 import '../agui/agui_events.dart';
 
@@ -44,7 +45,7 @@ class _ChatPanelState extends State<ChatPanel> {
     if (widget.workspaceId == null || widget.authToken == null) return;
     try {
       final response = await http.get(
-        Uri.parse('/workspaces/${widget.workspaceId}/messages'),
+        Uri.parse('$baseUrl/workspaces/${widget.workspaceId}/messages'),
         headers: {'Authorization': 'Bearer ${widget.authToken}'},
       );
       if (response.statusCode == 200) {

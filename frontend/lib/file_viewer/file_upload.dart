@@ -1,6 +1,7 @@
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../utils/backend_url.dart';
 
 class FileDropZone extends StatefulWidget {
   final String workspaceId;
@@ -21,7 +22,7 @@ class FileDropZone extends StatefulWidget {
 }
 
 class _FileDropZoneState extends State<FileDropZone> {
-  static const _baseUrl = '';
+  String get _baseUrl => baseUrl;
   bool _dragging = false;
   bool _uploading = false;
 
