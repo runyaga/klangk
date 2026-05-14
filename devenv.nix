@@ -16,22 +16,37 @@
     docker-client
   ];
 
+  tasks = {
+    "bark:flutter-build" = {
+      exec = "flutterbuildweb";
+      execIfModified = [
+        "frontend/lib"
+        "frontend/web"
+        "frontend/pubspec.yaml"
+        "frontend/pubspec.lock"
+      ];
+    };
+    "bark:docker-build" = {
+      exec = "dockerbuild";
+      execIfModified = [
+        "docker/Dockerfile"
+        "docker/entrypoint.sh"
+        "docker/extensions"
+        "docker/tools"
+      ];
+    };
+  };
+
   processes = {
-    backend.exec = ''
-      cd $DEVENV_ROOT
-      # Build frontend if not already built
-      if [ ! -d frontend/build/web ]; then
-        echo "Building Flutter app..."
-        flutterbuildweb
-      fi
-      # Build Pi agent Docker image if not already built or Dockerfile changed
-      if ! docker image inspect bark-pi >/dev/null 2>&1 || \
-         [ docker/Dockerfile -nt "$(docker image inspect bark-pi --format='{{.Created}}' 2>/dev/null || echo '0')" ]; then
-        echo "Building bark-pi Docker image..."
-        dockerbuild
-      fi
-      cd backend && uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8997
-    '';
+    backend = {
+      exec = ''
+        cd $DEVENV_ROOT/backend && uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8997
+      '';
+      after = [
+        "bark:flutter-build"
+        "bark:docker-build"
+      ];
+    };
   };
 
   dotenv.enable = true;
