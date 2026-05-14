@@ -71,7 +71,8 @@ async def start_container(
     """
     docker = await get_docker()
 
-    # Try to restart existing container
+    # Check existing container — if running, reuse; if stopped, remove and recreate
+    # (recreate ensures the entrypoint runs fresh, picking up new extensions/AGENTS.md)
     if existing_container_id:
         try:
             container = await docker.containers.get(existing_container_id)
@@ -79,12 +80,11 @@ async def start_container(
             if info["State"]["Running"]:
                 _track_activity(existing_container_id, workspace_id)
                 return existing_container_id, "connected"
-            await container.start()
-            _track_activity(existing_container_id, workspace_id)
-            logger.info("Restarted container %s for workspace %s", existing_container_id, workspace_id)
-            return existing_container_id, "restarted"
+            # Stopped container: remove it so we recreate with fresh entrypoint
+            await container.delete(force=True)
+            logger.info("Removed stopped container %s for workspace %s, will recreate", existing_container_id, workspace_id)
         except aiodocker.exceptions.DockerError:
-            logger.info("Could not restart container %s, creating new one", existing_container_id)
+            logger.info("Could not find container %s, creating new one", existing_container_id)
 
     # Allocate port range for this workspace
     start_port, end_port = _allocate_port_range(workspace_id)
