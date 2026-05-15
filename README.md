@@ -86,7 +86,6 @@ Workspace files on disk
 - **Backend**: FastAPI serving both API and frontend static files on a single port
 - **Agent**: Pi coding agent in RPC mode with Ollama (cloud or self-hosted, configurable model)
 - **Protocol**: [AG-UI](https://docs.ag-ui.com/) for standardized agent-user communication
-- **Soliplex**: Optional RAG knowledge base integration via client-side tools
 
 Each workspace gets its own Docker container with a bind-mounted directory. Pi sessions persist across container restarts, and conversation history is stored in SQLite.
 

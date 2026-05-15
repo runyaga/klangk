@@ -353,11 +353,11 @@ LLM calls tool → Pi extension execute()
 
 ### Soliplex integration
 
+Soliplex has its own Bark plugins currently hosted on the `bark-integration` branch of the Soliplex repository within `bark-plugin`.  The `bark` repository has some sops to Soliplex integration, namely that it starts an nginx service that is unnecessary for non-integraion scenarios.
+
 The Soliplex tools run entirely in the browser, which has the user's Soliplex authentication cookies. When deployed behind nginx on the same domain, the browser can call Soliplex APIs directly with no CORS issues. The backend serves a `/api/config` endpoint that tells the frontend where Soliplex is located (via `SOLIPLEX_URL` env var).
 
 The query flow: frontend creates a thread in the Soliplex room, posts the user's question as an AG-UI `RunAgentInput`, collects the streamed SSE response, extracts `TEXT_MESSAGE_CONTENT` deltas, and returns the assembled text to the Pi extension.
-
-Soliplex has its own Bark plugins:
 
 - **soliplex_list_rooms** (external, via `plugins.yaml`): Lists available Soliplex knowledge base rooms
 - **soliplex_query** (external, via `plugins.yaml`): Queries a Soliplex room via AG-UI (creates thread, posts question, collects SSE response). Default room: `search`
