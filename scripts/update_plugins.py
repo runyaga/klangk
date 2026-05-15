@@ -184,7 +184,8 @@ def main():
     print(f"Fetching {len(plugins)} plugin{'s' if len(plugins) != 1 else ''}...")
 
     # Preserve existing lock entries when updating a single plugin
-    lock_map = read_lock()
+    old_lock = read_lock()
+    lock_map = dict(old_lock)
 
     for plugin in plugins:
         if "git" not in plugin:
@@ -193,6 +194,17 @@ def main():
         entry = fetch_plugin(plugin, PLUGINS_DIR)
         if entry:
             lock_map[entry["name"]] = entry
+
+    # Remove plugins that were in the old lockfile but dropped from plugins.yaml
+    if not only:
+        yaml_names = {plugin_name(p) for p in config.get("plugins", []) if "git" in p}
+        for name in list(lock_map):
+            if name not in yaml_names:
+                plugin_dir = os.path.join(PLUGINS_DIR, name)
+                if os.path.isdir(plugin_dir):
+                    shutil.rmtree(plugin_dir)
+                    print(f"  Removed {name} (no longer in plugins.yaml)")
+                del lock_map[name]
 
     write_lock(list(lock_map.values()), LOCK_PATH)
     print(f"Wrote {LOCK_PATH} with {len(lock_map)} plugins")
