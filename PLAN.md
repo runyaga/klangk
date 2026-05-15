@@ -372,6 +372,7 @@ nginx reverse proxy (port 8995)
 ## TODO
 
 - **Configurable data directory**: Allow `BARK_DATA_DIR` to be set by the user instead of hardcoding it to `$DEVENV_STATE/.bark`. This would let Bark store its database, workspace files, and Pi sessions in a user-chosen location, similar to how `BARK_PLUGINS_DIR` works for plugins. Useful for deployments outside devenv or when data should persist independently of the devenv state directory.
+- **Plugin directory structure**: Consider whether each plugin should have explicit subdirectories for different file types (e.g., `dart/` for Flutter code, `extension/` for TypeScript, `tools/` for server-side scripts) instead of the current flat layout where `gen_plugins.py` copies all `*.dart` files and `dockerbuild` picks up `extension.ts` by name. Subdirectories would simplify the copying logic and make it clearer what goes where.
 - **Plugin version numbers**: Plugins may want their own version numbers (in `plugin.yaml` or similar metadata) for compatibility checking, display in the UI, and meaningful pinning beyond git refs.
 - **Read-only root filesystem**: Use `--read-only` Docker flag to make the container's root filesystem unwritable. Only `/workspace` (bind mount) and necessary tmpfs mounts (`/tmp`, `/root/.pi`) should be writable. This prevents the agent from modifying system files or installing packages outside the workspace.
 - **Container resource limits**: Add CPU/memory limits to containers to prevent runaway processes.
