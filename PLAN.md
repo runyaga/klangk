@@ -23,8 +23,8 @@ Python/FastAPI backend (port 8997, serves API + frontend static files)
     ├── Message history (SQLite)
     ↕ docker attach subprocess
 Pi container per workspace (stdin/stdout JSON-RPC)
-    ├── Pi extensions (from plugins/*/extension.ts)
-    ├── Server-side tools (from plugins/*/tools/)
+    ├── Pi extensions (from $BARK_PLUGINS_DIR/*/extension.ts)
+    ├── Server-side tools (from $BARK_PLUGINS_DIR/*/tools/)
     ├── AGENTS.md (dynamically generated on container start)
     ↕ bind mount
 $DEVENV_STATE/.bark/workspaces/<user-id>/<workspace-name>/
@@ -263,20 +263,20 @@ All tools live in `$BARK_PLUGINS_DIR/<name>/` directories. A plugin can contain:
 A plugin needs at minimum an `extension.ts`. The `plugin.dart` is only needed for client-side tools that delegate execution to the browser via `ctx.ui.input("HOST_TOOL_REQUEST", ...)`.
 
 **Build integration:**
-- `scripts/gen_plugins.py` scans `plugins/*/plugin.dart`, copies `.dart` files into `frontend/lib/tools/plugins/`, and generates `plugins_generated.dart`
+- `scripts/gen_plugins.py` scans `$BARK_PLUGINS_DIR/*/plugin.dart`, copies `.dart` files into `frontend/lib/tools/plugins/`, and generates `plugins_generated.dart`
 - `dockerbuild` collects `extension.ts` and `tools/` files from all plugins into the Docker build context
 - `flutterbuildweb` runs the codegen before compiling
 - Both are triggered automatically by `devenv up` via `execIfModified`
 
 **Adding a plugin:**
-1. Create `plugins/<name>/extension.ts` with `pi.registerTool()` 
+1. Create `$BARK_PLUGINS_DIR/<name>/extension.ts` with `pi.registerTool()` 
 2. For client-side tools, add `plugin.dart` extending `ToolPlugin` with action handlers
-3. For server-side scripts, add files in `plugins/<name>/tools/`
-4. `devenv up` rebuilds automatically when `plugins/` changes
+3. For server-side scripts, add files in `$BARK_PLUGINS_DIR/<name>/tools/`
+4. `devenv up` rebuilds automatically when `$BARK_PLUGINS_DIR` changes
 
 **Plugin management:**
 
-All plugins live in `plugins/` (gitignored). Plugins are declared in `plugins/plugins.yaml`. Each entry requires `name` and `git`; `path` and `ref` are optional:
+Plugins are declared in `$BARK_PLUGINS_DIR/plugins.yaml`. Each entry requires `name` and `git`; `path` and `ref` are optional:
 
 ```yaml
 plugins:
@@ -313,7 +313,7 @@ plugins:
   - If `plugins.yaml` exists, fetches listed plugins, resolves git refs to commit SHAs, and writes `plugins.lock`
 - `update-plugins` — devenv script alias that runs `python3 scripts/update_plugins.py "$@"`
 - `update-plugins <name>` — fetch/update a single plugin by name, preserving other lock entries
-- `plugins/` — directory in the Bark repo containing starter plugins. These aren't special — they're just plugins that happen to live in the same repo and are included in the generated template.
+- `plugins/` — directory in the Bark repo containing starter plugin source. These aren't special — they're just plugins that happen to live in the same repo and are referenced in the generated template.
 - `plugins.lock` — records resolved commit SHAs for reproducible builds
 - On first `devenv up`, if `plugins.yaml` exists but no lockfile is found, `update-plugins` runs automatically. After that, updates are explicit only.
 - Local plugin development: drop a directory into `$BARK_PLUGINS_DIR` directly — the build system treats it the same as a fetched plugin.
