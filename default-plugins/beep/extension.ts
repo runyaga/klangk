@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 export default function (pi: any) {
   pi.registerTool({
     name: "beep",
+    label: "Beep",
     description: "Play a beep sound in the user's browser. Use when the user asks for an audible alert, notification, or beep.",
     parameters: Type.Object({
       frequency: Type.Optional(Type.Number({ description: "Frequency in Hz (default 440)" })),
