@@ -128,6 +128,8 @@
       # Server-side tools (any files in tools/ subdir)
       [ -d "$d/tools" ] && cp -r "$d/tools/"* docker/tools/ 2>/dev/null
     done
+    # Remove old containers before rebuilding so they get recreated from the new image
+    docker ps -a --filter ancestor=bark-pi -q | xargs -r docker rm -f
     docker build --platform linux/amd64 -t bark-pi docker/
   '';
 
