@@ -287,9 +287,10 @@ plugins:
     ref: v2.0.0
 ```
 
-- `update-plugins` — explicit devenv script:
+- `scripts/update_plugins.py` — Python script that manages plugin fetching:
   - If `plugins/` doesn't exist, creates it with a template `plugins.yaml` that includes the default plugins (celebrate, beep) pointing at `default-plugins/` in the Bark repo
   - If `plugins/plugins.yaml` exists, fetches listed plugins into `plugins/`, resolves git refs to commit SHAs, and writes `plugins/plugins.lock`
+- `update-plugins` — devenv script alias that runs `python3 scripts/update_plugins.py`
 - `default-plugins/` — directory in the Bark repo containing starter plugins (celebrate, beep). These aren't special — they're just plugins that happen to live in the same repo and are included in the generated template.
 - `plugins/plugins.lock` — records resolved commit SHAs for reproducible builds
 - On first `devenv up`, if `plugins/plugins.yaml` exists but no lockfile is found, `update-plugins` runs automatically. After that, updates are explicit only.
