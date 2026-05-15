@@ -25,6 +25,7 @@
         "frontend/web"
         "frontend/pubspec.yaml"
         "frontend/pubspec.lock"
+        "plugins"
       ];
     };
     "bark:docker-build" = {
@@ -32,7 +33,7 @@
       execIfModified = [
         "docker/Dockerfile"
         "docker/entrypoint.sh"
-        "docker/extensions"
+        "plugins"
         "docker/tools"
       ];
     };
@@ -109,12 +110,22 @@
 
   scripts.flutterbuildweb.exec = ''
     cd $DEVENV_ROOT
+    python3 scripts/gen_plugins.py
     cd frontend && flutter pub get && flutter build web --base-href=/bark/
     rm -f build/web/flutter_service_worker.js
   '';
 
   scripts.dockerbuild.exec = ''
     cd $DEVENV_ROOT
+    # Collect plugin extension.ts files into docker/extensions/
+    rm -rf docker/extensions
+    mkdir -p docker/extensions
+    for d in plugins/*/; do
+      if [ -f "$d/extension.ts" ]; then
+        name=$(basename "$d")
+        cp "$d/extension.ts" "docker/extensions/$name.ts"
+      fi
+    done
     docker build --platform linux/amd64 -t bark-pi docker/
   '';
 

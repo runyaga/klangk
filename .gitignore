@@ -42,5 +42,10 @@ Thumbs.db
 # Bark data
 .bark/
 
+# Generated
+docker/extensions/
+frontend/lib/tools/plugins_generated.dart
+frontend/lib/tools/plugins/
+
 # Claude
 .claude/

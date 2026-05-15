@@ -10,13 +10,12 @@ import '../auth/auth_service.dart';
 import '../utils/backend_url.dart';
 import '../utils/page_title.dart';
 import '../widgets/bark_logo.dart';
-import '../widgets/beep.dart';
-import '../widgets/confetti.dart';
 import '../file_viewer/file_viewer_panel.dart';
 import '../layout/ide_layout.dart';
 import '../output/output_panel.dart';
 import '../terminal/chat_panel.dart';
-import '../tools/soliplex_tools.dart';
+import '../tools/tool_plugin.dart';
+import '../tools/plugins_generated.dart';
 
 class WorkspacePage extends StatefulWidget {
   final String workspaceId;
@@ -33,12 +32,18 @@ class _WorkspacePageState extends State<WorkspacePage> {
   String? _error;
   String _workspaceName = '';
   bool _agentRunning = false;
-  bool _showConfetti = false;
   StreamSubscription? _eventSub;
+  late final ToolPluginRegistry _pluginRegistry;
+  late final List<ToolPlugin> _plugins;
 
   @override
   void initState() {
     super.initState();
+    _pluginRegistry = ToolPluginRegistry();
+    _plugins = createAllPlugins();
+    for (final plugin in _plugins) {
+      _pluginRegistry.register(plugin);
+    }
     _fetchWorkspaceName();
     // Delay connect until after first frame so child widgets (OutputPanel etc.) are subscribed
     WidgetsBinding.instance.addPostFrameCallback((_) => _connectToWorkspace());
@@ -131,37 +136,15 @@ class _WorkspacePageState extends State<WorkspacePage> {
     final aguiClient = context.read<AguiClient>();
 
     // Handle HOST_TOOL_REQUEST: extensions use ctx.ui.input("HOST_TOOL_REQUEST", jsonPayload)
-    // to delegate actions to the browser
+    // to delegate actions to the browser. Dispatch to plugin registry.
     if (method == 'input' && title == 'HOST_TOOL_REQUEST') {
       final payload = value['placeholder'] as String? ?? '{}';
       try {
         final request = Map<String, dynamic>.from(
           json.decode(payload) as Map,
         );
-        final action = request['action'] as String?;
-        String responseText;
-
-        switch (action) {
-          case 'celebrate':
-            if (mounted) setState(() => _showConfetti = true);
-            responseText = 'Celebration triggered! ${request['reason'] ?? ''}';
-            break;
-          case 'beep':
-            playBeep();
-            responseText = 'Beep played! (${request['frequency'] ?? 440}Hz, ${request['duration'] ?? 600}ms)';
-            break;
-          case 'soliplex_list_rooms':
-            responseText = await _soliplexListRooms();
-            break;
-          case 'soliplex_query':
-            responseText = await _soliplexQuery(
-              request['room_id'] as String? ?? 'search',
-              request['question'] as String? ?? '',
-            );
-            break;
-          default:
-            responseText = 'Unknown action: $action';
-        }
+        final action = request['action'] as String? ?? '';
+        final responseText = await _pluginRegistry.dispatch(action, request);
         aguiClient.sendExtensionUiResponse(id, value: responseText);
       } catch (e) {
         aguiClient.sendExtensionUiResponse(id, value: 'Error: $e');
@@ -174,28 +157,6 @@ class _WorkspacePageState extends State<WorkspacePage> {
     aguiClient.sendExtensionUiResponse(id, cancelled: true);
   }
 
-  Future<String> _soliplexListRooms() async {
-    try {
-      final client = SoliplexClient();
-      final rooms = await client.listRooms();
-      if (rooms.isEmpty) return 'No rooms available.';
-      return rooms.map((r) =>
-        '- ${r['room_id'] ?? r['id']}: ${r['name'] ?? 'unnamed'} — ${r['description'] ?? 'no description'}'
-      ).join('\n');
-    } catch (e) {
-      return 'Error listing rooms: $e';
-    }
-  }
-
-  Future<String> _soliplexQuery(String roomId, String question) async {
-    if (question.isEmpty) return 'Error: question is required';
-    try {
-      final client = SoliplexClient();
-      return await client.queryRoom(roomId, question);
-    } catch (e) {
-      return 'Error querying Soliplex: $e';
-    }
-  }
 
   @override
   void deactivate() {
@@ -210,6 +171,9 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
   @override
   void dispose() {
+    for (final plugin in _plugins) {
+      plugin.dispose();
+    }
     super.dispose();
   }
 
@@ -295,12 +259,9 @@ class _WorkspacePageState extends State<WorkspacePage> {
             ),
             output: OutputPanel(aguiClient: aguiClient),
           ),
-          if (_showConfetti)
-            Positioned.fill(
-              child: ConfettiOverlay(
-                onComplete: () => setState(() => _showConfetti = false),
-              ),
-            ),
+          for (final plugin in _plugins)
+            if (plugin.buildOverlay(context) != null)
+              plugin.buildOverlay(context)!,
         ],
       ),
     );
