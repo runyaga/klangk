@@ -21,6 +21,7 @@
   tasks = {
     "bark:flutter-build" = {
       exec = "flutterbuildweb";
+      showOutput = true;
       execIfModified = [
         "frontend/lib"
         "frontend/web"
@@ -32,6 +33,7 @@
     };
     "bark:docker-build" = {
       exec = "dockerbuild";
+      showOutput = true;
       execIfModified = [
         "docker/Dockerfile"
         "docker/entrypoint.sh"
