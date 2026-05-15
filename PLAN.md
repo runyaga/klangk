@@ -307,6 +307,7 @@ plugins:
 - `scripts/update_plugins.py` — Python script that manages plugin fetching:
   - If `$BARK_PLUGINS_DIR` doesn't exist, creates it with a template `plugins.yaml` that includes sample plugins (celebrate, beep, pig-latin, word-count)
   - If `plugins.yaml` exists, fetches listed plugins, resolves git refs to commit SHAs, and writes `plugins.lock`
+  - On full update, removes fetched plugin directories that are no longer listed in `plugins.yaml` (local-only plugins not in the lockfile are left alone)
 - `update-plugins` — devenv script alias that runs `python3 scripts/update_plugins.py "$@"`
 - `update-plugins <name>` — fetch/update a single plugin by name, preserving other lock entries
 - `plugins/` — directory in the Bark repo containing starter plugin source. These aren't special — they're just plugins that happen to live in the same repo and are referenced in the generated template.
