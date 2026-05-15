@@ -109,6 +109,14 @@ class AguiClient extends ChangeNotifier {
     _send({'cmd': 'ui_ready'});
   }
 
+  void sendExtensionUiResponse(String id, {String? value, bool? cancelled, bool? confirmed}) {
+    final msg = <String, dynamic>{'cmd': 'extension_ui_response', 'id': id};
+    if (value != null) msg['value'] = value;
+    if (cancelled == true) msg['cancelled'] = true;
+    if (confirmed != null) msg['confirmed'] = confirmed;
+    _send(msg);
+  }
+
   void sendPrompt(String text) {
     _send({'cmd': 'prompt', 'text': text});
   }

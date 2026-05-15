@@ -87,16 +87,14 @@ class _WorkspacePageState extends State<WorkspacePage> {
     // Listen for workspace_ready
     aguiClient.addListener(_onClientUpdate);
 
-    // Track agent running state and celebrate events
+    // Track agent running state and extension UI requests
     _eventSub = aguiClient.events.listen((event) {
       if (event.type == AguiEventType.runStarted) {
         if (mounted) setState(() => _agentRunning = true);
       } else if (event.type == AguiEventType.runFinished || event.type == AguiEventType.runError) {
         if (mounted) setState(() => _agentRunning = false);
-      } else if (event.type == AguiEventType.toolCallStart && event.toolCallName == 'celebrate') {
-        if (mounted) setState(() => _showConfetti = true);
-      } else if (event.type == AguiEventType.toolCallStart && event.toolCallName == 'beep') {
-        playBeep();
+      } else if (event.type == AguiEventType.custom && event.customName == 'extension_ui_request') {
+        _handleExtensionUiRequest(event);
       }
     });
 
@@ -117,6 +115,53 @@ class _WorkspacePageState extends State<WorkspacePage> {
         aguiClient.sendUiReady();
       });
     }
+  }
+
+  Future<void> _handleExtensionUiRequest(AguiEvent event) async {
+    final value = event.customValue as Map<String, dynamic>?;
+    if (value == null) return;
+
+    final id = value['id'] as String?;
+    final method = value['method'] as String?;
+    final title = value['title'] as String?;
+
+    if (id == null || method == null) return;
+
+    final aguiClient = context.read<AguiClient>();
+
+    // Handle HOST_TOOL_REQUEST: extensions use ctx.ui.input("HOST_TOOL_REQUEST", jsonPayload)
+    // to delegate actions to the browser
+    if (method == 'input' && title == 'HOST_TOOL_REQUEST') {
+      final payload = value['placeholder'] as String? ?? '{}';
+      try {
+        final request = Map<String, dynamic>.from(
+          json.decode(payload) as Map,
+        );
+        final action = request['action'] as String?;
+        String responseText;
+
+        switch (action) {
+          case 'celebrate':
+            if (mounted) setState(() => _showConfetti = true);
+            responseText = 'Celebration triggered! ${request['reason'] ?? ''}';
+            break;
+          case 'beep':
+            playBeep();
+            responseText = 'Beep played! (${request['frequency'] ?? 440}Hz, ${request['duration'] ?? 600}ms)';
+            break;
+          default:
+            responseText = 'Unknown action: $action';
+        }
+        aguiClient.sendExtensionUiResponse(id, value: responseText);
+      } catch (e) {
+        aguiClient.sendExtensionUiResponse(id, value: 'Error: $e');
+      }
+      return;
+    }
+
+    // For other extension UI requests (select, confirm, etc.), cancel them
+    // since we don't have a UI for them yet
+    aguiClient.sendExtensionUiResponse(id, cancelled: true);
   }
 
   @override

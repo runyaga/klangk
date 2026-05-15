@@ -137,6 +137,14 @@ def translate_event(pi_event: dict, workspace_id: str) -> list[dict]:
             "code": pi_event.get("code"),
         })
 
+    elif event_type == "extension_ui_request":
+        # Forward extension UI requests to the frontend for client-side handling
+        agui_events.append({
+            "type": "CUSTOM",
+            "name": "extension_ui_request",
+            "value": pi_event,
+        })
+
     else:
         # Forward unknown events as CUSTOM
         agui_events.append({

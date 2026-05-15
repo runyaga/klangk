@@ -128,6 +128,16 @@ class _OutputPanelState extends State<OutputPanel> {
             content: reason.toString(),
             timestamp: DateTime.now(),
           );
+        } else if (event.customName == 'extension_ui_request') {
+          final value = event.customValue;
+          final method = value is Map ? (value['method'] ?? '') : '';
+          final title = value is Map ? (value['title'] ?? '') : '';
+          entry = _OutputEntry(
+            type: _EntryType.toolCall,
+            title: 'Extension UI: $method',
+            content: title.length > 100 ? '${title.substring(0, 100)}...' : title,
+            timestamp: DateTime.now(),
+          );
         } else if (event.customName == 'container_idle_stop') {
           final value = event.customValue;
           final reason = value is Map ? (value['reason'] ?? '') : '';

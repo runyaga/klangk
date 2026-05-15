@@ -63,6 +63,8 @@ async def handle_websocket(ws: WebSocket) -> None:
                         "name": "container_ready",
                         "value": {"reason": status_msg},
                     }})
+            elif cmd == "extension_ui_response":
+                await _handle_extension_ui_response(conn_state, msg)
             else:
                 await _send_error(ws, f"Unknown command: {cmd}")
 
@@ -266,6 +268,22 @@ async def _handle_follow_up(state: dict, msg: dict) -> None:
         return
     container_manager.record_activity(state["container_id"])
     await pi_client.follow_up(msg.get("text", ""))
+
+
+async def _handle_extension_ui_response(state: dict, msg: dict) -> None:
+    """Forward extension UI response from frontend to Pi."""
+    pi_client: PiRpcClient | None = state.get("pi_client")
+    if pi_client is None:
+        return
+    # Forward the response as-is to Pi (it expects extension_ui_response)
+    response = {"type": "extension_ui_response", "id": msg.get("id")}
+    if "value" in msg:
+        response["value"] = msg["value"]
+    if msg.get("cancelled"):
+        response["cancelled"] = True
+    if "confirmed" in msg:
+        response["confirmed"] = msg["confirmed"]
+    await pi_client.send_command(response)
 
 
 async def _handle_abort(state: dict) -> None:
