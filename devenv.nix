@@ -5,6 +5,7 @@
   };
   languages.python = {
     enable = true;
+    venv.enable = true;
     uv = {
       enable = true;
       sync.enable = true;
@@ -122,6 +123,7 @@
     rm -rf docker/extensions docker/tools
     mkdir -p docker/extensions docker/tools
     for d in plugins/*/; do
+      [ -d "$d" ] || continue
       name=$(basename "$d")
       # TypeScript extensions
       [ -f "$d/extension.ts" ] && cp "$d/extension.ts" "docker/extensions/$name.ts"
@@ -140,6 +142,11 @@
     echo "==> Flutter web"
     flutterbuildweb
     echo "==> Done"
+  '';
+
+  scripts.update-plugins.exec = ''
+    cd $DEVENV_ROOT
+    python3 scripts/update_plugins.py
   '';
 
   enterShell = ''
