@@ -42,11 +42,14 @@ export default function (pi: any) {
           details: {},
         };
       }
+      const proto = process.env.BARK_HOSTING_PROTO || "http";
+      const hostname = process.env.BARK_HOSTING_HOSTNAME || "localhost";
+      const url = `${proto}://${hostname}:${externalPort}/`;
       return {
         content: [
           {
             type: "text",
-            text: `Container port ${port} is mapped to external port ${externalPort}. The user can access it at http://localhost:${externalPort}`,
+            text: `Container port ${port} is mapped to external port ${externalPort}. The user can access it at ${url}`,
           },
         ],
         details: {},

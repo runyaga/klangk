@@ -65,6 +65,8 @@ async def start_container(
     existing_container_id: str | None = None,
     resume_session: str | None = None,
     num_ports: int = DEFAULT_PORTS_PER_WORKSPACE,
+    hosting_hostname: str = "localhost",
+    hosting_proto: str = "http",
 ) -> tuple[str, str]:
     """Start (or restart) a Pi container for a workspace.
 
@@ -106,6 +108,8 @@ async def start_container(
     # Tell the container the port mappings (container_port:host_port pairs)
     mappings = [f"{CONTAINER_PORT_START + i}:{hp}" for i, hp in enumerate(host_ports)]
     env_vars.append(f"BARK_PORT_MAPPINGS={','.join(mappings)}")
+    env_vars.append(f"BARK_HOSTING_HOSTNAME={hosting_hostname}")
+    env_vars.append(f"BARK_HOSTING_PROTO={hosting_proto}")
     if resume_session:
         env_vars.append(f"BARK_RESUME_SESSION={resume_session}")
 

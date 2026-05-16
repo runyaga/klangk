@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -94,6 +95,27 @@ async def handle_websocket(ws: WebSocket) -> None:
         _connections.pop(ws, None)
 
 
+def _derive_hosting_info(ws: WebSocket) -> tuple[str, str]:
+    """Derive hosting hostname and proto from env vars or WebSocket headers.
+
+    Returns (hostname, proto). Env vars take precedence over headers.
+    """
+    hostname = os.environ.get("BARK_HOSTING_HOSTNAME")
+    proto = os.environ.get("BARK_HOSTING_PROTO")
+    if not hostname:
+        hostname = (
+            ws.headers.get("x-forwarded-host")
+            or ws.headers.get("host")
+            or "localhost"
+        )
+        # Strip port from hostname if present
+        if ":" in hostname:
+            hostname = hostname.split(":")[0]
+    if not proto:
+        proto = ws.headers.get("x-forwarded-proto") or "http"
+    return hostname, proto
+
+
 async def _start_workspace_container(ws: WebSocket, state: dict, workspace_id: str, workspace: dict) -> None:
     """Start/restart container, connect Pi RPC, start event forwarding, resume session."""
     user = state["user"]
@@ -108,10 +130,13 @@ async def _start_workspace_container(ws: WebSocket, state: dict, workspace_id: s
         most_recent = session_files[-1]
         resume_session = most_recent.replace(sessions_path, "/home/bark/.pi/sessions")
 
+    hosting_hostname, hosting_proto = _derive_hosting_info(ws)
     container_id, container_status = await container_manager.start_container(
         workspace_id, host_path, sessions_path, workspace.get("container_id"),
         resume_session=resume_session,
         num_ports=workspace.get("num_ports", container_manager.DEFAULT_PORTS_PER_WORKSPACE),
+        hosting_hostname=hosting_hostname,
+        hosting_proto=hosting_proto,
     )
     state["container_status"] = container_status
 

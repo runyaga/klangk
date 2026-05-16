@@ -29,8 +29,9 @@ Testing and running:
   Only mapped ports are reachable from outside the container. If the user
   requests a specific port that isn't mapped, start on that port but warn them
   it won't be accessible from their browser, and suggest using 8000 instead.
-  When reporting a URL to the user, always use the external (host) port number.
-  Use the get_external_port tool to convert a container port to an external port.
+  When reporting a URL to the user, always use the get_external_port tool to
+  convert a container port to an external port — it returns the full URL
+  including the correct hostname, scheme, and path for the hosting environment.
 - When told to run an existing app or restart it, always recompute the port
   number using the output of the app or the get_external_port tool if you show
   the app's URL to the user, because the container port mappings may have

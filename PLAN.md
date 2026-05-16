@@ -151,7 +151,7 @@ bark/
 - Native Pi session persistence (JSONL files in workspace `.pi/sessions/`)
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
 - Per-workspace port allocation: well-known container ports (8000+) mapped to host ports (9000+), persisted in SQLite (`port_allocations` table with per-port PRIMARY KEY preventing overlap). Ports allocated at workspace creation, stable across restarts, freed by CASCADE on workspace delete. `num_ports` column on workspaces table (default 5) controls how many; on container start, ports are added/removed to match. `BARK_PORT_MAPPINGS` env var passes container:host pairs to the container.
-- Built-in `get_external_port` tool parses `BARK_PORT_MAPPINGS` to convert container port to user-facing host port
+- Built-in `get_external_port` tool converts container port to full user-facing URL using `BARK_PORT_MAPPINGS`, `BARK_HOSTING_HOSTNAME`, and `BARK_HOSTING_PROTO`
 - LLM provider/model configured via `settings.json` FIFO (sets `defaultProvider` and `defaultModel`)
 - API key delivered via `models.json` FIFO (named pipe, written once at startup, deleted after Pi reads it — key never persists on disk)
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)
@@ -302,6 +302,8 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `BARK_PLUGINS_DIR` | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`) |
 | `BARK_IMAGE_NAME` | `bark-pi` | Docker image name for workspace containers |
 | `BARK_INSTANCE_ID` | `default` | Instance identifier for multi-instance deployments on the same host — isolates containers, names, and cleanup |
+| `BARK_HOSTING_HOSTNAME` | (from `Host` header) | Hostname for user-facing app URLs. Auto-derived from `X-Forwarded-Host` or `Host` WebSocket header if not set |
+| `BARK_HOSTING_PROTO` | (from `X-Forwarded-Proto` or `http`) | Protocol for user-facing app URLs. Auto-derived from request headers if not set |
 | `BARK_IDLE_TIMEOUT_SECONDS` | `1800` | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s) |
 | `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
 | `OLLAMA_API_KEY` | | Ollama Cloud API key |
