@@ -183,7 +183,7 @@ async def _handle_workspace_connect(ws: WebSocket, state: dict, msg: dict) -> No
     })
     # Store status for when frontend sends ui_ready
     state["pending_status_msg"] = status_msg
-    logger.info("User %s connected to workspace %s (ports %s)", state["user"]["username"], workspace_id, port_info)
+    logger.info("User %s connected to workspace %s (ports %s)", state["user"]["username"], workspace_id, ports)
 
 
 async def _handle_workspace_disconnect(ws: WebSocket, state: dict) -> None:
