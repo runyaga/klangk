@@ -6,6 +6,8 @@ import '../utils/backend_url.dart';
 class FileDropZone extends StatefulWidget {
   final String workspaceId;
   final String? authToken;
+  final String currentPath;
+  final List<Map<String, dynamic>> currentEntries;
   final VoidCallback onUploadComplete;
   final Widget child;
 
@@ -13,6 +15,8 @@ class FileDropZone extends StatefulWidget {
     super.key,
     required this.workspaceId,
     this.authToken,
+    this.currentPath = '.',
+    this.currentEntries = const [],
     required this.onUploadComplete,
     required this.child,
   });
@@ -44,6 +48,25 @@ class _FileDropZoneState extends State<FileDropZone> {
   }
 
   Future<void> _uploadFiles(DropDoneDetails details) async {
+    // Check for name conflicts with existing entries
+    final existingNames = widget.currentEntries.map((e) => e['name'] as String).toSet();
+    final conflicts = <String>[];
+    for (final item in details.files) {
+      final name = item.name ?? 'unnamed';
+      if (existingNames.contains(name)) {
+        conflicts.add(name);
+      }
+    }
+    if (conflicts.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Already exist${conflicts.length == 1 ? "s" : ""}: ${conflicts.join(", ")}'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     final files = _collectFiles(details.files, '');
     if (files.isEmpty) return;
 
@@ -58,7 +81,7 @@ class _FileDropZoneState extends State<FileDropZone> {
         final bytes = await file.readAsBytes();
         final request = http.MultipartRequest(
           'POST',
-          Uri.parse('$_baseUrl/workspaces/${widget.workspaceId}/files/upload?path=${Uri.encodeComponent(path)}'),
+          Uri.parse('$_baseUrl/workspaces/${widget.workspaceId}/files/upload?path=${Uri.encodeComponent(widget.currentPath == '.' ? path : '${widget.currentPath}/$path')}'),
         );
         if (widget.authToken != null) {
           request.headers['Authorization'] = 'Bearer ${widget.authToken}';

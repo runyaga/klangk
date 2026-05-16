@@ -104,6 +104,25 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict | None:
+    """Like get_current_user but returns None instead of raising 401."""
+    if credentials is None:
+        return None
+    try:
+        payload = _decode_token(credentials.credentials)
+        user_id = payload.get("sub")
+        jti = payload.get("jti")
+        if user_id is None or jti is None:
+            return None
+        if await user_store.is_token_blocklisted(jti):
+            return None
+        return await user_store.get_user_by_id(user_id)
+    except JWTError:
+        return None
+
+
 async def get_user_from_token(token: str) -> dict | None:
     """Validate a token string (used for WebSocket auth)."""
     try:

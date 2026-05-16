@@ -6,7 +6,7 @@ from pathlib import Path
 from . import workspace_manager
 
 
-def _resolve_path(user_id: str, workspace_id: str, relative_path: str) -> Path:
+def resolve_path(user_id: str, workspace_id: str, relative_path: str) -> Path:
     """Resolve a relative path within a workspace, preventing directory traversal."""
     root = workspace_manager.get_workspace_host_path(user_id, workspace_id)
     resolved = (root / relative_path).resolve()
@@ -17,7 +17,7 @@ def _resolve_path(user_id: str, workspace_id: str, relative_path: str) -> Path:
 
 def list_files(user_id: str, workspace_id: str, relative_path: str = ".") -> list[dict]:
     """List files and directories at the given path."""
-    path = _resolve_path(user_id, workspace_id, relative_path)
+    path = resolve_path(user_id, workspace_id, relative_path)
     if not path.exists() or not path.is_dir():
         return []
 
@@ -36,7 +36,7 @@ def list_files(user_id: str, workspace_id: str, relative_path: str = ".") -> lis
 
 def read_file(user_id: str, workspace_id: str, relative_path: str) -> str | None:
     """Read file contents. Returns None if file doesn't exist or is too large."""
-    path = _resolve_path(user_id, workspace_id, relative_path)
+    path = resolve_path(user_id, workspace_id, relative_path)
     if not path.exists() or not path.is_file():
         return None
 
@@ -52,7 +52,7 @@ def read_file(user_id: str, workspace_id: str, relative_path: str) -> str | None
 
 def delete_path(user_id: str, workspace_id: str, relative_path: str) -> str:
     """Delete a file or directory. Returns the relative path deleted."""
-    path = _resolve_path(user_id, workspace_id, relative_path)
+    path = resolve_path(user_id, workspace_id, relative_path)
     if not path.exists():
         raise FileNotFoundError("Path not found")
     if path.is_dir():
@@ -67,8 +67,8 @@ def delete_path(user_id: str, workspace_id: str, relative_path: str) -> str:
 
 def rename_path(user_id: str, workspace_id: str, old_path: str, new_path: str) -> str:
     """Rename/move a file or directory. Returns the new relative path."""
-    src = _resolve_path(user_id, workspace_id, old_path)
-    dst = _resolve_path(user_id, workspace_id, new_path)
+    src = resolve_path(user_id, workspace_id, old_path)
+    dst = resolve_path(user_id, workspace_id, new_path)
     if not src.exists():
         raise FileNotFoundError("Source path not found")
     if dst.exists():
@@ -82,7 +82,7 @@ def rename_path(user_id: str, workspace_id: str, old_path: str, new_path: str) -
 
 def write_file(user_id: str, workspace_id: str, relative_path: str, content: bytes) -> str:
     """Write file contents. Returns the resolved relative path."""
-    path = _resolve_path(user_id, workspace_id, relative_path)
+    path = resolve_path(user_id, workspace_id, relative_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     return str(path.relative_to(

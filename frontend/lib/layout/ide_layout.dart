@@ -41,7 +41,7 @@ class IdeLayout extends StatefulWidget {
 
 class _IdeLayoutState extends State<IdeLayout> {
   double _horizontalRatio = 0.5;
-  double _verticalRatio = 0.7; // file viewer gets more space
+  double _verticalRatio = 1.0; // debug pane collapsed by default, drag to open
 
   @override
   Widget build(BuildContext context) {
@@ -57,8 +57,10 @@ class _IdeLayoutState extends State<IdeLayout> {
         final rightWidth = usableWidth - leftWidth;
 
         // Account for: horizontal divider + bottom bar = 2 bars vertically
+        // Reserve minimum height for the debug pane header even when collapsed
+        const minBottom = 28.0;
         final usableHeight = totalHeight - bar * 2;
-        final topHeight = usableHeight * _verticalRatio;
+        final topHeight = (usableHeight - minBottom) * _verticalRatio;
         final bottomHeight = usableHeight - topHeight;
 
         return Row(
@@ -106,7 +108,7 @@ class _IdeLayoutState extends State<IdeLayout> {
                     onVerticalDragUpdate: (details) {
                       setState(() {
                         _verticalRatio += details.delta.dy / usableHeight;
-                        _verticalRatio = _verticalRatio.clamp(0.2, 0.8);
+                        _verticalRatio = _verticalRatio.clamp(0.2, 1.0);
                       });
                     },
                     child: MouseRegion(

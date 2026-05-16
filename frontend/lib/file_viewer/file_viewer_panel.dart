@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:html' as html;
 import '../agui/agui_client.dart';
 import '../utils/backend_url.dart';
 import '../agui/agui_events.dart';
@@ -183,16 +184,46 @@ class _FileViewerPanelState extends State<FileViewerPanel> {
     }
   }
 
+  Future<void> _downloadPath(String path, String name, bool isDir) async {
+    final url = '$_baseUrl/workspaces/${widget.workspaceId}/files/download?path=${Uri.encodeComponent(path)}';
+    try {
+      final response = await http.get(Uri.parse(url), headers: _headers);
+      if (response.statusCode != 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Download failed: ${response.statusCode}')),
+          );
+        }
+        return;
+      }
+      final filename = isDir ? '$name.zip' : name;
+      final blob = html.Blob([response.bodyBytes]);
+      final blobUrl = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: blobUrl)..download = filename;
+      anchor.click();
+      html.Url.revokeObjectUrl(blobUrl);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download error: $e')),
+        );
+      }
+    }
+  }
+
   void _showContextMenu(Offset position, String path, String name, bool isDir) {
     showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: [
+        const PopupMenuItem(value: 'download', child: ListTile(dense: true, leading: Icon(Icons.download, size: 18), title: Text('Download'))),
         const PopupMenuItem(value: 'rename', child: ListTile(dense: true, leading: Icon(Icons.edit, size: 18), title: Text('Rename'))),
         const PopupMenuItem(value: 'delete', child: ListTile(dense: true, leading: Icon(Icons.delete, size: 18, color: Colors.red), title: Text('Delete', style: TextStyle(color: Colors.red)))),
       ],
     ).then((action) {
-      if (action == 'rename') {
+      if (action == 'download') {
+        _downloadPath(path, name, isDir);
+      } else if (action == 'rename') {
         _renamePath(path, name, isDir);
       } else if (action == 'delete') {
         _deletePath(path, name, isDir);
@@ -211,6 +242,8 @@ class _FileViewerPanelState extends State<FileViewerPanel> {
     return FileDropZone(
       workspaceId: widget.workspaceId,
       authToken: widget.authToken,
+      currentPath: _currentPath,
+      currentEntries: _entries,
       onUploadComplete: _loadFiles,
       child: Column(
         children: [
@@ -232,7 +265,21 @@ class _FileViewerPanelState extends State<FileViewerPanel> {
                     onTap: () => _navigateTo('.'),
                     child: const Text('/', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                Expanded(child: Text(_currentPath == '.' ? '/' : '/$_currentPath')),
+                Expanded(child: Text(_currentPath == '.' ? '/' : _currentPath, overflow: TextOverflow.ellipsis, maxLines: 1)),
+                if (_currentPath != '.')
+                  IconButton(
+                    icon: const Icon(Icons.arrow_upward, size: 16),
+                    onPressed: () {
+                      final parent = _currentPath.contains('/')
+                          ? _currentPath.substring(0, _currentPath.lastIndexOf('/'))
+                          : '.';
+                      _navigateTo(parent);
+                    },
+                    iconSize: 16,
+                    constraints: const BoxConstraints(),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Up',
+                  ),
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 16),
                   onPressed: _loadFiles,

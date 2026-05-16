@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, container_manager, file_service, user_store, workspace_manager
@@ -194,6 +195,40 @@ async def rename_file(
     except FileExistsError:
         raise HTTPException(status_code=409, detail="Destination already exists")
     return {"path": renamed, "status": "renamed"}
+
+
+@app.get("/workspaces/{workspace_id}/files/download")
+async def download_file(
+    workspace_id: str,
+    path: str,
+    user: dict = Depends(auth.get_current_user),
+):
+    workspace = await workspace_manager.get_workspace(workspace_id, user["id"])
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    try:
+        resolved = file_service.resolve_path(user["id"], workspace_id, path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    if resolved.is_file():
+        return FileResponse(resolved, filename=resolved.name)
+    # Directory: zip it on the fly
+    import io
+    import zipfile
+    from fastapi.responses import StreamingResponse
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in resolved.rglob("*"):
+            if file_path.is_file():
+                zf.write(file_path, file_path.relative_to(resolved))
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{resolved.name}.zip"'},
+    )
 
 
 @app.post("/workspaces/{workspace_id}/files/upload")

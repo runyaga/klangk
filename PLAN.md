@@ -183,7 +183,11 @@ bark/
 - Click to view file contents (16pt JetBrains Mono, left-aligned)
 - Auto-refresh when Pi writes/edits files or runs file-creating/deleting bash commands
 - Drag-and-drop upload for files and folders (preserves directory structure, progress indicator)
-- Right-click context menu on files and folders: Rename (with dialog) and Delete (with confirmation)
+- Uploads go into the currently viewed directory (not always root)
+- Duplicate detection: blocks upload if a file or folder with the same name already exists
+- Right-click context menu on files and folders: Download, Rename (with dialog), and Delete (with confirmation)
+- Download files directly; download folders as .zip (zipped on the fly by the backend)
+- Path bar with ellipsis overflow, clickable `/` root link, and up-arrow navigation button
 - nginx `client_max_body_size 500m` for large file uploads
 - nginx `sub_filter` rewrites `<base href>` for subpath hosting (`/bark/`)
 
@@ -407,7 +411,7 @@ nginx reverse proxy (port 8995)
 - **Container network isolation**: Restrict container network access to prevent use as an attack platform. Use a custom Docker network with limited egress — allow only the Ollama API endpoint (cloud or self-hosted) and block all other outbound traffic. Consider using `--network=none` with a proxy sidecar for allowlisted domains only.
 - **Multiple LLM providers**: Support selecting different models per workspace.
 - **Syntax highlighting language detection**: Improve code block language detection for unlabeled blocks.
-- **Container terminal pane**: Add a terminal panel (xterm.dart) that gives the user direct shell access to the workspace container via `docker exec`. Would allow users to run commands, inspect processes, debug code, and interact with running servers without going through the AI agent.
+- **Container terminal pane**: Add a terminal panel using xterm.dart (already in pubspec.yaml) in a tabbed bottom-right panel alongside Debug. Backend spawns `docker exec` subprocess with PTY (`os.openpty`), pipes stdin/stdout over the existing WebSocket via `terminal_start/input/resize/stop` commands. On-demand: subprocess starts when user clicks Terminal tab. Terminal interaction should bump the container idle timeout via `record_activity()`. Uses xterm.dart's `TerminalTheme`/`TerminalStyle` for styling consistent with Bark's theme (JetBrains Mono, warm colors).
 - **Same-workspace multi-window**: Opening the same workspace in two browser windows simultaneously has undefined behavior — both WebSocket connections share one Pi container/session, and prompts from either window could collide or interleave unpredictably. Consider either locking a workspace to one connection at a time, or multiplexing both windows onto the same event stream.
 - **Workspace disk quotas**: Limit how much disk space each workspace can consume. Options: use filesystem quotas (XFS/ext4 project quotas on the host), overlay2 with size limits, or a loopback-mounted filesystem per workspace with a fixed size. Should also surface current disk usage in the UI (file viewer header or workspace list) so users can see how much space they've used.
 - **Expose Pi's `/compact` command in the UI**: Pi has built-in context compaction — both automatic (triggers when context tokens approach the window limit) and manual via the `{"type": "compact"}` RPC command. Auto-compaction is already working silently for Bark users. Add a "Compact" button in the chat UI that sends the `compact` RPC command to Pi, letting users manually trigger summarization of older context. Could also surface compaction events in the debug pane and expose settings for `reserveTokens`/`keepRecentTokens` thresholds.
