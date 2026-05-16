@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../agui/agui_client.dart';
 
@@ -89,10 +90,9 @@ class _ContainerTerminalState extends State<ContainerTerminal> {
     return TerminalView(
       _terminal,
       theme: _theme,
-      textStyle: const TerminalStyle(
+      textStyle: TerminalStyle(
         fontSize: 14,
-        fontFamily: 'monospace',
-        fontFamilyFallback: ['Courier New', 'Courier', 'monospace'],
+        fontFamily: GoogleFonts.robotoMono().fontFamily!,
       ),
       autofocus: false,
       autoResize: true,
