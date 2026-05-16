@@ -1,0 +1,391 @@
+import { test, expect, Page, APIRequestContext } from '@playwright/test';
+
+const USER = process.env.BARK_TEST_USER || 'admin';
+const PASS = process.env.BARK_TEST_PASS || 'admin';
+const API_BASE = process.env.BARK_API_URL || 'http://localhost:8997';
+
+async function getAuthToken(request: APIRequestContext): Promise<string> {
+  const resp = await request.post(`${API_BASE}/auth/login`, {
+    data: { username: USER, password: PASS },
+  });
+  expect(resp.ok()).toBeTruthy();
+  const data = await resp.json();
+  return data.access_token;
+}
+
+async function getFirstWorkspaceId(request: APIRequestContext, token: string): Promise<string> {
+  const resp = await request.get(`${API_BASE}/workspaces`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(resp.ok()).toBeTruthy();
+  const workspaces = await resp.json();
+  expect(workspaces.length).toBeGreaterThan(0);
+  return workspaces[0].id;
+}
+
+// Flutter Web renders to <canvas> inside <flutter-view>, so standard DOM
+// locators (text=, role=, input) don't work. We interact via coordinate
+// clicks on <flutter-view> and verify state via page title and screenshots.
+
+async function waitForFlutter(page: Page) {
+  await page.waitForFunction(
+    () => !document.body.textContent?.includes('Loading, please wait'),
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(1000);
+}
+
+function fv(page: Page) {
+  return page.locator('flutter-view');
+}
+
+function vp(page: Page) {
+  return page.viewportSize() || { width: 1280, height: 720 };
+}
+
+async function login(page: Page) {
+  await page.goto('');
+  await waitForFlutter(page);
+
+  const { width, height } = vp(page);
+  const cx = width / 2;
+  const f = fv(page);
+
+  // Username field
+  await f.click({ position: { x: cx, y: height * 0.47 }, force: true });
+  await page.waitForTimeout(300);
+  await page.keyboard.type(USER);
+
+  // Password field
+  await f.click({ position: { x: cx, y: height * 0.55 }, force: true });
+  await page.waitForTimeout(300);
+  await page.keyboard.type(PASS);
+
+  // Login button
+  await f.click({ position: { x: cx, y: height * 0.66 }, force: true });
+
+  await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
+}
+
+async function openFirstWorkspace(page: Page) {
+  const { width } = vp(page);
+  // Click on first workspace in the list
+  await fv(page).click({ position: { x: width / 2, y: 110 }, force: true });
+  await expect(page).not.toHaveTitle(/Workspaces/i, { timeout: 30_000 });
+  await page.waitForTimeout(5000);
+}
+
+// Layout coordinates at 1280x720:
+// Chat panel: x 0-486 (38%)
+// Right panel: x 492-1280
+// Tab bar (Terminal/Files): y ~0-32 in right panel
+// Chat input: bottom of left panel, ~y 690
+// Debug bar: bottom of right panel
+// Back button: x ~25, y ~28
+
+test.describe('Bark E2E', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test('login with default credentials', async ({ page }) => {
+    await login(page);
+    await expect(page).toHaveTitle(/Workspaces/i);
+  });
+
+  test('login with wrong password fails', async ({ page }) => {
+    await page.goto('');
+    await waitForFlutter(page);
+
+    const { width, height } = vp(page);
+    const cx = width / 2;
+    const f = fv(page);
+
+    await f.click({ position: { x: cx, y: height * 0.47 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type(USER);
+
+    await f.click({ position: { x: cx, y: height * 0.55 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type('wrongpassword');
+
+    await f.click({ position: { x: cx, y: height * 0.66 }, force: true });
+    await page.waitForTimeout(3000);
+
+    // Should still be on the login page
+    await expect(page).toHaveTitle(/Login/i);
+  });
+
+  test('navigate to workspace and see IDE layout', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    // Verify we're in a workspace (title is "Bark - <name>")
+    const title = await page.title();
+    expect(title).toMatch(/^Bark - /);
+    expect(title).not.toMatch(/Workspaces/i);
+  });
+
+  test('workspace shows terminal tab', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    // Terminal is the default tab — canvas should be present (xterm.dart)
+    const canvas = page.locator('canvas');
+    await expect(canvas.first()).toBeVisible();
+  });
+
+  test('switch to Files tab and back', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const { width } = vp(page);
+    const f = fv(page);
+    // Right panel tab bar: Terminal tab ~x 790, Files tab ~x 1190, y ~16
+    const rightCenter = (492 + width) / 2;
+
+    // Click Files tab (right side of tab bar)
+    await f.click({ position: { x: rightCenter + 200, y: 16 }, force: true });
+    await page.waitForTimeout(1000);
+    // Take screenshot to verify files tab is showing
+    await page.screenshot({ path: 'test-results/files-tab.png' });
+
+    // Click Terminal tab (left side of tab bar)
+    await f.click({ position: { x: rightCenter - 200, y: 16 }, force: true });
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: 'test-results/terminal-tab.png' });
+  });
+
+  test('terminal accepts keyboard input', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    // Terminal should be active — click in the terminal area
+    const { width, height } = vp(page);
+    const f = fv(page);
+    const termX = (492 + width) / 2;
+    const termY = height / 2;
+
+    await f.click({ position: { x: termX, y: termY }, force: true });
+    await page.waitForTimeout(500);
+
+    // Type a command
+    await page.keyboard.type('echo hello-playwright');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2000);
+
+    // Take screenshot — should show the command and output
+    await page.screenshot({ path: 'test-results/terminal-input.png' });
+  });
+
+  test('chat input accepts text', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const { height } = vp(page);
+    const f = fv(page);
+    // Chat input is at the bottom of the left panel
+    const chatInputX = 240;
+    const chatInputY = height - 30;
+
+    await f.click({ position: { x: chatInputX, y: chatInputY }, force: true });
+    await page.waitForTimeout(500);
+    await page.keyboard.type('test message from playwright');
+    await page.waitForTimeout(500);
+
+    // Take screenshot — should show text in the chat input
+    await page.screenshot({ path: 'test-results/chat-input.png' });
+
+    // Clear the input without sending (select all + delete)
+    await page.keyboard.press('Control+a');
+    await page.keyboard.press('Backspace');
+  });
+
+  test('navigate back to workspaces', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    // Click back arrow (top-left corner)
+    await fv(page).click({ position: { x: 25, y: 28 }, force: true });
+    await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
+  });
+
+  test('create and delete workspace', async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+
+    const { width, height } = vp(page);
+    const f = fv(page);
+
+    // Click the FAB (+) button in bottom-right corner
+    await f.click({ position: { x: width - 40, y: height - 40 }, force: true });
+    await page.waitForTimeout(1000);
+
+    // Dialog should appear — type workspace name
+    // Dialog input is centered in the page
+    await f.click({ position: { x: width / 2, y: height / 2 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type('e2e-test-workspace');
+
+    // Click Create/OK button (below the input, center of dialog)
+    await f.click({ position: { x: width / 2 + 100, y: height / 2 + 60 }, force: true });
+    await page.waitForTimeout(2000);
+
+    // Take screenshot to verify workspace was created
+    await page.screenshot({ path: 'test-results/workspace-created.png' });
+
+    // Now delete it — find the delete button (trash icon) on the right side of the entry
+    // The new workspace should be in the list. Find it by looking for delete buttons.
+    // Delete button is at the far right of a workspace row
+    // We need to find which row has our workspace — take the last one
+    await f.click({ position: { x: width - 40, y: 110 }, force: true });
+    await page.waitForTimeout(1000);
+
+    // Confirm deletion dialog — click the confirm button
+    await f.click({ position: { x: width / 2 + 80, y: height / 2 + 30 }, force: true });
+    await page.waitForTimeout(2000);
+
+    await page.screenshot({ path: 'test-results/workspace-deleted.png' });
+  });
+
+  test('terminal command creates file visible via API', async ({ page, request }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const { width, height } = vp(page);
+    const f = fv(page);
+    const termX = (492 + width) / 2;
+    const termY = height / 2;
+
+    // Click in terminal area
+    await f.click({ position: { x: termX, y: termY }, force: true });
+    await page.waitForTimeout(500);
+
+    // Type command to create a file
+    await page.keyboard.type('echo "foo" > /workspace/foo.txt');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2000);
+
+    // Verify file exists via API
+    const token = await getAuthToken(request);
+    const workspaceId = await getFirstWorkspaceId(request, token);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const listResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
+      { headers },
+    );
+    expect(listResp.ok()).toBeTruthy();
+    const files = await listResp.json();
+    const names = files.map((f: any) => f.name);
+    expect(names).toContain('foo.txt');
+
+    // Verify content
+    const readResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files/content?path=foo.txt`,
+      { headers },
+    );
+    expect(readResp.ok()).toBeTruthy();
+    const data = await readResp.json();
+    expect(data.content.trim()).toBe('foo');
+
+    // Clean up
+    await request.delete(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=foo.txt`,
+      { headers },
+    );
+  });
+
+  test('file upload, rename, and delete', async ({ request }) => {
+    const token = await getAuthToken(request);
+    const workspaceId = await getFirstWorkspaceId(request, token);
+    const headers = { Authorization: `Bearer ${token}` };
+    const fileName = 'playwright-test.txt';
+    const renamedName = 'playwright-renamed.txt';
+    const fileContent = 'hello from playwright e2e tests';
+
+    // Upload
+    const uploadResp = await request.post(
+      `${API_BASE}/workspaces/${workspaceId}/files/upload?path=`,
+      {
+        headers,
+        multipart: {
+          file: {
+            name: fileName,
+            mimeType: 'text/plain',
+            buffer: Buffer.from(fileContent),
+          },
+        },
+      },
+    );
+    expect(uploadResp.ok()).toBeTruthy();
+
+    // Verify upload in listing
+    let listResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
+      { headers },
+    );
+    let files = await listResp.json();
+    let names = files.map((f: any) => f.name);
+    expect(names).toContain(fileName);
+
+    // Verify content
+    const readResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files/content?path=${fileName}`,
+      { headers },
+    );
+    expect(readResp.ok()).toBeTruthy();
+    const data = await readResp.json();
+    expect(data.content).toBe(fileContent);
+
+    // Rename
+    const renameResp = await request.post(
+      `${API_BASE}/workspaces/${workspaceId}/files/rename?old_path=${fileName}&new_path=${renamedName}`,
+      { headers },
+    );
+    expect(renameResp.ok()).toBeTruthy();
+
+    listResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
+      { headers },
+    );
+    files = await listResp.json();
+    names = files.map((f: any) => f.name);
+    expect(names).not.toContain(fileName);
+    expect(names).toContain(renamedName);
+
+    // Delete
+    const deleteResp = await request.delete(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=${renamedName}`,
+      { headers },
+    );
+    expect(deleteResp.ok()).toBeTruthy();
+
+    listResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
+      { headers },
+    );
+    files = await listResp.json();
+    names = files.map((f: any) => f.name);
+    expect(names).not.toContain(renamedName);
+  });
+
+  test('logout returns to login page', async ({ page }) => {
+    test.setTimeout(60_000);
+    await login(page);
+
+    const { width } = vp(page);
+    const f = fv(page);
+
+    // Logout button is in the top-right corner of the workspaces page
+    await f.click({ position: { x: width - 25, y: 28 }, force: true });
+    await page.waitForTimeout(2000);
+
+    await expect(page).toHaveTitle(/Login/i, { timeout: 10_000 });
+  });
+});

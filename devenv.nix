@@ -3,6 +3,12 @@
     enable = true;
     package = pkgs.flutter;
   };
+  languages.javascript = {
+    enable = true;
+    npm.enable = true;
+    npm.install.enable = true;
+    directory = "./tests/playwright";
+  };
   languages.python = {
     enable = true;
     venv.enable = true;
@@ -141,7 +147,7 @@
       python3 scripts/update_plugins.py
     fi
     python3 scripts/import_plugins.py
-    cd frontend && flutter --disable-analytics && flutter pub get && flutter build web --base-href=/bark/ --no-wasm-dry-run
+    cd frontend && flutter --disable-analytics && flutter pub get && flutter build web --base-href=/ --no-wasm-dry-run
     rm -f build/web/flutter_service_worker.js
   '';
 
