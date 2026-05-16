@@ -161,6 +161,7 @@ bark/
   - `/run`, `/var/log` — tmpfs (runtime)
 - `bark` user baked into the image at build time with the host UID/GID (passed as Docker build args)
 - Root escalation prevented: root password locked, suid removed from `su`/`chsh`/`chfn`/`newgrp`
+- Containers labeled with `bark.managed=true`, `bark.instance=<BARK_INSTANCE_ID>`, and `bark.workspace-id=<id>` for identification, cleanup, and orphan detection (not reliant on image name). Multiple Bark instances on the same host use different `BARK_INSTANCE_ID` values to isolate their containers.
 
 ### Container Terminal
 - Direct shell access to the workspace container via the Terminal tab in the right panel
@@ -286,6 +287,8 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `BARK_SOLIPLEX_PORT` | `8555` | Soliplex backend port (for nginx proxy) |
 | `BARK_DATA_DIR` | `~/.bark/data` | Database, workspaces, Pi sessions |
 | `BARK_PLUGINS_DIR` | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`) |
+| `BARK_IMAGE_NAME` | `bark-pi` | Docker image name for workspace containers |
+| `BARK_INSTANCE_ID` | `default` | Instance identifier for multi-instance deployments on the same host — isolates containers, names, and cleanup |
 | `BARK_IDLE_TIMEOUT_SECONDS` | `1800` | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s) |
 | `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
 | `OLLAMA_API_KEY` | | Ollama Cloud API key |
@@ -438,7 +441,6 @@ nginx reverse proxy (port 8995)
 - **Extract devenv scripts**: Move inline shell code from `devenv.nix` script definitions into standalone scripts in `scripts/`. Candidates: `flutterbuildweb` (plugin auto-fetch, codegen, flutter build), `dockerbuild` (plugin auto-fetch, collect extensions/tools, docker build, container cleanup), and `nginx` process (config generation and exec). This would make the logic easier to read, test, and reuse outside devenv.
 - **Plugin directory structure**: Consider whether each plugin should have explicit subdirectories for different file types (e.g., `dart/` for Flutter code, `extension/` for TypeScript, `tools/` for server-side scripts) instead of the current flat layout where `import_plugins.py` copies all `*.dart` files and `dockerbuild` picks up `extension.ts` by name. Subdirectories would simplify the copying logic and make it clearer what goes where.
 - **Plugin version numbers**: Plugins may want their own version numbers (in `plugin.yaml` or similar metadata) for compatibility checking, display in the UI, and meaningful pinning beyond git refs.
-- **Container identification via labels**: Currently containers are identified/cleaned up by image name, which is fragile (e.g., after image retag or if multiple Bark instances share a host). Instead, bake a label like `bark.managed=true` and `bark.workspace-id=<id>` into container metadata at creation time, and use label filters for cleanup, orphan detection, and listing.
 - **Docker --init for zombie reaping**: Add `Init: True` to container config so Docker runs `tini` as PID 1. Currently Pi runs as PID 1 and doesn't reap child processes, causing zombies from terminal sessions and tool executions.
 - **Container resource limits**: Add CPU/memory limits to containers to prevent runaway processes.
 - **Container network isolation**: Restrict container network access to prevent use as an attack platform. Use a custom Docker network with limited egress — allow only the Ollama API endpoint (cloud or self-hosted) and block all other outbound traffic. Consider using `--network=none` with a proxy sidecar for allowlisted domains only.

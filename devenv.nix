@@ -129,6 +129,8 @@
   env.BARK_SOLIPLEX_PORT = lib.mkOverride 1500 "8555";
   env.BARK_DATA_DIR = lib.mkOverride 1500 (builtins.getEnv "HOME" + "/.bark/data");
   env.BARK_PLUGINS_DIR = lib.mkOverride 1500 (builtins.getEnv "HOME" + "/.bark/plugins");
+  env.BARK_IMAGE_NAME = lib.mkOverride 1500 "bark-pi";
+  env.BARK_INSTANCE_ID = lib.mkOverride 1500 "default";
   dotenv.enable = true;
 
   scripts.flutterbuildweb.exec = ''
@@ -162,8 +164,8 @@
       [ -d "$d/tools" ] && cp -r "$d/tools/"* docker/tools/ 2>/dev/null
     done
     # Remove old containers before rebuilding so they get recreated from the new image
-    docker ps -a --filter ancestor=bark-pi -q | xargs -r docker rm -f
-    docker build --platform linux/amd64 --build-arg BARK_UID=$(id -u) --build-arg BARK_GID=$(id -g) -t bark-pi docker/
+    docker ps -a --filter "label=bark.instance=${config.env.BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+    docker build --platform linux/amd64 --build-arg BARK_UID=$(id -u) --build-arg BARK_GID=$(id -g) -t "${config.env.BARK_IMAGE_NAME}" docker/
   '';
 
   scripts.rebuild.exec = ''

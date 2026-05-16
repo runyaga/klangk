@@ -9,7 +9,8 @@ from . import user_store
 
 logger = logging.getLogger(__name__)
 
-IMAGE_NAME = "bark-pi"
+IMAGE_NAME = os.environ.get("BARK_IMAGE_NAME", "bark-pi")
+INSTANCE_ID = os.environ.get("BARK_INSTANCE_ID", "default")
 IDLE_TIMEOUT_SECONDS = 30 * 60
 _idle_env = os.environ.get("BARK_IDLE_TIMEOUT_SECONDS")
 if _idle_env is not None:
@@ -119,6 +120,11 @@ async def start_container(
 
     config = {
         "Image": IMAGE_NAME,
+        "Labels": {
+            "bark.managed": "true",
+            "bark.instance": INSTANCE_ID,
+            "bark.workspace-id": workspace_id,
+        },
         "HostConfig": {
             "ReadonlyRootfs": True,
             "Binds": [
@@ -143,7 +149,7 @@ async def start_container(
     }
 
     container = await docker.containers.create_or_replace(
-        name=f"bark-{workspace_id[:12]}",
+        name=f"bark-{INSTANCE_ID}-{workspace_id[:12]}",
         config=config,
     )
     await container.start()
@@ -251,7 +257,7 @@ async def _cleanup_idle_containers() -> None:
 def start_cleanup_loop() -> None:
     """Start the background cleanup task."""
     global _cleanup_task
-    logger.info("Idle timeout: %ds, check interval: %ds", IDLE_TIMEOUT_SECONDS, CHECK_INTERVAL_SECONDS)
+    logger.info("Instance: %s, idle timeout: %ds, check interval: %ds", INSTANCE_ID, IDLE_TIMEOUT_SECONDS, CHECK_INTERVAL_SECONDS)
     if _cleanup_task is None:
         _cleanup_task = asyncio.create_task(_cleanup_idle_containers())
 
@@ -265,6 +271,23 @@ async def shutdown() -> None:
     # Stop all tracked containers
     for cid in list(_containers.keys()):
         await stop_container(cid)
+    # Also stop any orphaned bark containers (not in _containers but have our label)
+    try:
+        docker = await get_docker()
+        containers = await docker.containers.list(
+            all=True,
+            filters={"label": [f"bark.instance={INSTANCE_ID}"]},
+        )
+        for c in containers:
+            cid = c.id
+            if cid not in _containers:
+                logger.info("Stopping orphaned bark container %s", cid)
+                try:
+                    await c.stop()
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning("Error cleaning up orphaned containers: %s", e)
     if _docker:
         await _docker.close()
         _docker = None
