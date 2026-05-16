@@ -109,6 +109,7 @@ async def _start_workspace_container(ws: WebSocket, state: dict, workspace_id: s
     container_id, container_status = await container_manager.start_container(
         workspace_id, host_path, sessions_path, workspace.get("container_id"),
         resume_session=resume_session,
+        num_ports=workspace.get("num_ports", container_manager.DEFAULT_PORTS_PER_WORKSPACE),
     )
     state["container_status"] = container_status
 
@@ -163,13 +164,13 @@ async def _handle_workspace_connect(ws: WebSocket, state: dict, msg: dict) -> No
 
     await _start_workspace_container(ws, state, workspace_id, workspace)
 
-    ports = container_manager.get_workspace_ports(workspace_id)
-    port_info = {"startPort": ports[0], "endPort": ports[1]} if ports else None
+    ports = await container_manager.get_workspace_ports(workspace_id)
     status = state.get("container_status", "created")
+    ports_str = f" (ports {','.join(str(p) for p in ports)})" if ports else ""
     status_msg = {
-        "connected": f"Connected to running container (ports {port_info['startPort']}-{port_info['endPort']})" if port_info else "Connected to running container",
-        "restarted": f"Restarted stopped container (ports {port_info['startPort']}-{port_info['endPort']})" if port_info else "Restarted stopped container",
-        "created": f"Created new container (ports {port_info['startPort']}-{port_info['endPort']})" if port_info else "Created new container",
+        "connected": f"Connected to running container{ports_str}",
+        "restarted": f"Restarted stopped container{ports_str}",
+        "created": f"Created new container{ports_str}",
     }.get(status, "Container ready")
 
     if state.get("resume_session"):
@@ -178,7 +179,7 @@ async def _handle_workspace_connect(ws: WebSocket, state: dict, msg: dict) -> No
     await ws.send_json({
         "type": "workspace_ready",
         "workspaceId": workspace_id,
-        "ports": port_info,
+        "ports": ports,
     })
     # Store status for when frontend sends ui_ready
     state["pending_status_msg"] = status_msg

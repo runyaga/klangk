@@ -60,6 +60,7 @@ bark/
   scripts/
     import_plugins.py              # Codegen: scans plugins, generates plugins_generated.dart
     update_plugins.py           # Fetches plugins from git repos, writes plugins.lock
+    test_port_allocation.py    # Tests port allocation lifecycle: create, increase, decrease, delete
 
   docker/
     Dockerfile                  # Pi agent image: node:22-slim + Pi + Python3 + Dart + Flutter + Rust + build-essential
@@ -142,8 +143,8 @@ bark/
 - Pi RPC events translated to AG-UI events in real-time
 - Native Pi session persistence (JSONL files in workspace `.pi/sessions/`)
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
-- 5 TCP ports allocated per workspace: well-known container ports 8000-8004 mapped to host ports (9000-9004, 9005-9009, etc.) so the agent always uses predictable ports
-- Built-in `get_external_port` tool converts container port to user-facing host port
+- Per-workspace port allocation: well-known container ports (8000+) mapped to host ports (9000+), persisted in SQLite (`port_allocations` table with per-port PRIMARY KEY preventing overlap). Ports allocated at workspace creation, stable across restarts, freed by CASCADE on workspace delete. `num_ports` column on workspaces table (default 5) controls how many; on container start, ports are added/removed to match. `BARK_PORT_MAPPINGS` env var passes container:host pairs to the container.
+- Built-in `get_external_port` tool parses `BARK_PORT_MAPPINGS` to convert container port to user-facing host port
 - LLM provider/model configured via `settings.json` FIFO (sets `defaultProvider` and `defaultModel`)
 - API key delivered via `models.json` FIFO (named pipe, written once at startup, deleted after Pi reads it — key never persists on disk)
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)

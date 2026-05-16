@@ -12,6 +12,7 @@ async def _get_db() -> aiosqlite.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = await aiosqlite.connect(str(DB_PATH))
     db.row_factory = aiosqlite.Row
+    await db.execute("PRAGMA foreign_keys = ON")
     return db
 
 
@@ -32,8 +33,25 @@ async def init_db() -> None:
                 user_id TEXT NOT NULL REFERENCES users(id),
                 name TEXT NOT NULL,
                 container_id TEXT,
+                num_ports INTEGER NOT NULL DEFAULT 5,  -- see container_manager.DEFAULT_PORTS_PER_WORKSPACE
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(user_id, name)
+            )
+        """)
+        # Migration: add num_ports column to existing tables
+        try:
+            await db.execute("ALTER TABLE workspaces ADD COLUMN num_ports INTEGER NOT NULL DEFAULT 5")
+        except Exception:
+            pass
+        # Recreate port_allocations if schema changed (migrate from old range-based table)
+        cursor = await db.execute("SELECT sql FROM sqlite_master WHERE name='port_allocations'")
+        row = await cursor.fetchone()
+        if row and 'port_start' in row['sql']:
+            await db.execute("DROP TABLE port_allocations")
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS port_allocations (
+                port INTEGER PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE
             )
         """)
         await db.execute("""
@@ -45,7 +63,7 @@ async def init_db() -> None:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                 entry_type TEXT NOT NULL,
                 content TEXT NOT NULL DEFAULT '',
                 tool_args TEXT,
@@ -119,7 +137,8 @@ async def create_workspace(user_id: str, name: str) -> dict:
             (workspace_id, user_id, name),
         )
         await db.commit()
-        return {"id": workspace_id, "user_id": user_id, "name": name}
+        from . import container_manager
+        return {"id": workspace_id, "user_id": user_id, "name": name, "num_ports": container_manager.DEFAULT_PORTS_PER_WORKSPACE}
     finally:
         await db.close()
 
@@ -144,13 +163,66 @@ async def get_workspace(workspace_id: str, user_id: str) -> dict | None:
     db = await _get_db()
     try:
         cursor = await db.execute(
-            "SELECT id, user_id, name, container_id FROM workspaces WHERE id = ? AND user_id = ?",
+            "SELECT id, user_id, name, container_id, num_ports FROM workspaces WHERE id = ? AND user_id = ?",
             (workspace_id, user_id),
         )
         row = await cursor.fetchone()
         if row is None:
             return None
-        return {"id": row["id"], "user_id": row["user_id"], "name": row["name"], "container_id": row["container_id"]}
+        return {"id": row["id"], "user_id": row["user_id"], "name": row["name"], "container_id": row["container_id"], "num_ports": row["num_ports"]}
+    finally:
+        await db.close()
+
+
+async def add_port_allocations(workspace_id: str, ports: list[int]) -> None:
+    """Allocate ports to a workspace. Raises IntegrityError on conflict."""
+    db = await _get_db()
+    try:
+        for port in ports:
+            await db.execute(
+                "INSERT INTO port_allocations (port, workspace_id) VALUES (?, ?)",
+                (port, workspace_id),
+            )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def remove_port_allocations(workspace_id: str, ports: list[int]) -> None:
+    """Remove specific port allocations from a workspace."""
+    db = await _get_db()
+    try:
+        for port in ports:
+            await db.execute(
+                "DELETE FROM port_allocations WHERE port = ? AND workspace_id = ?",
+                (port, workspace_id),
+            )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_workspace_ports(workspace_id: str) -> list[int]:
+    """Return all allocated ports for a workspace, sorted."""
+    db = await _get_db()
+    try:
+        cursor = await db.execute(
+            "SELECT port FROM port_allocations WHERE workspace_id = ? ORDER BY port",
+            (workspace_id,),
+        )
+        rows = await cursor.fetchall()
+        return [row["port"] for row in rows]
+    finally:
+        await db.close()
+
+
+async def get_all_allocated_ports() -> set[int]:
+    """Return all allocated port numbers across all workspaces."""
+    db = await _get_db()
+    try:
+        cursor = await db.execute("SELECT port FROM port_allocations")
+        rows = await cursor.fetchall()
+        return {row["port"] for row in rows}
     finally:
         await db.close()
 

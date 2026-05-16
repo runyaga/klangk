@@ -13,45 +13,35 @@ IMAGE_NAME = "bark-pi"
 IDLE_TIMEOUT_SECONDS = 15 * 60  # 15 minutes
 CHECK_INTERVAL_SECONDS = 60
 
-# Port allocation: each workspace gets PORTS_PER_WORKSPACE ports
-# starting from PORT_RANGE_START on the host, mapped to fixed
-# container ports starting from CONTAINER_PORT_START
+# Port allocation
 PORT_RANGE_START = 9000
 CONTAINER_PORT_START = 8000
-PORTS_PER_WORKSPACE = 5
+DEFAULT_PORTS_PER_WORKSPACE = 5
 
 # Track active containers: container_id -> {last_activity, workspace_id, ports}
 _containers: dict[str, dict] = {}
-# Track allocated port ranges: workspace_id -> (start_port, end_port)
-_allocated_ports: dict[str, tuple[int, int]] = {}
 # Callbacks for idle timeout notifications: workspace_id -> [async_callback]
 _idle_callbacks: dict[str, list] = {}
 _docker: aiodocker.Docker | None = None
 _cleanup_task: asyncio.Task | None = None
 
 
-def _allocate_port_range(workspace_id: str) -> tuple[int, int]:
-    """Allocate a port range for a workspace. Returns (start_port, end_port) inclusive."""
-    if workspace_id in _allocated_ports:
-        return _allocated_ports[workspace_id]
-
-    used_ranges = set(_allocated_ports.values())
+async def allocate_ports(workspace_id: str, count: int) -> list[int]:
+    """Allocate additional ports for a workspace. Returns the newly allocated port numbers."""
+    used = await user_store.get_all_allocated_ports()
+    ports = []
     port = PORT_RANGE_START
-    while True:
-        candidate = (port, port + PORTS_PER_WORKSPACE - 1)
-        if candidate not in used_ranges:
-            _allocated_ports[workspace_id] = candidate
-            return candidate
-        port += PORTS_PER_WORKSPACE
+    while len(ports) < count:
+        if port not in used:
+            ports.append(port)
+        port += 1
+    await user_store.add_port_allocations(workspace_id, ports)
+    return ports
 
 
-def _release_port_range(workspace_id: str) -> None:
-    _allocated_ports.pop(workspace_id, None)
-
-
-def get_workspace_ports(workspace_id: str) -> tuple[int, int] | None:
-    """Get the allocated port range for a workspace, if any."""
-    return _allocated_ports.get(workspace_id)
+async def get_workspace_ports(workspace_id: str) -> list[int]:
+    """Get allocated ports for a workspace."""
+    return await user_store.get_workspace_ports(workspace_id)
 
 
 async def get_docker() -> aiodocker.Docker:
@@ -67,6 +57,7 @@ async def start_container(
     sessions_path: str,
     existing_container_id: str | None = None,
     resume_session: str | None = None,
+    num_ports: int = DEFAULT_PORTS_PER_WORKSPACE,
 ) -> tuple[str, str]:
     """Start (or restart) a Pi container for a workspace.
 
@@ -90,26 +81,32 @@ async def start_container(
         except aiodocker.exceptions.DockerError:
             logger.info("Could not find container %s, creating new one", existing_container_id)
 
-    # Allocate port range for this workspace
-    start_port, end_port = _allocate_port_range(workspace_id)
+    # Ensure workspace has the right number of ports allocated
+    host_ports = await get_workspace_ports(workspace_id)
+    if len(host_ports) < num_ports:
+        new_ports = await allocate_ports(workspace_id, num_ports - len(host_ports))
+        host_ports.extend(new_ports)
+    elif len(host_ports) > num_ports:
+        excess = host_ports[num_ports:]
+        await user_store.remove_port_allocations(workspace_id, excess)
+        host_ports = host_ports[:num_ports]
 
     # Collect API keys from environment to pass into the container
     env_vars = []
     for key in os.environ:
         if key.startswith(("ANTHROPIC_", "OPENAI_", "GOOGLE_", "GROQ_", "MISTRAL_", "OLLAMA_")):
             env_vars.append(f"{key}={os.environ[key]}")
-    # Tell the container which ports are available
-    env_vars.append(f"BARK_PORT_START={start_port}")
-    env_vars.append(f"BARK_PORT_END={end_port}")
+    # Tell the container the port mappings (container_port:host_port pairs)
+    mappings = [f"{CONTAINER_PORT_START + i}:{hp}" for i, hp in enumerate(host_ports)]
+    env_vars.append(f"BARK_PORT_MAPPINGS={','.join(mappings)}")
     if resume_session:
         env_vars.append(f"BARK_RESUME_SESSION={resume_session}")
 
     # Build port bindings: map well-known container ports to allocated host ports
     port_bindings = {}
     exposed_ports = {}
-    for i in range(PORTS_PER_WORKSPACE):
+    for i, host_port in enumerate(host_ports):
         container_port = CONTAINER_PORT_START + i
-        host_port = start_port + i
         port_key = f"{container_port}/tcp"
         exposed_ports[port_key] = {}
         port_bindings[port_key] = [{"HostPort": str(host_port)}]
@@ -150,8 +147,8 @@ async def start_container(
     _track_activity(container_id, workspace_id)
 
     logger.info(
-        "Started container %s for workspace %s (ports %d-%d)",
-        container_id, workspace_id, start_port, end_port,
+        "Started container %s for workspace %s (ports %s)",
+        container_id, workspace_id, host_ports,
     )
     return container_id, "created"
 
@@ -188,9 +185,7 @@ async def remove_container(container_id: str) -> None:
     except aiodocker.exceptions.DockerError as e:
         logger.warning("Failed to remove container %s: %s", container_id, e)
 
-    info = _containers.pop(container_id, None)
-    if info:
-        _release_port_range(info["workspace_id"])
+    _containers.pop(container_id, None)
 
 
 async def stop_user_containers(user_id: str) -> None:

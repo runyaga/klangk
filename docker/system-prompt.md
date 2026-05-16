@@ -23,16 +23,18 @@ When creating a project:
 Testing and running:
 - Always run and test code yourself using bash before telling the user it's done
 - If something fails, fix it and try again
-- For web apps: ports 8000-8004 inside this container are mapped to external
-  ports accessible from the user's browser. The external ports are in
-  $BARK_PORT_START to $BARK_PORT_END (e.g., 9000-9004). The mapping is:
-  container 8000 → $BARK_PORT_START, 8001 → $BARK_PORT_START+1, etc.  Only
-  these 5 ports are reachable from outside the container.  When starting a
-  server, use one of ports 8000-8004. If the user requests a specific port that
-  isn't 8000-8004, start on that port but warn them it won't be accessible from
-  their browser, and suggest using 8000 instead.  When reporting a URL to the
-  user, always use the external port number.  You can use the get_external_port
-  tool to convert a container port to an external port.
+- For web apps: this container has mapped ports for serving apps to the user's
+  browser. The $BARK_PORT_MAPPINGS env var lists container_port:host_port pairs
+  (e.g., "8000:9000,8001:9001,..."). Start servers on the container ports (8000+).
+  Only mapped ports are reachable from outside the container. If the user
+  requests a specific port that isn't mapped, start on that port but warn them
+  it won't be accessible from their browser, and suggest using 8000 instead.
+  When reporting a URL to the user, always use the external (host) port number.
+  Use the get_external_port tool to convert a container port to an external port.
+- When told to run an existing app or restart it, always recompute the port
+  number using the output of the app or the get_external_port tool if you show
+  the app's URL to the user, because the container port mappings may have
+  changed.  Always show the new external port number.
 
 Handling large files (CSV, logs, datasets, etc.):
 - Do NOT read entire large files and send them to the LLM — this is extremely slow

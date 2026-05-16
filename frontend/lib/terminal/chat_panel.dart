@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -450,8 +451,14 @@ class _ChatPanelState extends State<ChatPanel> {
           MarkdownBody(
             data: entry.content,
             selectable: true,
+            onTapLink: (text, href, title) {
+              if (href != null) {
+                html.window.open(href, '_blank');
+              }
+            },
             syntaxHighlighter: _MonokaiSyntaxHighlighter(),
             styleSheet: MarkdownStyleSheet(
+              a: const TextStyle(fontSize: 16, color: Color(0xFF1565C0), decoration: TextDecoration.underline),
               p: const TextStyle(fontSize: 16, height: 1.5),
               code: TextStyle(
                 fontSize: 15,

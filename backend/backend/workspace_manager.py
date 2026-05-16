@@ -2,7 +2,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import user_store
+from . import container_manager, user_store
 
 _data_dir = Path(os.environ.get("BARK_DATA_DIR", str(Path.home() / ".bark" / "data")))
 WORKSPACES_ROOT = _data_dir / "workspaces"
@@ -22,6 +22,8 @@ async def create_workspace(user_id: str, name: str) -> dict:
     path.mkdir(parents=True, exist_ok=True)
     sessions = _sessions_path(user_id, workspace["id"])
     sessions.mkdir(parents=True, exist_ok=True)
+    # Allocate ports at creation time so ranges are sequential
+    await container_manager.allocate_ports(workspace["id"], workspace["num_ports"])
     return workspace
 
 
