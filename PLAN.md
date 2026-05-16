@@ -162,6 +162,7 @@ bark/
 - `bark` user baked into the image at build time with the host UID/GID (passed as Docker build args)
 - Root escalation prevented: root password locked, suid removed from `su`/`chsh`/`chfn`/`newgrp`
 - Containers labeled with `bark.managed=true`, `bark.instance=<BARK_INSTANCE_ID>`, and `bark.workspace-id=<id>` for identification, cleanup, and orphan detection (not reliant on image name). Multiple Bark instances on the same host use different `BARK_INSTANCE_ID` values to isolate their containers.
+- `Init: True` (Docker `--init`) runs `tini` as PID 1 to reap zombie processes from terminal sessions and tool executions
 
 ### Container Terminal
 - Direct shell access to the workspace container via the Terminal tab in the right panel
@@ -441,7 +442,7 @@ nginx reverse proxy (port 8995)
 - **Extract devenv scripts**: Move inline shell code from `devenv.nix` script definitions into standalone scripts in `scripts/`. Candidates: `flutterbuildweb` (plugin auto-fetch, codegen, flutter build), `dockerbuild` (plugin auto-fetch, collect extensions/tools, docker build, container cleanup), and `nginx` process (config generation and exec). This would make the logic easier to read, test, and reuse outside devenv.
 - **Plugin directory structure**: Consider whether each plugin should have explicit subdirectories for different file types (e.g., `dart/` for Flutter code, `extension/` for TypeScript, `tools/` for server-side scripts) instead of the current flat layout where `import_plugins.py` copies all `*.dart` files and `dockerbuild` picks up `extension.ts` by name. Subdirectories would simplify the copying logic and make it clearer what goes where.
 - **Plugin version numbers**: Plugins may want their own version numbers (in `plugin.yaml` or similar metadata) for compatibility checking, display in the UI, and meaningful pinning beyond git refs.
-- **Docker --init for zombie reaping**: Add `Init: True` to container config so Docker runs `tini` as PID 1. Currently Pi runs as PID 1 and doesn't reap child processes, causing zombies from terminal sessions and tool executions.
+- **Entrypoint nohup zombie**: The `nohup sh -c "cat ... > FIFO ..."` writer in `entrypoint.sh` (line 78) leaves one `[sh] <defunct>` zombie per container start. Its parent is the `su` process which doesn't call `wait()`. Harmless but cosmetic. Fix by restructuring the entrypoint so the writer finishes before the final `exec`, or by using a different mechanism to feed the FIFOs.
 - **Container resource limits**: Add CPU/memory limits to containers to prevent runaway processes.
 - **Container network isolation**: Restrict container network access to prevent use as an attack platform. Use a custom Docker network with limited egress — allow only the Ollama API endpoint (cloud or self-hosted) and block all other outbound traffic. Consider using `--network=none` with a proxy sidecar for allowlisted domains only.
 - **Debug pane cross-entry text selection**: Currently each debug entry has individually selectable text, but you can't drag-select across multiple entries. Wrapping the ListView in a SelectionArea or similar approach would allow selecting and copying text spanning multiple events.

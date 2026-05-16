@@ -126,6 +126,7 @@ async def start_container(
             "bark.workspace-id": workspace_id,
         },
         "HostConfig": {
+            "Init": True,
             "ReadonlyRootfs": True,
             "Binds": [
                 f"{host_path}:/workspace",
