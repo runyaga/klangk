@@ -65,6 +65,7 @@ bark/
     Dockerfile                  # Pi agent image: node:22-slim + Pi + Python3 + Dart + Flutter + Rust + build-essential
     entrypoint.sh               # Sets up Pi config (FIFO for models.json, system prompt), starts Pi in RPC mode
     system-prompt.md            # Static system prompt for Pi (copied into image)
+    builtin-extensions/         # Built-in Pi extensions (port-map.ts, etc.) — not from plugins
     extensions/                 # Generated: collected from $BARK_PLUGINS_DIR/*/extension.ts at build time
     tools/                      # Generated: collected from $BARK_PLUGINS_DIR/*/tools/ at build time
 
@@ -141,7 +142,8 @@ bark/
 - Pi RPC events translated to AG-UI events in real-time
 - Native Pi session persistence (JSONL files in workspace `.pi/sessions/`)
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
-- 5 TCP ports allocated per workspace (9000-9004, 9005-9009, etc.) for user apps
+- 5 TCP ports allocated per workspace: well-known container ports 8000-8004 mapped to host ports (9000-9004, 9005-9009, etc.) so the agent always uses predictable ports
+- Built-in `get_external_port` tool converts container port to user-facing host port
 - LLM provider/model configured via `settings.json` FIFO (sets `defaultProvider` and `defaultModel`)
 - API key delivered via `models.json` FIFO (named pipe, written once at startup, deleted after Pi reads it — key never persists on disk)
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)
@@ -432,7 +434,6 @@ nginx reverse proxy (port 8995)
 - **Syntax highlighting language detection**: Improve code block language detection for unlabeled blocks.
 - **Strip env vars from terminal session**: Currently `docker exec -e VAR=` blanks sensitive env vars (API keys, BARK_RESUME_SESSION) but they still appear in `env` output as empty strings. Investigate using `env -u` inside the exec command or wrapping the shell invocation to fully unset them rather than just blanking.
 - **Terminal scrollbar**: The terminal pane (xterm.dart) currently has no visible scrollbar for scrollback history.
-- **Well-known container ports**: Map allocated host ports (e.g., 9000-9004) to fixed container ports (e.g., 8080-8084) so the agent always uses predictable ports. AGENTS.md can say "start your server on port 8080" regardless of which host port range is assigned. Currently `BARK_PORT_START`/`BARK_PORT_END` env vars expose host-side allocation details to the container, which the agent shouldn't need to know.
 - **User app preview pane**: Users should be able to create web apps inside their workspace and preview them in the browser. Add a preview tab or iframe panel that loads the app from the workspace's allocated port. Needs UI to show which ports are active (e.g., detect listening sockets), a way to open a preview, and optionally proxy through nginx so the app is accessible at a stable URL.
 - **Same-workspace multi-window**: Opening the same workspace in two browser windows simultaneously has undefined behavior — both WebSocket connections share one Pi container/session, and prompts from either window could collide or interleave unpredictably. Consider either locking a workspace to one connection at a time, or multiplexing both windows onto the same event stream.
 - **Workspace disk quotas**: Limit how much disk space each workspace can consume. Options: use filesystem quotas (XFS/ext4 project quotas on the host), overlay2 with size limits, or a loopback-mounted filesystem per workspace with a fixed size. Should also surface current disk usage in the UI (file viewer header or workspace list) so users can see how much space they've used.

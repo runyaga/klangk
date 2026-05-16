@@ -76,7 +76,7 @@ All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` 
 ### Ports
 - `BARK_PORT` (default `8997`): Web UI + API (single FastAPI/uvicorn server)
 - `BARK_NGINX_PORT` (default `8995`): nginx reverse proxy
-- `9000+`: User app ports (5 per workspace)
+- `9000+`: User app ports (5 per workspace, mapped to container ports 8000-8004)
 
 ### Rebuilding
 
