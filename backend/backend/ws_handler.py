@@ -74,6 +74,8 @@ async def handle_websocket(ws: WebSocket) -> None:
                 await _handle_terminal_resize(conn_state, msg)
             elif cmd == "terminal_stop":
                 await _handle_terminal_stop(conn_state)
+            elif cmd == "restart_container":
+                await _handle_restart_container(ws, conn_state)
             else:
                 await _send_error(ws, f"Unknown command: {cmd}")
 
@@ -125,8 +127,8 @@ async def _start_workspace_container(ws: WebSocket, state: dict, workspace_id: s
         try:
             await ws.send_json({"type": "event", "event": {
                 "type": "CUSTOM",
-                "name": "container_idle_stop",
-                "value": {"reason": "Container stopped due to idle timeout. Will restart on next prompt."},
+                "name": "container_stopped",
+                "value": {"reason": "idle timeout"},
             }})
         except Exception:
             pass
@@ -175,6 +177,12 @@ async def _handle_workspace_connect(ws: WebSocket, state: dict, msg: dict) -> No
 
     if state.get("resume_session"):
         status_msg += " (session resumed)"
+
+    timeout_mins = container_manager.IDLE_TIMEOUT_SECONDS / 60
+    if timeout_mins == int(timeout_mins):
+        status_msg += f" — idle timeout: {int(timeout_mins)}m"
+    else:
+        status_msg += f" — idle timeout: {timeout_mins:.1f}m"
 
     await ws.send_json({
         "type": "workspace_ready",
@@ -319,6 +327,55 @@ async def _handle_abort(state: dict) -> None:
     await pi_client.abort()
 
 
+async def _handle_restart_container(ws: WebSocket, state: dict) -> None:
+    """Restart a stopped container (e.g., after idle timeout)."""
+    workspace_id = state.get("workspace_id")
+    if not workspace_id:
+        await _send_error(ws, "Not connected to a workspace")
+        return
+
+    await ws.send_json({"type": "event", "event": {
+        "type": "CUSTOM",
+        "name": "container_restart",
+        "value": {"reason": "Restarting container..."},
+    }})
+
+    try:
+        await _cleanup_connection(ws, state)
+    except Exception as e:
+        logger.warning("Cleanup error during restart: %s", e)
+
+    workspace = state.get("workspace")
+    if workspace is None:
+        workspace = await workspace_manager.get_workspace(workspace_id, state["user"]["id"])
+    if workspace is None:
+        await _send_error(ws, "Workspace not found")
+        return
+
+    await _start_workspace_container(ws, state, workspace_id, workspace)
+    container_manager.record_activity(state["container_id"])
+
+    ports = await container_manager.get_workspace_ports(workspace_id)
+    ports_str = f" (ports {','.join(str(p) for p in ports)})" if ports else ""
+    status_msg = f"Container restarted{ports_str}"
+    if state.get("resume_session"):
+        status_msg += " (session resumed)"
+
+    timeout_mins = container_manager.IDLE_TIMEOUT_SECONDS / 60
+    if timeout_mins == int(timeout_mins):
+        status_msg += f" — idle timeout: {int(timeout_mins)}m"
+    else:
+        status_msg += f" — idle timeout: {timeout_mins:.1f}m"
+
+    await ws.send_json({"type": "event", "event": {
+        "type": "CUSTOM",
+        "name": "container_ready",
+        "value": {"reason": status_msg},
+    }})
+
+    logger.info("Container restarted via restart_container command for workspace %s", workspace_id)
+
+
 async def _handle_terminal_start(ws: WebSocket, state: dict, msg: dict) -> None:
     container_id = state.get("container_id")
     if not container_id:
@@ -375,8 +432,24 @@ async def _forward_terminal_output(ws: WebSocket, session: TerminalSession, stat
     try:
         async for data in session.output():
             await ws.send_json({"type": "terminal_output", "data": data})
+        # Stream ended without cancellation — container likely died
+        await ws.send_json({"type": "event", "event": {
+            "type": "CUSTOM",
+            "name": "container_stopped",
+            "value": {},
+        }})
+    except asyncio.CancelledError:
+        raise  # Normal cleanup, don't send event
     except Exception as e:
         logger.error("Terminal output forwarding error: %s", e)
+        try:
+            await ws.send_json({"type": "event", "event": {
+                "type": "CUSTOM",
+                "name": "container_stopped",
+                "value": {},
+            }})
+        except Exception:
+            pass
 
 
 async def _forward_events(ws: WebSocket, pi_client: PiRpcClient, workspace_id: str, state: dict) -> None:

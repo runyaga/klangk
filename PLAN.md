@@ -151,7 +151,7 @@ bark/
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)
 - All provider env vars (`OLLAMA_*`, `ANTHROPIC_*`, etc.) stripped from Pi's process environment before exec
 - System prompt stored as `docker/system-prompt.md`, copied into image at build time
-- 15-minute idle timeout with automatic container stop and debug notification
+- 30-minute idle timeout (configurable via `BARK_IDLE_TIMEOUT_SECONDS`) with automatic container stop, debug notification, and terminal overlay with restart button
 - All user containers stopped on logout and backend shutdown
 - Read-only root filesystem (`ReadonlyRootfs: True`) — the agent cannot modify system files or install packages outside the workspace. Writable paths:
   - `/workspace` — bind mount to host (user files)
@@ -172,6 +172,7 @@ bark/
 - State preserved across tab switches (IndexedStack keeps all panels alive)
 - Right-click context menu with Copy (when text selected) and Paste
 - Scrollbar for terminal history
+- Overlay with restart button when container stops (idle timeout or unexpected), auto-reconnects terminal session after restart
 - Cleaned up on workspace disconnect or WebSocket close
 
 ### Right Panel Layout
@@ -285,6 +286,7 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `BARK_SOLIPLEX_PORT` | `8555` | Soliplex backend port (for nginx proxy) |
 | `BARK_DATA_DIR` | `~/.bark/data` | Database, workspaces, Pi sessions |
 | `BARK_PLUGINS_DIR` | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`) |
+| `BARK_IDLE_TIMEOUT_SECONDS` | `1800` | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s) |
 | `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
 | `OLLAMA_API_KEY` | | Ollama Cloud API key |
 | `OLLAMA_BASE_URL` | | Ollama API URL (cloud or self-hosted) |

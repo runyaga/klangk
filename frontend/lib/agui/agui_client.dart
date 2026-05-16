@@ -137,6 +137,10 @@ class AguiClient extends ChangeNotifier {
     _send({'cmd': 'abort'});
   }
 
+  void sendRestartContainer() {
+    _send({'cmd': 'restart_container'});
+  }
+
   void sendTerminalStart({int cols = 80, int rows = 24}) {
     _send({'cmd': 'terminal_start', 'cols': cols, 'rows': rows});
   }

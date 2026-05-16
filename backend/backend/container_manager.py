@@ -10,8 +10,14 @@ from . import user_store
 logger = logging.getLogger(__name__)
 
 IMAGE_NAME = "bark-pi"
-IDLE_TIMEOUT_SECONDS = 15 * 60  # 15 minutes
-CHECK_INTERVAL_SECONDS = 60
+IDLE_TIMEOUT_SECONDS = 30 * 60
+_idle_env = os.environ.get("BARK_IDLE_TIMEOUT_SECONDS")
+if _idle_env is not None:
+    try:
+        IDLE_TIMEOUT_SECONDS = int(_idle_env)
+    except ValueError:
+        logger.warning("BARK_IDLE_TIMEOUT_SECONDS=%r is not a valid integer, using default %d", _idle_env, IDLE_TIMEOUT_SECONDS)
+CHECK_INTERVAL_SECONDS = max(10, min(60, IDLE_TIMEOUT_SECONDS // 3))
 
 # Port allocation
 PORT_RANGE_START = 9000
@@ -245,6 +251,7 @@ async def _cleanup_idle_containers() -> None:
 def start_cleanup_loop() -> None:
     """Start the background cleanup task."""
     global _cleanup_task
+    logger.info("Idle timeout: %ds, check interval: %ds", IDLE_TIMEOUT_SECONDS, CHECK_INTERVAL_SECONDS)
     if _cleanup_task is None:
         _cleanup_task = asyncio.create_task(_cleanup_idle_containers())
 
