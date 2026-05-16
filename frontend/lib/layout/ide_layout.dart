@@ -3,12 +3,8 @@ import '../terminal/container_terminal.dart';
 
 const _bar3d = BoxDecoration(
   gradient: LinearGradient(
-    colors: [Color(0xFFD0D0D0), Color(0xFFE8E8E8), Color(0xFFD0D0D0)],
+    colors: [Color(0xFFB8B8B8), Color(0xFFE8E8E8), Color(0xFFB8B8B8)],
   ),
-  boxShadow: [
-    BoxShadow(color: Color(0x30000000), blurRadius: 2, offset: Offset(-1, 0)),
-    BoxShadow(color: Color(0x30000000), blurRadius: 2, offset: Offset(1, 0)),
-  ],
 );
 
 /// Split-pane IDE layout: chat on left, tabbed panel on right.
@@ -62,35 +58,28 @@ class _IdeLayoutState extends State<IdeLayout>
         final totalHeight = constraints.maxHeight;
         const bar = 6.0;
 
-        final usableWidth = totalWidth - bar;
-        final leftWidth = usableWidth * _horizontalRatio;
-        final rightWidth = usableWidth - leftWidth;
+        final leftWidth = totalWidth * _horizontalRatio;
+        final dividerLeft = leftWidth;
 
-        return Row(
+        return Stack(
           children: [
             // Chat panel (left)
-            Container(
+            Positioned(
+              left: 0,
+              top: 0,
               width: leftWidth,
               height: totalHeight,
-              color: const Color(0xFFF7F6F2),
-              child: widget.chat,
-            ),
-            // Center divider
-            GestureDetector(
-              onHorizontalDragUpdate: (details) {
-                setState(() {
-                  _horizontalRatio += details.delta.dx / usableWidth;
-                  _horizontalRatio = _horizontalRatio.clamp(0.2, 0.8);
-                });
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.resizeColumn,
-                child: Container(width: bar, decoration: _bar3d),
+              child: Container(
+                color: const Color(0xFFF7F6F2),
+                child: widget.chat,
               ),
             ),
             // Right column: tabbed panel
-            SizedBox(
-              width: rightWidth,
+            Positioned(
+              left: leftWidth + bar,
+              top: 0,
+              right: 0,
+              bottom: 0,
               child: Column(
                 children: [
                   Container(
@@ -131,7 +120,8 @@ class _IdeLayoutState extends State<IdeLayout>
                             child: widget.fileViewer,
                           ),
                           Container(
-                            color: const Color(0xFFF0EFE9),
+                            color: const Color(0xFF1D1F21),
+                            padding: const EdgeInsets.only(left: 5),
                             child: widget.terminal,
                           ),
                           Container(
@@ -143,6 +133,25 @@ class _IdeLayoutState extends State<IdeLayout>
                     ),
                   ),
                 ],
+              ),
+            ),
+            // Center divider (on top so shadow renders over both panels)
+            Positioned(
+              left: dividerLeft,
+              top: 0,
+              width: bar,
+              height: totalHeight,
+              child: GestureDetector(
+                onHorizontalDragUpdate: (details) {
+                  setState(() {
+                    _horizontalRatio += details.delta.dx / totalWidth;
+                    _horizontalRatio = _horizontalRatio.clamp(0.2, 0.8);
+                  });
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: Container(decoration: _bar3d),
+                ),
               ),
             ),
           ],
