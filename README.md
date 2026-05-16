@@ -103,16 +103,15 @@ devenv up                                # builds and starts
 
 Sample plugins (celebrate, beep, pig-latin, word-count) are included in the generated template. Sample plugin source lives in `plugins/` in this repo.
 
-By default, plugins are stored in `~/.bark/plugins` and data (database, workspaces) in `~/.bark/data`. To change these using devenv, create `devenv.local.nix` (gitignored):
+By default, plugins are stored in `~/.bark/plugins` and data (database, workspaces) in `~/.bark/data`. Override these and other settings in `.env`:
 
-```nix
-{ lib, ... }: {
-  env.BARK_DATA_DIR = lib.mkForce "/path/to/my/data";
-  env.BARK_PLUGINS_DIR = lib.mkForce "/path/to/my/plugins";
-}
+```bash
+BARK_DATA_DIR=/path/to/my/data
+BARK_PLUGINS_DIR=/path/to/my/plugins
+BARK_PORT=8997           # backend port
+BARK_NGINX_PORT=8995     # nginx reverse proxy port
+BARK_SOLIPLEX_PORT=8555  # Soliplex backend port
 ```
-
-If you aren't using devenv, just set the environment variables directly.
 
 Each plugin directory can contain:
 

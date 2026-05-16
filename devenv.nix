@@ -1,4 +1,4 @@
-{ pkgs, config, ... }: {
+{ pkgs, config, lib, ... }: {
   languages.dart = {
     enable = true;
     package = pkgs.flutter;
@@ -47,7 +47,7 @@
   processes = {
     backend = {
       exec = ''
-        cd $DEVENV_ROOT/backend && exec uvicorn backend.main:app --host 0.0.0.0 --port 8997
+        cd $DEVENV_ROOT/backend && exec uvicorn backend.main:app --host 0.0.0.0 --port $BARK_PORT
       '';
       after = [
         "bark:flutter-build"
@@ -76,10 +76,10 @@
           }
 
           server {
-            listen 8995;
+            listen ${toString config.env.BARK_NGINX_PORT};
 
             location /bark/ {
-              proxy_pass http://127.0.0.1:8997/;
+              proxy_pass http://127.0.0.1:${config.env.BARK_PORT}/;
               proxy_set_header Host $host;
               proxy_set_header X-Real-IP $remote_addr;
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -90,7 +90,7 @@
             }
 
             location / {
-              proxy_pass http://127.0.0.1:8555/;
+              proxy_pass http://127.0.0.1:${toString config.env.BARK_SOLIPLEX_PORT}/;
               proxy_set_header Host $host;
               proxy_set_header X-Real-IP $remote_addr;
               proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -102,6 +102,7 @@
           }
         }
         NGINX
+        echo "nginx listening on port $BARK_NGINX_PORT" >&2
         exec nginx -e stderr -c $DEVENV_STATE/nginx/nginx.conf
       '';
       after = [
@@ -113,8 +114,15 @@
 
   env.SOURCE_DATE_EPOCH = "";
   env.UV_PYTHON = config.devenv.state + "/venv/bin/python";
-  env.BARK_DATA_DIR = builtins.getEnv "HOME" + "/.bark/data";
-  env.BARK_PLUGINS_DIR = builtins.getEnv "HOME" + "/.bark/plugins";
+  # Port defaults use mkOverride 1500 (lower priority than mkDefault/1000).
+  # dotenv.enable loads .env values as mkDefault, so .env entries override these.
+  # devenv.local.nix with lib.mkForce overrides everything.
+  # Priority: devenv.local.nix (mkForce/50) > .env (mkDefault/1000) > these defaults (1500)
+  env.BARK_PORT = lib.mkOverride 1500 "8997";
+  env.BARK_NGINX_PORT = lib.mkOverride 1500 "8995";
+  env.BARK_SOLIPLEX_PORT = lib.mkOverride 1500 "8555";
+  env.BARK_DATA_DIR = lib.mkOverride 1500 (builtins.getEnv "HOME" + "/.bark/data");
+  env.BARK_PLUGINS_DIR = lib.mkOverride 1500 (builtins.getEnv "HOME" + "/.bark/plugins");
   dotenv.enable = true;
 
   scripts.flutterbuildweb.exec = ''

@@ -295,15 +295,11 @@ plugins:
     ref: main
 ```
 
-- `BARK_DATA_DIR` — env var controlling where Bark stores its data (database, workspaces, Pi sessions). Defaults to `~/.bark/data`.
-- `BARK_PLUGINS_DIR` — env var controlling where plugins are stored. Defaults to `~/.bark/plugins`. Lives outside the repo so that devenv's `execIfModified` can detect changes without `.gitignore` conflicts.
-- Both can be overridden via `devenv.local.nix` (gitignored, loaded automatically alongside `devenv.nix` for local-only settings):
-  ```nix
-  { lib, ... }: {
-    env.BARK_DATA_DIR = lib.mkForce "/path/to/my/data";
-    env.BARK_PLUGINS_DIR = lib.mkForce "/path/to/my/plugins";
-  }
-  ```
+- `BARK_DATA_DIR` — where Bark stores its data (database, workspaces, Pi sessions). Defaults to `~/.bark/data`. Override in `.env`.
+- `BARK_PLUGINS_DIR` — where plugins are stored. Defaults to `~/.bark/plugins`. Lives outside the repo so that devenv's `execIfModified` can detect changes without `.gitignore` conflicts. Override in `.env`.
+- `BARK_PORT` — backend port. Defaults to `8997`. Override in `.env`.
+- `BARK_NGINX_PORT` — nginx reverse proxy port. Defaults to `8995`. Override in `.env`.
+- `BARK_SOLIPLEX_PORT` — Soliplex backend port for nginx proxy. Defaults to `8555`. Override in `.env`.
 - `scripts/update_plugins.py` — Python script that manages plugin fetching:
   - If `$BARK_PLUGINS_DIR` doesn't exist, creates it with a template `plugins.yaml` that includes sample plugins (celebrate, beep, pig-latin, word-count)
   - If `plugins.yaml` exists, fetches listed plugins, resolves git refs to commit SHAs, and writes `plugins.lock`
@@ -377,7 +373,6 @@ nginx reverse proxy (port 8995)
 
 - **Local files pane**: Add a browser-side file pane where users can upload files into an in-browser-memory filesystem (e.g., using the File System Access API or an in-memory store). These files would be accessible to client-side plugins and could be passed to the REPL as context without uploading to the server. Useful for working with sensitive files that shouldn't leave the browser, or for quick one-off analysis without persisting to the workspace.
 - **Extract devenv scripts**: Move inline shell code from `devenv.nix` script definitions into standalone scripts in `scripts/`. Candidates: `flutterbuildweb` (plugin auto-fetch, codegen, flutter build), `dockerbuild` (plugin auto-fetch, collect extensions/tools, docker build, container cleanup), and `nginx` process (config generation and exec). This would make the logic easier to read, test, and reuse outside devenv.
-- **Configurable backend port**: The backend port (8997) is hardcoded in the uvicorn command and the nginx proxy_pass in `devenv.nix`. Extract it into a variable so both reference the same value and it can be overridden via `devenv.local.nix`.
 - **Plugin directory structure**: Consider whether each plugin should have explicit subdirectories for different file types (e.g., `dart/` for Flutter code, `extension/` for TypeScript, `tools/` for server-side scripts) instead of the current flat layout where `import_plugins.py` copies all `*.dart` files and `dockerbuild` picks up `extension.ts` by name. Subdirectories would simplify the copying logic and make it clearer what goes where.
 - **Plugin version numbers**: Plugins may want their own version numbers (in `plugin.yaml` or similar metadata) for compatibility checking, display in the UI, and meaningful pinning beyond git refs.
 - **Read-only root filesystem**: Use `--read-only` Docker flag to make the container's root filesystem unwritable. Only `/workspace` (bind mount) and necessary tmpfs mounts (`/tmp`, `/root/.pi`) should be writable. This prevents the agent from modifying system files or installing packages outside the workspace.
