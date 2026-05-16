@@ -53,22 +53,41 @@ Open [http://localhost:8997](http://localhost:8997) and log in with `admin`/`adm
 5. **View files** in the file viewer panel, drag-and-drop to upload
 6. **Monitor activity** in the debug panel
 
-### Ports
+### Environment Variables
 
-| Port | Service |
-|------|---------|
-| 8997 | Web UI + API (single FastAPI server) |
-| 9000+ | User app ports (5 per workspace) |
+All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` at low priority so `.env` values take precedence.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BARK_PORT` | `8997` | Backend (FastAPI/uvicorn) port |
+| `BARK_NGINX_PORT` | `8995` | nginx reverse proxy port |
+| `BARK_SOLIPLEX_PORT` | `8555` | Soliplex backend port (for nginx proxy) |
+| `BARK_DATA_DIR` | `~/.bark/data` | Database, workspaces, Pi sessions |
+| `BARK_PLUGINS_DIR` | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`) |
+| `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
+| `OLLAMA_API_KEY` | | Ollama Cloud API key |
+| `OLLAMA_BASE_URL` | | Ollama API URL (cloud or self-hosted) |
+| `OLLAMA_MODEL` | | LLM model name |
+| `BARK_JWT_SECRET` | | JWT signing secret |
+| `BARK_DEFAULT_USER` | | Auto-seeded user on startup |
+| `BARK_DEFAULT_PASSWORD` | | Auto-seeded password on startup |
+
+### Ports
+- `BARK_PORT` (default `8997`): Web UI + API (single FastAPI/uvicorn server)
+- `BARK_NGINX_PORT` (default `8995`): nginx reverse proxy
+- `9000+`: User app ports (5 per workspace)
 
 ### Rebuilding
 
-To force rebuild the Docker image and Flutter web app:
+The devenv environment rebuilds necessary components at `devenv processes up` time.
+
+To force-rebuild the Docker image and Flutter web app:
 
 ```bash
 devenv shell -- rebuild
 ```
 
-Then restart the processes. On normal startup, Flutter and Docker builds run automatically when their source files have changed (via devenv `execIfModified` content hashing).
+Then restart the processes. 
 
 ## Architecture
 
@@ -102,16 +121,6 @@ devenv up                                # builds and starts
 ```
 
 Sample plugins (celebrate, beep, pig-latin, word-count) are included in the generated template. Sample plugin source lives in `plugins/` in this repo.
-
-By default, plugins are stored in `~/.bark/plugins` and data (database, workspaces) in `~/.bark/data`. Override these and other settings in `.env`:
-
-```bash
-BARK_DATA_DIR=/path/to/my/data
-BARK_PLUGINS_DIR=/path/to/my/plugins
-BARK_PORT=8997           # backend port
-BARK_NGINX_PORT=8995     # nginx reverse proxy port
-BARK_SOLIPLEX_PORT=8555  # Soliplex backend port
-```
 
 Each plugin directory can contain:
 

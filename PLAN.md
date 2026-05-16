@@ -228,8 +228,28 @@ devenv processes up
 open http://localhost:8997
 ```
 
+### Environment Variables
+
+All settings can be overridden in `.env`. Defaults (where appropriate) are provided in `devenv.nix` at low priority so `.env` values take precedence.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BARK_PORT` | `8997` | Backend (FastAPI/uvicorn) port |
+| `BARK_NGINX_PORT` | `8995` | nginx reverse proxy port |
+| `BARK_SOLIPLEX_PORT` | `8555` | Soliplex backend port (for nginx proxy) |
+| `BARK_DATA_DIR` | `~/.bark/data` | Database, workspaces, Pi sessions |
+| `BARK_PLUGINS_DIR` | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`) |
+| `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
+| `OLLAMA_API_KEY` | | Ollama Cloud API key |
+| `OLLAMA_BASE_URL` | | Ollama API URL (cloud or self-hosted) |
+| `OLLAMA_MODEL` | | LLM model name |
+| `BARK_JWT_SECRET` | | JWT signing secret |
+| `BARK_DEFAULT_USER` | | Auto-seeded user on startup |
+| `BARK_DEFAULT_PASSWORD` | | Auto-seeded password on startup |
+
 ### Ports
-- `8997`: Web UI + API (single FastAPI/uvicorn server)
+- `BARK_PORT` (default `8997`): Web UI + API (single FastAPI/uvicorn server)
+- `BARK_NGINX_PORT` (default `8995`): nginx reverse proxy
 - `9000+`: User app ports (5 per workspace)
 
 ### Rebuild
@@ -295,11 +315,6 @@ plugins:
     ref: main
 ```
 
-- `BARK_DATA_DIR` — where Bark stores its data (database, workspaces, Pi sessions). Defaults to `~/.bark/data`. Override in `.env`.
-- `BARK_PLUGINS_DIR` — where plugins are stored. Defaults to `~/.bark/plugins`. Lives outside the repo so that devenv's `execIfModified` can detect changes without `.gitignore` conflicts. Override in `.env`.
-- `BARK_PORT` — backend port. Defaults to `8997`. Override in `.env`.
-- `BARK_NGINX_PORT` — nginx reverse proxy port. Defaults to `8995`. Override in `.env`.
-- `BARK_SOLIPLEX_PORT` — Soliplex backend port for nginx proxy. Defaults to `8555`. Override in `.env`.
 - `scripts/update_plugins.py` — Python script that manages plugin fetching:
   - If `$BARK_PLUGINS_DIR` doesn't exist, creates it with a template `plugins.yaml` that includes sample plugins (celebrate, beep, pig-latin, word-count)
   - If `plugins.yaml` exists, fetches listed plugins, resolves git refs to commit SHAs, and writes `plugins.lock`
@@ -322,7 +337,7 @@ plugins:
 
 ## Client-Side Tool Delegation via Extension UI Sub-Protocol
 
-Pi's RPC mode does **not** support host tools (`set_host_tools` returns "Unknown command"). Instead, we use Pi's **Extension UI Sub-Protocol** to delegate tool execution to the browser.
+We use Pi's **Extension UI Sub-Protocol** to delegate tool execution to the browser.
 
 ### How it works
 
