@@ -3,8 +3,8 @@ name: E2E Tests
 on:
   workflow_dispatch:
   schedule:
-    # Twice daily: 8am and 8pm UTC
-    - cron: "0 8,20 * * *"
+    # Hourly — skips if no commits in the last hour
+    - cron: "0 * * * *"
 
 jobs:
   test:
@@ -20,9 +20,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Skip if no recent changes
+        if: github.event_name == 'schedule'
+        run: |
+          LAST_COMMIT=$(git log -1 --format=%ct)
+          NOW=$(date +%s)
+          DIFF=$((NOW - LAST_COMMIT))
+          if [ $DIFF -gt 3600 ]; then
+            echo "No commits in the last hour, skipping"
+            echo "SKIP_RUN=true" >> $GITHUB_ENV
+          fi
+
       - uses: DeterminateSystems/determinate-nix-action@main
+        if: env.SKIP_RUN != 'true'
 
       - name: Free disk space
+        if: env.SKIP_RUN != 'true'
         run: |
           set -x
           rm -rf $HOME/.cache
@@ -36,6 +49,7 @@ jobs:
             /usr/local/julia* &
 
       - name: Create .env
+        if: env.SKIP_RUN != 'true'
         run: |
           cat > .env << EOF
           OLLAMA_API_KEY=${{ secrets.OLLAMA_API_KEY }}
@@ -47,19 +61,17 @@ jobs:
           EOF
 
       - name: Install devenv
+        if: env.SKIP_RUN != 'true'
         run: ./bootstrap --unattended
 
       - name: Start services and wait for server
+        if: env.SKIP_RUN != 'true'
         shell: bash
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          # Start devenv in background within this step so the
-          # process survives while we poll. Builds (Flutter + Docker)
-          # run via execIfModified and can take several minutes.
           devenv up --no-tui > /tmp/devenv-up.log 2>&1 &
           DEVENV_PID=$!
           echo "devenv up started as PID $DEVENV_PID"
-          # Poll for up to 10 minutes (builds can be slow on CI)
           for i in $(seq 1 120); do
             if ! kill -0 $DEVENV_PID 2>/dev/null; then
               echo "devenv up exited unexpectedly, logs:"
@@ -81,12 +93,14 @@ jobs:
           exit 1
 
       - name: Install Playwright browsers
+        if: env.SKIP_RUN != 'true'
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
           devenv shell -- bash -c \
             "cd tests/playwright && npm run install-browsers"
 
       - name: Run E2E tests
+        if: env.SKIP_RUN != 'true'
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
           CHROME=$(which google-chrome-stable 2>/dev/null \
@@ -97,7 +111,7 @@ jobs:
              CHROME_PATH=$CHROME npx playwright test"
 
       - name: Upload test results
-        if: failure()
+        if: failure() && env.SKIP_RUN != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-results
