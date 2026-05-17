@@ -281,7 +281,8 @@ async def proxy_hosted_app(
 ):
     """Proxy requests to apps running in workspace containers (no auth required)."""
     # Build upstream URL
-    upstream_url = f"http://localhost:{port}/{path}"
+    upstream_url = f"http://127.0.0.1:{port}/{path}"
+    logger.info("Proxying %s %s -> %s", request.method, request.url.path, upstream_url)
     if request.url.query:
         upstream_url += f"?{request.url.query}"
 
@@ -301,6 +302,8 @@ async def proxy_hosted_app(
         resp = await client.send(req, stream=True)
     except httpx.ConnectError:
         raise HTTPException(status_code=502, detail="App is not running on this port")
+    except httpx.RemoteProtocolError:
+        raise HTTPException(status_code=502, detail="App did not send a valid response")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="App did not respond in time")
 
