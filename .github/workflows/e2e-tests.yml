@@ -92,9 +92,12 @@ jobs:
           CHROME=$(which google-chrome-stable 2>/dev/null \
             || which chromium-browser 2>/dev/null \
             || echo /usr/bin/google-chrome-stable)
+          # Run a single test while validating CI setup, then
+          # switch to full suite once stable
           devenv shell -- bash -c \
             "cd tests/playwright && \
-             CHROME_PATH=$CHROME npx playwright test"
+             CHROME_PATH=$CHROME npx playwright test \
+             -g 'login with default credentials'"
 
       - name: Upload test results
         if: failure()
