@@ -345,10 +345,20 @@ Tests cover auth (password hashing, JWT, login/register, token blocklisting), us
 ```bash
 # Install browsers (first time only)
 devenv shell -- bash -c "cd tests/playwright && npm run install-browsers"
-# Run tests
+
+# Run all tests
 devenv shell -- bash -c "cd tests/playwright && npx playwright test"
+
+# Run a single test by name
+devenv shell -- bash -c "cd tests/playwright && npx playwright test -g 'login with default credentials'"
+
+# Run with headed browser (visible)
+devenv shell -- bash -c "cd tests/playwright && npx playwright test --headed"
+
+# Run with verbose output
+devenv shell -- bash -c "cd tests/playwright && npx playwright test --reporter=list"
 ```
-Tests run against `http://localhost:8997` using system Chrome. They cover login, workspace creation/deletion, terminal input, file tab switching, chat input, file upload/rename/delete via API, and logout. Flutter Web renders to canvas, so UI interaction uses coordinate-based clicks on `<flutter-view>`.
+Tests run against `http://localhost:8997` using system Chrome. They cover login (success and failure), workspace creation/deletion, terminal input, file tab switching, chat input, file upload/rename/delete via API, folder upload with zip download round-trip, an LLM integration test (agent builds a pong game and returns a hosted URL), and logout. Flutter Web renders to canvas, so UI interaction uses coordinate-based clicks on `<flutter-view>`. The agent integration test creates a fresh workspace and cleans it up afterward; it requires a working LLM provider and can take 1–3 minutes.
 
 ### Plugin System
 

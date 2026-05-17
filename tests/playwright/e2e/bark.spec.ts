@@ -215,42 +215,48 @@ test.describe('Bark E2E', () => {
     await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
   });
 
-  test('create and delete workspace', async ({ page }) => {
-    test.setTimeout(90_000);
-    await login(page);
+  test('create and delete workspace', async ({ request }) => {
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+    const wsName = 'e2e-test-workspace';
 
-    const { width, height } = vp(page);
-    const f = fv(page);
+    // Clean up any leftover workspace with the same name
+    const existingResp = await request.get(`${API_BASE}/workspaces`, { headers });
+    if (existingResp.ok()) {
+      for (const ws of await existingResp.json()) {
+        if (ws.name === wsName) {
+          await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+        }
+      }
+    }
 
-    // Click the FAB (+) button in bottom-right corner
-    await f.click({ position: { x: width - 40, y: height - 40 }, force: true });
-    await page.waitForTimeout(1000);
+    // Create workspace via API
+    const createResp = await request.post(
+      `${API_BASE}/workspaces?name=${encodeURIComponent(wsName)}`,
+      { headers },
+    );
+    expect(createResp.ok()).toBeTruthy();
+    const created = await createResp.json();
+    expect(created.id).toBeTruthy();
+    expect(created.name).toBe(wsName);
 
-    // Dialog should appear — type workspace name
-    // Dialog input is centered in the page
-    await f.click({ position: { x: width / 2, y: height / 2 }, force: true });
-    await page.waitForTimeout(300);
-    await page.keyboard.type('e2e-test-workspace');
+    // Verify it appears in the listing
+    let listResp = await request.get(`${API_BASE}/workspaces`, { headers });
+    expect(listResp.ok()).toBeTruthy();
+    let workspaces = await listResp.json();
+    expect(workspaces.some((ws: any) => ws.id === created.id)).toBeTruthy();
 
-    // Click Create/OK button (below the input, center of dialog)
-    await f.click({ position: { x: width / 2 + 100, y: height / 2 + 60 }, force: true });
-    await page.waitForTimeout(2000);
+    // Delete it
+    const deleteResp = await request.delete(
+      `${API_BASE}/workspaces/${created.id}`,
+      { headers },
+    );
+    expect(deleteResp.ok()).toBeTruthy();
 
-    // Take screenshot to verify workspace was created
-    await page.screenshot({ path: 'test-results/workspace-created.png' });
-
-    // Now delete it — find the delete button (trash icon) on the right side of the entry
-    // The new workspace should be in the list. Find it by looking for delete buttons.
-    // Delete button is at the far right of a workspace row
-    // We need to find which row has our workspace — take the last one
-    await f.click({ position: { x: width - 40, y: 110 }, force: true });
-    await page.waitForTimeout(1000);
-
-    // Confirm deletion dialog — click the confirm button
-    await f.click({ position: { x: width / 2 + 80, y: height / 2 + 30 }, force: true });
-    await page.waitForTimeout(2000);
-
-    await page.screenshot({ path: 'test-results/workspace-deleted.png' });
+    // Verify it's gone
+    listResp = await request.get(`${API_BASE}/workspaces`, { headers });
+    workspaces = await listResp.json();
+    expect(workspaces.some((ws: any) => ws.id === created.id)).toBeFalsy();
   });
 
   test('terminal command creates file visible via API', async ({ page, request }) => {
