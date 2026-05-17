@@ -38,27 +38,32 @@ jobs:
       - name: Install devenv
         run: ./bootstrap --unattended
 
-      - name: Start services
+      - name: Start services and wait for server
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          # Run in background — builds (Flutter + Docker) run via
-          # execIfModified before processes start and can take
-          # several minutes, exceeding devenv's 120s daemon timeout.
-          nohup devenv up --no-tui > /tmp/devenv-up.log 2>&1 &
-
-      - name: Wait for server
-        run: |
+          # Start devenv in background within this step so the
+          # process survives while we poll. Builds (Flutter + Docker)
+          # run via execIfModified and can take several minutes.
+          devenv up --no-tui &
+          DEVENV_PID=$!
           for i in $(seq 1 120); do
+            if ! kill -0 $DEVENV_PID 2>/dev/null; then
+              echo "devenv up exited unexpectedly"
+              cat /tmp/devenv-up.log 2>/dev/null || true
+              exit 1
+            fi
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               http://localhost:8997/ 2>/dev/null)
             if [ "$code" = "200" ]; then
               echo "Server ready (attempt $i)"
-              exit 0
+              break
             fi
             sleep 5
           done
-          echo "Server failed to start"
-          exit 1
+          if [ "$code" != "200" ]; then
+            echo "Server failed to start"
+            exit 1
+          fi
 
       - name: Install Playwright browsers
         run: |
