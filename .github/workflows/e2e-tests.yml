@@ -38,19 +38,17 @@ jobs:
       - name: Install devenv
         run: ./bootstrap --unattended
 
-      - name: Build (Flutter + Docker)
-        run: |
-          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell -- rebuild
-
       - name: Start services
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell -- bash -c "devenv up -d"
+          # Run in background — builds (Flutter + Docker) run via
+          # execIfModified before processes start and can take
+          # several minutes, exceeding devenv's 120s daemon timeout.
+          nohup devenv up --no-tui > /tmp/devenv-up.log 2>&1 &
 
       - name: Wait for server
         run: |
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               http://localhost:8997/ 2>/dev/null)
             if [ "$code" = "200" ]; then
