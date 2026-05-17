@@ -1,5 +1,6 @@
 """Tests for api.py: HTTP route handlers via FastAPI TestClient."""
 
+import importlib
 import io
 import zipfile
 
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
-from backend import api, user_store
+from backend import api, container_manager, user_store
 
 
 @pytest.fixture
@@ -438,3 +439,48 @@ class TestFileRoutes:
             files={"file": ("evil.txt", b"bad", "text/plain")},
         )
         assert resp.status_code == 400
+
+
+# --- Test mode endpoint ---
+
+
+class TestSetIdleTimeout:
+    async def test_set_idle_timeout_in_test_mode(self, db, user, monkeypatch):
+        """With BARK_TEST_MODE set, the endpoint should exist and work."""
+        monkeypatch.setenv("BARK_TEST_MODE", "1")
+        importlib.reload(api)
+
+        test_app = FastAPI()
+        test_app.include_router(api.router)
+        transport = ASGITransport(app=test_app)
+
+        original_timeout = container_manager.IDLE_TIMEOUT_SECONDS
+        try:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
+                # Get current timeout
+                get_resp = await client.get("/api/test/idle-timeout")
+                assert get_resp.status_code == 200
+                assert get_resp.json()["idle_timeout_seconds"] == original_timeout
+
+                # Set new timeout
+                resp = await client.post("/api/test/set-idle-timeout?seconds=42")
+                assert resp.status_code == 200
+                assert resp.json()["idle_timeout_seconds"] == 42
+                assert container_manager.IDLE_TIMEOUT_SECONDS == 42
+
+                # Verify get reflects the change
+                get_resp2 = await client.get("/api/test/idle-timeout")
+                assert get_resp2.json()["idle_timeout_seconds"] == 42
+        finally:
+            container_manager.IDLE_TIMEOUT_SECONDS = original_timeout
+            monkeypatch.delenv("BARK_TEST_MODE")
+            importlib.reload(api)
+
+    async def test_endpoint_missing_without_test_mode(self, client):
+        """Without BARK_TEST_MODE, the endpoints should not exist."""
+        resp = await client.post("/api/test/set-idle-timeout?seconds=10")
+        assert resp.status_code in (404, 405)
+        resp = await client.get("/api/test/idle-timeout")
+        assert resp.status_code in (404, 405)

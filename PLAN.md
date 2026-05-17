@@ -550,8 +550,7 @@ nginx reverse proxy (port 8995)
   - Send a prompt while agent is running and verify it gets queued
   - Click abort while agent is running and verify the run stops
   - Navigate into a subdirectory, verify breadcrumb path updates
-  - Idle timeout: set a very short timeout, verify container stops
-  - Restart after idle: trigger restart, verify container comes back
+
 - **Suppress no-op scheduled CI runs**: When the hourly E2E schedule triggers but skips due to no recent commits, it still creates a visible "success" run in the GitHub Actions UI. Investigate using `concurrency` groups to auto-cancel, or a separate job that gates the main job, or the `skip-duplicate-actions` community action to avoid polluting the run history.
 - **Parallelize Playwright E2E tests**: Tests currently run serially (`mode: "serial"`) but each test does its own login and workspace setup independently. Remove serial mode and split tests that truly need ordering into separate describe blocks to enable parallel workers.
 - **Clean up stale plugin build artifacts**: When a plugin is removed from `plugins.yaml`/`plugins.lock`, `update-plugins` removes the plugin directory from `$BARK_PLUGINS_DIR`, but the build artifacts remain: `.dart` files in `frontend/lib/tools/plugins/`, `.ts` files in `docker/extensions/`, and tool scripts in `docker/tools/`. Stale files accumulate and can cause build errors. The build scripts (`import_plugins.py`, `dockerbuild.sh`) should delete any plugin-originated files that don't correspond to a current plugin in `$BARK_PLUGINS_DIR` before copying fresh ones.

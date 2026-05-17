@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   schedule:
     # Hourly — skips if no commits in the last hour
-    - cron: "0 * * * *"
+    - cron: "15 * * * *"
 
 jobs:
   test:
@@ -58,6 +58,7 @@ jobs:
           BARK_JWT_SECRET=e2e-test-secret
           BARK_DEFAULT_USER=admin
           BARK_DEFAULT_PASSWORD=admin
+          BARK_TEST_MODE=1
           EOF
 
       - name: Install devenv

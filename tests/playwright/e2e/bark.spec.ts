@@ -1,5 +1,6 @@
 import { test, expect, Page, APIRequestContext } from "@playwright/test";
 import AdmZip from "adm-zip";
+import { execSync } from "child_process";
 
 const USER = process.env.BARK_TEST_USER || "admin";
 const PASS = process.env.BARK_TEST_PASS || "admin";
@@ -77,6 +78,14 @@ async function openFirstWorkspace(page: Page) {
   await fv(page).click({ position: { x: width / 2, y: 110 }, force: true });
   await expect(page).not.toHaveTitle(/Workspaces/i, { timeout: 30_000 });
   await page.waitForTimeout(5000);
+}
+
+function dockerContainersForWorkspace(workspaceId: string): string[] {
+  const output = execSync(
+    `docker ps --filter "label=bark.workspace-id=${workspaceId}" --format "{{.ID}}"`,
+    { encoding: "utf-8" },
+  );
+  return output.trim().split("\n").filter(Boolean);
 }
 
 // Layout coordinates at 1280x720:
@@ -565,7 +574,7 @@ test.describe("Bark E2E", () => {
       expect(hasFiles).toBeTruthy();
 
       // Poll messages for an assistant response containing a hosted URL
-      let hostedUrl = false;
+      let hostedUrl: string | null = null;
       for (let i = 0; i < 60; i++) {
         const msgResp = await request.get(
           `${API_BASE}/workspaces/${workspaceId}/messages`,
@@ -581,13 +590,21 @@ test.describe("Bark E2E", () => {
               ),
           );
           if (match) {
-            hostedUrl = true;
+            // Extract the URL from the message
+            const urlMatch = (match.content as string).match(
+              /https?:\/\/localhost:\d+\/(bark\/)?hosted\/[^\s)]+/,
+            );
+            hostedUrl = urlMatch ? urlMatch[0] : null;
             break;
           }
         }
         await page.waitForTimeout(5000);
       }
       expect(hostedUrl).toBeTruthy();
+
+      // Visit the hosted URL — the app should respond
+      const appResp = await request.get(hostedUrl!);
+      expect(appResp.status()).toBe(200);
     } finally {
       // Clean up: delete the test workspace
       await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
@@ -837,6 +854,150 @@ test.describe("Bark E2E", () => {
       `${API_BASE}/workspaces/${workspaceId}/files?path=.tab-survive`,
       { headers },
     );
+  });
+
+  test("container stops after idle timeout", async ({ page, request }) => {
+    test.setTimeout(120_000);
+
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Check if test mode is enabled and stash original timeout
+    const getResp = await request.get(`${API_BASE}/api/test/idle-timeout`, {
+      headers,
+    });
+    if (!getResp.ok()) {
+      test.skip(true, "BARK_TEST_MODE not enabled");
+      return;
+    }
+    const originalTimeout = (await getResp.json()).idle_timeout_seconds;
+
+    await request.post(`${API_BASE}/api/test/set-idle-timeout?seconds=5`, {
+      headers,
+    });
+
+    try {
+      // Create a workspace and open it to start a container
+      const existingResp = await request.get(`${API_BASE}/workspaces`, {
+        headers,
+      });
+      for (const ws of await existingResp.json()) {
+        if (ws.name === "e2e-idle-test") {
+          await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+        }
+      }
+      const createResp = await request.post(
+        `${API_BASE}/workspaces?name=e2e-idle-test`,
+        { headers },
+      );
+      expect(createResp.ok()).toBeTruthy();
+      const workspace = await createResp.json();
+      const workspaceId = workspace.id;
+
+      try {
+        await login(page);
+        await page.goto(`#/workspace/${workspaceId}`);
+        await page.waitForTimeout(10000);
+
+        // Wait for the container to idle out (5s timeout + check interval)
+        await page.waitForTimeout(15000);
+
+        // Send a prompt — it should trigger a container restart
+        const { height } = vp(page);
+        const f = fv(page);
+        await f.click({ position: { x: 240, y: height - 30 }, force: true });
+        await page.waitForTimeout(500);
+        await page.keyboard.type("say hello");
+        await page.waitForTimeout(300);
+        await page.keyboard.press("Enter");
+
+        // Poll for a response — the container should restart and respond
+        let found = false;
+        for (let i = 0; i < 30; i++) {
+          await page.waitForTimeout(3000);
+          const msgResp = await request.get(
+            `${API_BASE}/workspaces/${workspaceId}/messages`,
+            { headers },
+          );
+          if (msgResp.ok()) {
+            const messages = await msgResp.json();
+            if (
+              messages.some(
+                (m: any) => m.entry_type === "assistant" && m.content,
+              )
+            ) {
+              found = true;
+              break;
+            }
+          }
+        }
+        expect(found).toBeTruthy();
+      } finally {
+        await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
+          headers,
+        });
+      }
+    } finally {
+      // Restore original timeout
+      await request.post(
+        `${API_BASE}/api/test/set-idle-timeout?seconds=${originalTimeout}`,
+        { headers },
+      );
+    }
+  });
+
+  test("container starts on workspace open and stops on navigate away", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Create a fresh workspace
+    const existingResp = await request.get(`${API_BASE}/workspaces`, {
+      headers,
+    });
+    for (const ws of await existingResp.json()) {
+      if (ws.name === "e2e-container-lifecycle") {
+        await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+      }
+    }
+    const createResp = await request.post(
+      `${API_BASE}/workspaces?name=e2e-container-lifecycle`,
+      { headers },
+    );
+    expect(createResp.ok()).toBeTruthy();
+    const workspace = await createResp.json();
+    const workspaceId = workspace.id;
+
+    try {
+      // Before opening: no running container for this workspace
+      expect(dockerContainersForWorkspace(workspaceId)).toHaveLength(0);
+
+      // Open the workspace — this starts a container
+      await login(page);
+      await page.goto(`#/workspace/${workspaceId}`);
+      await page.waitForTimeout(10000);
+
+      // After opening: docker should show a running container
+      expect(dockerContainersForWorkspace(workspaceId).length).toBeGreaterThan(
+        0,
+      );
+
+      // Navigate away (click back button)
+      await fv(page).click({ position: { x: 25, y: 28 }, force: true });
+      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
+      await page.waitForTimeout(3000);
+
+      // After navigating away: container should be stopped
+      expect(dockerContainersForWorkspace(workspaceId)).toHaveLength(0);
+    } finally {
+      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
+        headers,
+      });
+    }
   });
 
   test("two workspaces are independent", async ({ request }) => {

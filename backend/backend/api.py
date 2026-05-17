@@ -15,6 +15,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# --- Test/debug endpoints (only when BARK_TEST_MODE is set) ---
+
+if os.environ.get("BARK_TEST_MODE"):
+
+    @router.get("/api/test/idle-timeout")
+    async def get_idle_timeout():
+        """Get the current idle timeout. Only available in test mode."""
+        return {"idle_timeout_seconds": container_manager.IDLE_TIMEOUT_SECONDS}
+
+    @router.post("/api/test/set-idle-timeout")
+    async def set_idle_timeout(seconds: int):
+        """Set the container idle timeout. Only available in test mode."""
+        container_manager.IDLE_TIMEOUT_SECONDS = seconds
+        container_manager.CHECK_INTERVAL_SECONDS = max(10, min(60, seconds // 3))
+        return {"idle_timeout_seconds": seconds}
+
+
 # --- Config endpoint ---
 
 SOLIPLEX_URL = os.environ.get("SOLIPLEX_URL", "")
