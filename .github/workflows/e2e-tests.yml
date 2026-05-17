@@ -38,7 +38,12 @@ jobs:
       - name: Install devenv
         run: ./bootstrap --unattended
 
-      - name: Build and start services
+      - name: Build (Flutter + Docker)
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- rebuild
+
+      - name: Start services
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
           devenv shell -- bash -c "devenv up -d"
@@ -46,7 +51,8 @@ jobs:
       - name: Wait for server
         run: |
           for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8997/ 2>/dev/null)
+            code=$(curl -s -o /dev/null -w "%{http_code}" \
+              http://localhost:8997/ 2>/dev/null)
             if [ "$code" = "200" ]; then
               echo "Server ready (attempt $i)"
               exit 0
@@ -59,7 +65,8 @@ jobs:
       - name: Install Playwright browsers
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell -- bash -c "cd tests/playwright && npm run install-browsers"
+          devenv shell -- bash -c \
+            "cd tests/playwright && npm run install-browsers"
 
       - name: Run E2E tests
         run: |
@@ -68,11 +75,12 @@ jobs:
             || which chromium-browser 2>/dev/null \
             || echo /usr/bin/google-chrome-stable)
           devenv shell -- bash -c \
-            "cd tests/playwright && CHROME_PATH=$CHROME npx playwright test"
+            "cd tests/playwright && \
+             CHROME_PATH=$CHROME npx playwright test"
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-results
           path: tests/playwright/test-results/
