@@ -1,0 +1,94 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker/**"
+      - "tests/playwright/**"
+      - "devenv.nix"
+      - "devenv.yaml"
+      - ".github/workflows/e2e-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker/**"
+      - "tests/playwright/**"
+      - "devenv.nix"
+      - "devenv.yaml"
+      - ".github/workflows/e2e-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+      OLLAMA_BASE_URL: ${{ secrets.OLLAMA_BASE_URL }}
+      OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
+      BARK_JWT_SECRET: e2e-test-secret
+      BARK_DEFAULT_USER: admin
+      BARK_DEFAULT_PASSWORD: admin
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: DeterminateSystems/determinate-nix-action@main
+
+      - name: Free disk space
+        run: |
+          set -x
+          rm -rf $HOME/.cache
+          nohup sudo ionice -c3 nice -n19 rm -rf \
+            /usr/share/dotnet /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/lib/jvm \
+            /usr/share/swift $HOME/.rustup \
+            /usr/local/share/chromium \
+            /usr/lib/google-cloud-sdk \
+            /usr/local/powershell /usr/local/.ghcup \
+            /usr/local/julia* &
+
+      - name: Install devenv
+        run: ./bootstrap --unattended
+
+      - name: Build and start services
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- bash -c "devenv up -d"
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8997/ 2>/dev/null)
+            if [ "$code" = "200" ]; then
+              echo "Server ready (attempt $i)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Server failed to start"
+          exit 1
+
+      - name: Install Playwright browsers
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- bash -c "cd tests/playwright && npm run install-browsers"
+
+      - name: Run E2E tests
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          CHROME=$(which google-chrome-stable 2>/dev/null \
+            || which chromium-browser 2>/dev/null \
+            || echo /usr/bin/google-chrome-stable)
+          devenv shell -- bash -c \
+            "cd tests/playwright && CHROME_PATH=$CHROME npx playwright test"
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: tests/playwright/test-results/

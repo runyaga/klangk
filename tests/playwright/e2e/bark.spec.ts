@@ -491,6 +491,18 @@ test.describe("Bark E2E", () => {
     const token = await getAuthToken(request);
     const headers = { Authorization: `Bearer ${token}` };
 
+    // Clean up any leftover workspace with the same name
+    const existingResp = await request.get(`${API_BASE}/workspaces`, {
+      headers,
+    });
+    if (existingResp.ok()) {
+      for (const ws of await existingResp.json()) {
+        if (ws.name === "e2e-pong-test") {
+          await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+        }
+      }
+    }
+
     // Create a fresh workspace for this test
     const createResp = await request.post(
       `${API_BASE}/workspaces?name=e2e-pong-test`,

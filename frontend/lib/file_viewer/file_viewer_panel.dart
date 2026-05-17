@@ -10,6 +10,9 @@ import '../agui/agui_events.dart';
 import 'file_upload.dart';
 import '../utils/suppress_browser_menu.dart';
 
+/// Override for testing — set to intercept all HTTP calls in file viewer.
+http.Client? testHttpClientOverride;
+
 class FileViewerPanel extends StatefulWidget {
   final AguiClient aguiClient;
   final String workspaceId;
@@ -28,6 +31,7 @@ class FileViewerPanel extends StatefulWidget {
 
 class FileViewerPanelState extends State<FileViewerPanel> {
   String get _baseUrl => baseUrl;
+  http.Client get _client => testHttpClientOverride ?? http.Client();
   List<Map<String, dynamic>> _entries = [];
   String _currentPath = '.';
   String? _selectedFile;
@@ -58,7 +62,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
     if (!mounted) return;
     setState(() => _loading = true);
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(
             '$_baseUrl/workspaces/${widget.workspaceId}/files?path=$_currentPath'),
         headers: _headers,
@@ -79,7 +83,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
 
   Future<void> _readFile(String path) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(
             '$_baseUrl/workspaces/${widget.workspaceId}/files/content?path=$path'),
         headers: _headers,
@@ -123,7 +127,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
     );
     if (confirmed != true) return;
     try {
-      final response = await http.delete(
+      final response = await _client.delete(
         Uri.parse(
             '$_baseUrl/workspaces/${widget.workspaceId}/files?path=${Uri.encodeComponent(path)}'),
         headers: _headers,
@@ -177,7 +181,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
     final newPath = '$parentDir$newName';
 
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$_baseUrl/workspaces/${widget.workspaceId}/files/rename'
             '?old_path=${Uri.encodeComponent(path)}&new_path=${Uri.encodeComponent(newPath)}'),
         headers: _headers,
@@ -207,7 +211,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
     final url =
         '$_baseUrl/workspaces/${widget.workspaceId}/files/download?path=${Uri.encodeComponent(path)}';
     try {
-      final response = await http.get(Uri.parse(url), headers: _headers);
+      final response = await _client.get(Uri.parse(url), headers: _headers);
       if (response.statusCode != 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
