@@ -7,7 +7,7 @@ import httpx
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
-from backend import main, user_store
+from bark_backend import main, user_store
 
 
 # --- Seed default user ---

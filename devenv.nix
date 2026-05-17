@@ -57,7 +57,7 @@
   processes = {
     backend = {
       exec = ''
-        cd $DEVENV_ROOT/backend && exec uvicorn backend.main:app --host 0.0.0.0 --port $BARK_PORT
+        cd $DEVENV_ROOT/backend && exec uvicorn bark_backend.main:app --host 0.0.0.0 --port $BARK_PORT
       '';
       after = [
         "bark:flutter-build"

@@ -1,6 +1,6 @@
 """Tests for agui_translator: Pi RPC event to AG-UI event mapping."""
 
-from backend.agui_translator import (
+from bark_backend.agui_translator import (
     translate_event,
     _bash_likely_creates_files,
     _extract_content_text,

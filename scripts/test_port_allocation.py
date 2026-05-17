@@ -6,7 +6,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from backend import user_store, container_manager
+from bark_backend import user_store, container_manager
 
 
 async def main():

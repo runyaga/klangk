@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiodocker.exceptions
 
-from backend import container_manager, user_store
+from bark_backend import container_manager, user_store
 
 
 class TestParseIdleTimeout:

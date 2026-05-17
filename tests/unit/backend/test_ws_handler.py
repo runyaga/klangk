@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 from fastapi import WebSocketDisconnect
 
-from backend import ws_handler, container_manager, user_store, workspace_manager
-from backend.ws_handler import (
+from bark_backend import ws_handler, container_manager, user_store, workspace_manager
+from bark_backend.ws_handler import (
     _derive_hosting_info,
     _start_workspace_container,
     _handle_workspace_connect,
@@ -1152,7 +1152,7 @@ class TestHandleWebsocketDispatch:
     """Test all command dispatch branches through the main handler."""
 
     async def _run_commands(self, user, commands):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1217,7 +1217,7 @@ class TestHandleWebsocketDispatch:
         assert any("Not connected" in str(c) for c in calls)
 
     async def test_container_stopped_on_disconnect(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1252,7 +1252,7 @@ class TestHandleWebsocketDispatch:
         assert any(call.args == ("cid-stop",) for call in mock_stop.call_args_list)
 
     async def test_container_stop_error_on_disconnect(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1391,7 +1391,7 @@ class TestHandleWebsocket:
         ws.close.assert_awaited_once_with(code=4001, reason="Invalid token")
 
     async def test_valid_token_then_disconnect(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1402,7 +1402,7 @@ class TestHandleWebsocket:
         ws.accept.assert_awaited_once()
 
     async def test_invalid_json(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1414,7 +1414,7 @@ class TestHandleWebsocket:
         assert any("Invalid JSON" in str(c) for c in calls)
 
     async def test_unknown_command(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1431,7 +1431,7 @@ class TestHandleWebsocket:
         assert any("Unknown command" in str(c) for c in calls)
 
     async def test_ui_ready_with_pending(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1471,7 +1471,7 @@ class TestHandleWebsocket:
         assert len(ready) == 1
 
     async def test_ui_ready_no_pending(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
@@ -1495,7 +1495,7 @@ class TestHandleWebsocket:
         assert len(ready) == 0
 
     async def test_general_exception_logged(self, user):
-        from backend import auth as auth_mod
+        from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})

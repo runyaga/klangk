@@ -78,7 +78,7 @@ bark/
 
   backend/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
-    backend/
+    bark_backend/
       main.py                   # FastAPI app, lifespan, hosted app proxy, default user seeding, static file serving
       api.py                    # API route handlers (auth, workspaces, files, messages) via APIRouter
       auth.py                   # Register/login/logout, JWT, bcrypt password hashing
@@ -564,7 +564,6 @@ nginx reverse proxy (port 8995)
 - **Investigate running Pi under bubblewrap**: Explore using [bubblewrap](https://github.com/containers/bubblewrap) (bwrap) as an alternative to Docker for sandboxing Pi. Bubblewrap is lighter-weight than Docker — no daemon, no image builds, no container overhead — and provides namespace-based isolation (mount, PID, network, user). This could significantly reduce startup time and resource usage. Trade-offs: no pre-built image caching, need to manage tool installations on the host, less isolation than full container. Could be offered as an alternative backend alongside Docker.
 - **Remove leading underscores from internal functions**: Functions like `_handle_prompt`, `_forward_events`, `_cleanup_connection`, `_derive_hosting_info`, etc. in `ws_handler.py` and helper functions in other modules use leading underscores to signal "module-private". Since these are now tested directly via imports, the underscores are unnecessary and make the test imports look odd. Rename to drop the underscores.
 - **Dart/Flutter unit tests**: Add widget and unit tests for the Flutter frontend. Key areas to cover: `AguiClient` (WebSocket connection, event parsing), `AuthService` (token storage, login/logout), `ToolPluginRegistry` (plugin dispatch), `FileViewerPanelState` (navigation, refresh, breadcrumbs), and `ChatPanel` (message rendering, input handling). Use `flutter test` with `mockito` or manual mocks for WebSocket and HTTP dependencies.
-- **Rename backend package**: Change the Python package name from `backend` to `bark_backend` for consistency with the frontend (`bark_frontend`) and to avoid conflicts with generic module names. Move backend tests from `tests/unit/backend/` to `tests/backend/`.
 - **Test workspace_page.dart and app.dart**: `workspace_page.dart` imports the gitignored `plugins_generated.dart`, making it untestable on a clean checkout. Options: commit a stub `plugins_generated.dart` that returns `[]` (codegen overwrites it), or make the import conditional. `app.dart` needs GoRouter/navigation mocking.
 - **Clipboard image paste in chat**: Investigate whether Pi supports image inputs and, if so, allow pasting images from the clipboard into the chat input field. Would need to intercept paste events, detect image MIME types, convert to a format Pi can accept (base64 or URL), and pass via the `images` parameter of `prompt()`.
 - **Simplify deploy script**: Consider replacing `synctoarctor.sh` with a plain `rsync` of the entire project directory instead of the current approach of syncing specific files and directories individually. Would be simpler to maintain and less likely to miss new files.

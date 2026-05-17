@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
-from backend import api, container_manager, user_store
+from bark_backend import api, container_manager, user_store
 
 
 @pytest.fixture

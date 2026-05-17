@@ -2,7 +2,7 @@
 
 import pytest
 
-from backend import file_service, workspace_manager
+from bark_backend import file_service, workspace_manager
 
 
 @pytest.fixture

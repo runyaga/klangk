@@ -2,7 +2,7 @@
 
 import pytest
 
-from backend import workspace_manager, container_manager
+from bark_backend import workspace_manager, container_manager
 
 
 class TestCreateWorkspace:

@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 
-from backend import auth
+from bark_backend import auth
 
 
 class TestPasswordHashing:

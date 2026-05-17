@@ -2,7 +2,7 @@
 
 import pytest
 
-from backend import user_store
+from bark_backend import user_store
 
 
 class TestUsers:

@@ -6,8 +6,8 @@ import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend import terminal_manager
-from backend.terminal_manager import TerminalSession
+from bark_backend import terminal_manager
+from bark_backend.terminal_manager import TerminalSession
 
 
 def _mock_proc(returncode=None):

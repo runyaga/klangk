@@ -6,7 +6,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend.pi_rpc_client import PiRpcClient
+from bark_backend.pi_rpc_client import PiRpcClient
 
 
 def _mock_proc(stdout_data=b"", returncode=None):
