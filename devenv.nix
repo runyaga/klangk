@@ -107,8 +107,5 @@
 
   enterShell = ''
     mkdir -p "$BARK_DATA_DIR"
-    echo "Bark dev environment ready"
-    echo "Run 'rebuild' to rebuild all sofware."
-    echo "Run 'devenv processes up' to start backend + frontend"
   '';
 }
