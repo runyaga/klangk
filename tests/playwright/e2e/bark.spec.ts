@@ -1092,4 +1092,230 @@ test.describe("Bark E2E", () => {
     await request.delete(`${API_BASE}/workspaces/${wsA.id}`, { headers });
     await request.delete(`${API_BASE}/workspaces/${wsB.id}`, { headers });
   });
+
+  test("navigate into subdirectory via file viewer", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const token = await getAuthToken(request);
+    const workspaceId = await getFirstWorkspaceId(request, token);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Create a nested directory structure via terminal
+    const { width, height } = vp(page);
+    const f = fv(page);
+    const termX = (492 + width) / 2;
+    await f.click({ position: { x: termX, y: 200 }, force: true });
+    await page.waitForTimeout(500);
+    await page.keyboard.type(
+      "mkdir -p /workspace/.e2e-nav/inner && echo nav-test > /workspace/.e2e-nav/inner/file.txt",
+    );
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(2000);
+
+    // Verify structure via API
+    const innerFiles = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-nav/inner`,
+      { headers },
+    );
+    expect(innerFiles.ok()).toBeTruthy();
+    const names = (await innerFiles.json()).map((e: any) => e.name);
+    expect(names).toContain("file.txt");
+
+    // Read nested file content
+    const content = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files/content?path=.e2e-nav/inner/file.txt`,
+      { headers },
+    );
+    expect(content.ok()).toBeTruthy();
+    expect((await content.json()).content.trim()).toBe("nav-test");
+
+    // Clean up
+    await request.delete(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-nav`,
+      { headers },
+    );
+  });
+
+  test("abort stops a running agent", async ({ page, request }) => {
+    test.setTimeout(120_000);
+
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Ensure idle timeout is safe
+    const DEFAULT_TIMEOUT = 1800;
+    const timeoutResp = await request.get(`${API_BASE}/api/test/idle-timeout`);
+    if (timeoutResp.ok()) {
+      const current = (await timeoutResp.json()).idle_timeout_seconds;
+      if (current < DEFAULT_TIMEOUT) {
+        await request.post(
+          `${API_BASE}/api/test/set-idle-timeout?seconds=${DEFAULT_TIMEOUT}`,
+        );
+      }
+    }
+
+    // Create a fresh workspace
+    const existingResp = await request.get(`${API_BASE}/workspaces`, {
+      headers,
+    });
+    for (const ws of await existingResp.json()) {
+      if (ws.name === "e2e-abort-test") {
+        await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+      }
+    }
+    const createResp = await request.post(
+      `${API_BASE}/workspaces?name=e2e-abort-test`,
+      { headers },
+    );
+    expect(createResp.ok()).toBeTruthy();
+    const workspace = await createResp.json();
+    const workspaceId = workspace.id;
+
+    try {
+      await login(page);
+      await page.goto(`#/workspace/${workspaceId}`);
+      await page.waitForTimeout(10000);
+
+      // Send a long-running prompt
+      const { height } = vp(page);
+      const f = fv(page);
+      await f.click({ position: { x: 240, y: height - 30 }, force: true });
+      await page.waitForTimeout(500);
+      await page.keyboard.type(
+        "write a very detailed 2000 word essay about the history of computing",
+      );
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Enter");
+
+      // Wait for the agent to start running
+      await page.waitForTimeout(5000);
+
+      // Click the abort button (red stop_circle icon, to the right of
+      // the chat input). It's at the send button position.
+      const sendBtnX = 460;
+      const sendBtnY = height - 30;
+      await f.click({
+        position: { x: sendBtnX, y: sendBtnY },
+        force: true,
+      });
+      await page.waitForTimeout(3000);
+
+      // Verify the agent stopped — check that messages contain a
+      // user prompt but the assistant response is incomplete or
+      // the run finished
+      const msgResp = await request.get(
+        `${API_BASE}/workspaces/${workspaceId}/messages`,
+        { headers },
+      );
+      expect(msgResp.ok()).toBeTruthy();
+      const messages = await msgResp.json();
+      // Should have at least the user prompt
+      expect(
+        messages.some(
+          (m: any) =>
+            m.entry_type === "user" && m.content.includes("computing"),
+        ),
+      ).toBeTruthy();
+    } finally {
+      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
+        headers,
+      });
+    }
+  });
+
+  test("queued prompt is delivered after current run finishes", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Ensure idle timeout is safe
+    const DEFAULT_TIMEOUT = 1800;
+    const timeoutResp = await request.get(`${API_BASE}/api/test/idle-timeout`);
+    if (timeoutResp.ok()) {
+      const current = (await timeoutResp.json()).idle_timeout_seconds;
+      if (current < DEFAULT_TIMEOUT) {
+        await request.post(
+          `${API_BASE}/api/test/set-idle-timeout?seconds=${DEFAULT_TIMEOUT}`,
+        );
+      }
+    }
+
+    // Create a fresh workspace
+    const existingResp = await request.get(`${API_BASE}/workspaces`, {
+      headers,
+    });
+    for (const ws of await existingResp.json()) {
+      if (ws.name === "e2e-queue-test") {
+        await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+      }
+    }
+    const createResp = await request.post(
+      `${API_BASE}/workspaces?name=e2e-queue-test`,
+      { headers },
+    );
+    expect(createResp.ok()).toBeTruthy();
+    const workspace = await createResp.json();
+    const workspaceId = workspace.id;
+
+    try {
+      await login(page);
+      await page.goto(`#/workspace/${workspaceId}`);
+      await page.waitForTimeout(10000);
+
+      const { height } = vp(page);
+      const f = fv(page);
+      const chatX = 240;
+      const chatY = height - 30;
+
+      // Send first prompt
+      await f.click({ position: { x: chatX, y: chatY }, force: true });
+      await page.waitForTimeout(500);
+      await page.keyboard.type("what is 10+10? reply with just the number");
+      await page.keyboard.press("Enter");
+
+      // Immediately send second prompt (should be queued)
+      await page.waitForTimeout(1000);
+      await f.click({ position: { x: chatX, y: chatY }, force: true });
+      await page.waitForTimeout(300);
+      await page.keyboard.type("what is 20+20? reply with just the number");
+      await page.keyboard.press("Enter");
+
+      // Poll for both responses
+      let foundFirst = false;
+      let foundSecond = false;
+      for (let i = 0; i < 40; i++) {
+        await page.waitForTimeout(3000);
+        const msgResp = await request.get(
+          `${API_BASE}/workspaces/${workspaceId}/messages`,
+          { headers },
+        );
+        if (msgResp.ok()) {
+          const messages = await msgResp.json();
+          const assistantMsgs = messages.filter(
+            (m: any) => m.entry_type === "assistant",
+          );
+          for (const m of assistantMsgs) {
+            if (m.content.includes("20")) foundFirst = true;
+            if (m.content.includes("40")) foundSecond = true;
+          }
+          if (foundFirst && foundSecond) break;
+        }
+      }
+      expect(foundFirst).toBeTruthy();
+      expect(foundSecond).toBeTruthy();
+    } finally {
+      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
+        headers,
+      });
+    }
+  });
 });

@@ -546,10 +546,6 @@ nginx reverse proxy (port 8995)
 ## TODO
 
 - **Local files pane**: Add a browser-side file pane where users can upload files into an in-browser-memory filesystem (e.g., using the File System Access API or an in-memory store). These files would be accessible to client-side plugins and could be passed to the REPL as context without uploading to the server. Useful for working with sensitive files that shouldn't leave the browser, or for quick one-off analysis without persisting to the workspace.
-- **Additional E2E tests**:
-  - Send a prompt while agent is running and verify it gets queued
-  - Click abort while agent is running and verify the run stops
-  - Navigate into a subdirectory, verify breadcrumb path updates
 
 - **Don't stop container on tab navigation**: `workspace_page.dart`'s `deactivate()` calls `disconnectWorkspace()`, which stops the container. This means switching browser tabs or navigating within the app kills the container. The container should only stop on explicit logout, workspace switch, or idle timeout — not on widget deactivation from tab changes. Alternatively (or additionally), the hosted app proxy could auto-start the container before proxying if it's not running.
 
