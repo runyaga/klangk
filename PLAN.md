@@ -388,7 +388,7 @@ devenv shell -- test-e2e --headed
 devenv shell -- test-e2e --reporter=list
 ```
 
-Tests run against `http://localhost:8997` using system Chrome. They cover login (success and failure), workspace creation/deletion, terminal input, file tab switching, file upload/rename/delete via API, folder upload with zip download round-trip, an LLM integration test (agent builds a pong game and returns a hosted URL), and logout. Flutter Web renders to canvas, so UI interaction uses coordinate-based clicks on `<flutter-view>`. The agent integration test creates a fresh workspace and cleans it up afterward; it requires a working LLM provider and can take 1–3 minutes.
+E2E tests start their own isolated Bark server via `globalSetup` — no need to start one manually. The test server uses non-default ports (18997/18995) and a temp `BARK_DATA_DIR` so it doesn't conflict with a running dev server. Config is written to `.env.e2e` which overrides `.env` via `dotenv.filename` in `devenv.nix`. The temp directory and `.env.e2e` are cleaned up in `globalTeardown`. Each test creates its own workspace and cleans it up, so tests are independent and can run in any order. Flutter Web renders to canvas, so UI interaction uses coordinate-based clicks on `<flutter-view>`. LLM-dependent tests require `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` in `.env` or the process environment.
 
 **Frontend unit tests** (Dart/Flutter, no browser required):
 
