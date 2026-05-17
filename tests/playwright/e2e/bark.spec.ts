@@ -609,4 +609,295 @@ test.describe("Bark E2E", () => {
 
     await expect(page).toHaveTitle(/Login/i, { timeout: 10_000 });
   });
+
+  test("register new user, logout, and login with new credentials", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(60_000);
+    const username = `e2e-user-${Date.now()}`;
+    const password = "testpass1234";
+
+    // Register via API
+    const regResp = await request.post(`${API_BASE}/auth/register`, {
+      data: { username, password },
+    });
+    expect(regResp.ok()).toBeTruthy();
+    const regData = await regResp.json();
+    expect(regData.access_token).toBeTruthy();
+
+    // Login via UI with the new user
+    await page.goto("");
+    await waitForFlutter(page);
+
+    const { width, height } = vp(page);
+    const cx = width / 2;
+    const f = fv(page);
+
+    await f.click({ position: { x: cx, y: height * 0.47 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type(username);
+
+    await f.click({ position: { x: cx, y: height * 0.55 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type(password);
+
+    await f.click({ position: { x: cx, y: height * 0.66 }, force: true });
+
+    await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
+  });
+
+  test("invalid token returns 401 from API", async ({ request }) => {
+    const headers = { Authorization: "Bearer invalid-token-value" };
+
+    const wsResp = await request.get(`${API_BASE}/workspaces`, { headers });
+    expect(wsResp.status()).toBe(401);
+
+    const filesResp = await request.get(
+      `${API_BASE}/workspaces/fake-id/files?path=.`,
+      { headers },
+    );
+    expect(filesResp.status()).toBe(401);
+
+    const msgResp = await request.get(
+      `${API_BASE}/workspaces/fake-id/messages`,
+      { headers },
+    );
+    expect(msgResp.status()).toBe(401);
+  });
+
+  test("no token returns 401 from API", async ({ request }) => {
+    const wsResp = await request.get(`${API_BASE}/workspaces`);
+    expect(wsResp.status()).toBe(401);
+  });
+
+  test("simple prompt returns assistant message", async ({ page, request }) => {
+    test.setTimeout(120_000);
+
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Create a fresh workspace
+    const existingResp = await request.get(`${API_BASE}/workspaces`, {
+      headers,
+    });
+    for (const ws of await existingResp.json()) {
+      if (ws.name === "e2e-simple-prompt") {
+        await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+      }
+    }
+    const createResp = await request.post(
+      `${API_BASE}/workspaces?name=e2e-simple-prompt`,
+      { headers },
+    );
+    expect(createResp.ok()).toBeTruthy();
+    const workspace = await createResp.json();
+    const workspaceId = workspace.id;
+
+    try {
+      await login(page);
+      await page.goto(`#/workspace/${workspaceId}`);
+      await page.waitForTimeout(10000);
+
+      // Type a simple prompt
+      const { height } = vp(page);
+      const f = fv(page);
+      await f.click({ position: { x: 240, y: height - 30 }, force: true });
+      await page.waitForTimeout(500);
+      await page.keyboard.type("what is 2+2? reply with just the number");
+      await page.waitForTimeout(300);
+      await page.keyboard.press("Enter");
+
+      // Poll for an assistant message
+      let found = false;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(3000);
+        const msgResp = await request.get(
+          `${API_BASE}/workspaces/${workspaceId}/messages`,
+          { headers },
+        );
+        if (msgResp.ok()) {
+          const messages = await msgResp.json();
+          const assistantMsg = messages.find(
+            (m: any) => m.entry_type === "assistant" && m.content.includes("4"),
+          );
+          if (assistantMsg) {
+            found = true;
+            break;
+          }
+        }
+      }
+      expect(found).toBeTruthy();
+    } finally {
+      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
+        headers,
+      });
+    }
+  });
+
+  test("terminal command sequence creates directory", async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const token = await getAuthToken(request);
+    const workspaceId = await getFirstWorkspaceId(request, token);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const { width, height } = vp(page);
+    const f = fv(page);
+    const termX = (492 + width) / 2;
+    const termY = height / 2;
+
+    // Click in terminal
+    await f.click({ position: { x: termX, y: termY }, force: true });
+    await page.waitForTimeout(500);
+
+    // Run a multi-command sequence
+    await page.keyboard.type(
+      "mkdir -p /workspace/.e2e-multitest/sub && echo done > /workspace/.e2e-multitest/sub/result.txt",
+    );
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(3000);
+
+    // Verify directory was created
+    const listResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-multitest/sub`,
+      { headers },
+    );
+    expect(listResp.ok()).toBeTruthy();
+    const entries = await listResp.json();
+    const names = entries.map((e: any) => e.name);
+    expect(names).toContain("result.txt");
+
+    // Verify file content
+    const readResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files/content?path=.e2e-multitest/sub/result.txt`,
+      { headers },
+    );
+    expect(readResp.ok()).toBeTruthy();
+    const data = await readResp.json();
+    expect(data.content.trim()).toBe("done");
+
+    // Clean up
+    await request.delete(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-multitest`,
+      { headers },
+    );
+  });
+
+  test("terminal works after tab switching", async ({ page, request }) => {
+    test.setTimeout(90_000);
+    await login(page);
+    await openFirstWorkspace(page);
+
+    const token = await getAuthToken(request);
+    const workspaceId = await getFirstWorkspaceId(request, token);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    const { width, height } = vp(page);
+    const f = fv(page);
+    const rightCenter = (492 + width) / 2;
+
+    // Switch to Files tab
+    await f.click({ position: { x: rightCenter + 200, y: 16 }, force: true });
+    await page.waitForTimeout(1000);
+
+    // Switch back to Terminal tab
+    await f.click({ position: { x: rightCenter - 200, y: 16 }, force: true });
+    await page.waitForTimeout(1000);
+
+    // Switch to Files again and back
+    await f.click({ position: { x: rightCenter + 200, y: 16 }, force: true });
+    await page.waitForTimeout(500);
+    await f.click({ position: { x: rightCenter - 200, y: 16 }, force: true });
+    await page.waitForTimeout(1000);
+
+    // Terminal should still work — run a command
+    const termX = rightCenter;
+    const termY = 200;
+    await f.click({ position: { x: termX, y: termY }, force: true });
+    await page.waitForTimeout(500);
+    await page.keyboard.type("echo tab-survive-test > /workspace/.tab-survive");
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(2000);
+
+    const readResp = await request.get(
+      `${API_BASE}/workspaces/${workspaceId}/files/content?path=.tab-survive`,
+      { headers },
+    );
+    expect(readResp.ok()).toBeTruthy();
+    const data = await readResp.json();
+    expect(data.content).toContain("tab-survive-test");
+
+    await request.delete(
+      `${API_BASE}/workspaces/${workspaceId}/files?path=.tab-survive`,
+      { headers },
+    );
+  });
+
+  test("two workspaces are independent", async ({ request }) => {
+    const token = await getAuthToken(request);
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Clean up any leftovers
+    const existing = await request.get(`${API_BASE}/workspaces`, { headers });
+    for (const ws of await existing.json()) {
+      if (ws.name === "e2e-ws-a" || ws.name === "e2e-ws-b") {
+        await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
+      }
+    }
+
+    // Create two workspaces
+    const respA = await request.post(`${API_BASE}/workspaces?name=e2e-ws-a`, {
+      headers,
+    });
+    expect(respA.ok()).toBeTruthy();
+    const wsA = await respA.json();
+
+    const respB = await request.post(`${API_BASE}/workspaces?name=e2e-ws-b`, {
+      headers,
+    });
+    expect(respB.ok()).toBeTruthy();
+    const wsB = await respB.json();
+
+    // Upload a file to workspace A only
+    const uploadResp = await request.post(
+      `${API_BASE}/workspaces/${wsA.id}/files/upload?path=only-in-a.txt`,
+      {
+        headers,
+        multipart: {
+          file: {
+            name: "only-in-a.txt",
+            mimeType: "text/plain",
+            buffer: Buffer.from("workspace A content"),
+          },
+        },
+      },
+    );
+    expect(uploadResp.ok()).toBeTruthy();
+
+    // Verify file exists in A
+    const filesA = await request.get(
+      `${API_BASE}/workspaces/${wsA.id}/files?path=.`,
+      { headers },
+    );
+    const namesA = (await filesA.json()).map((e: any) => e.name);
+    expect(namesA).toContain("only-in-a.txt");
+
+    // Verify file does NOT exist in B
+    const filesB = await request.get(
+      `${API_BASE}/workspaces/${wsB.id}/files?path=.`,
+      { headers },
+    );
+    const namesB = (await filesB.json()).map((e: any) => e.name);
+    expect(namesB).not.toContain("only-in-a.txt");
+
+    // Clean up
+    await request.delete(`${API_BASE}/workspaces/${wsA.id}`, { headers });
+    await request.delete(`${API_BASE}/workspaces/${wsB.id}`, { headers });
+  });
 });
