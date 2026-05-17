@@ -12,10 +12,10 @@ export default function (pi: any) {
   }
 
   pi.registerTool({
-    name: "get_external_port",
+    name: "get_hosted_url",
     description:
-      "Convert a container port to the external port visible to the user's browser. " +
-      "Use this when you need to tell the user which URL to visit for a running web app.",
+      "Get the hosted URL for a web app running on a container port. " +
+      "Returns the full URL the user should visit in their browser.",
     parameters: Type.Object({
       container_port: Type.Number({
         description: "The port number inside the container",
@@ -44,7 +44,9 @@ export default function (pi: any) {
       }
       const proto = process.env.BARK_HOSTING_PROTO || "http";
       const hostname = process.env.BARK_HOSTING_HOSTNAME || "localhost";
-      const url = `${proto}://${hostname}:${externalPort}/`;
+      const basePath = process.env.BARK_HOSTING_BASE_PATH || "";
+      const workspaceId = process.env.BARK_WORKSPACE_ID || "";
+      const url = `${proto}://${hostname}${basePath}/hosted/${workspaceId}/${externalPort}/`;
       return {
         content: [
           {

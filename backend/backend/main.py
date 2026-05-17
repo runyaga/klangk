@@ -6,9 +6,9 @@ from contextlib import asynccontextmanager
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, container_manager, file_service, user_store, workspace_manager
@@ -253,6 +253,76 @@ async def upload_file(
         raise HTTPException(status_code=400, detail=str(e))
     return {"path": saved_path, "status": "uploaded"}
 
+
+
+# --- Hosted app proxy ---
+
+import httpx
+
+_proxy_client: httpx.AsyncClient | None = None
+
+
+async def _get_proxy_client() -> httpx.AsyncClient:
+    global _proxy_client
+    if _proxy_client is None:
+        _proxy_client = httpx.AsyncClient(follow_redirects=True)
+    return _proxy_client
+
+
+@app.api_route(
+    "/hosted/{workspace_id}/{port:int}/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+)
+async def proxy_hosted_app(
+    workspace_id: str,
+    port: int,
+    path: str,
+    request: Request,
+):
+    """Proxy requests to apps running in workspace containers (no auth required)."""
+    # Build upstream URL
+    upstream_url = f"http://localhost:{port}/{path}"
+    if request.url.query:
+        upstream_url += f"?{request.url.query}"
+
+    # Proxy the request (streaming)
+    client = await _get_proxy_client()
+    body = await request.body()
+    try:
+        req = client.build_request(
+            method=request.method,
+            url=upstream_url,
+            headers={
+                k: v for k, v in request.headers.items()
+                if k.lower() not in ("host", "authorization", "connection")
+            },
+            content=body if body else None,
+        )
+        resp = await client.send(req, stream=True)
+    except httpx.ConnectError:
+        raise HTTPException(status_code=502, detail="App is not running on this port")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="App did not respond in time")
+
+    # Forward response headers, excluding hop-by-hop
+    excluded = {"transfer-encoding", "connection", "keep-alive"}
+    headers = {
+        k: v for k, v in resp.headers.items()
+        if k.lower() not in excluded
+    }
+
+    async def stream_body():
+        try:
+            async for chunk in resp.aiter_bytes():
+                yield chunk
+        finally:
+            await resp.aclose()
+
+    return StreamingResponse(
+        content=stream_body(),
+        status_code=resp.status_code,
+        headers=headers,
+    )
 
 
 # --- WebSocket ---

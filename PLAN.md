@@ -79,7 +79,7 @@ bark/
   backend/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
     backend/
-      main.py                   # FastAPI app, lifespan, routes, default user seeding, static file serving
+      main.py                   # FastAPI app, lifespan, routes, hosted app proxy, default user seeding, static file serving
       auth.py                   # Register/login/logout, JWT, bcrypt password hashing
       user_store.py             # SQLite: users, workspaces, token blocklist, message history
       workspace_manager.py      # Workspace CRUD + host directory management
@@ -151,7 +151,8 @@ bark/
 - Native Pi session persistence (JSONL files in workspace `.pi/sessions/`)
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
 - Per-workspace port allocation: well-known container ports (8000+) mapped to host ports (9000+), persisted in SQLite (`port_allocations` table with per-port PRIMARY KEY preventing overlap). Ports allocated at workspace creation, stable across restarts, freed by CASCADE on workspace delete. `num_ports` column on workspaces table (default 5) controls how many; on container start, ports are added/removed to match. `BARK_PORT_MAPPINGS` env var passes container:host pairs to the container.
-- Built-in `get_external_port` tool converts container port to full user-facing URL using `BARK_PORT_MAPPINGS`, `BARK_HOSTING_HOSTNAME`, and `BARK_HOSTING_PROTO`
+- Built-in `get_hosted_url` tool converts container port to full user-facing URL using `BARK_PORT_MAPPINGS`, `BARK_HOSTING_HOSTNAME`, `BARK_HOSTING_PROTO`, and `BARK_HOSTING_BASE_PATH`
+- Hosted app proxy: user apps are accessible at `{base_path}/hosted/{workspace_id}/{port}/` — the backend streams requests to `localhost:{port}` on the host. No authentication required for hosted app URLs. nginx `X-Forwarded-Prefix` and `$http_host` headers provide the base path and hostname with port.
 - LLM provider/model configured via `settings.json` FIFO (sets `defaultProvider` and `defaultModel`)
 - API key delivered via `models.json` FIFO (named pipe, written once at startup, deleted after Pi reads it — key never persists on disk)
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)
@@ -304,6 +305,7 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `BARK_INSTANCE_ID` | `default` | Instance identifier for multi-instance deployments on the same host — isolates containers, names, and cleanup |
 | `BARK_HOSTING_HOSTNAME` | (from `Host` header) | Hostname for user-facing app URLs. Auto-derived from `X-Forwarded-Host` or `Host` WebSocket header if not set |
 | `BARK_HOSTING_PROTO` | (from `X-Forwarded-Proto` or `http`) | Protocol for user-facing app URLs. Auto-derived from request headers if not set |
+| `BARK_HOSTING_BASE_PATH` | (from `X-Forwarded-Prefix` or empty) | Base path prefix for user-facing app URLs (e.g., `/bark`). Auto-derived from nginx `X-Forwarded-Prefix` header if not set |
 | `BARK_IDLE_TIMEOUT_SECONDS` | `1800` | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s) |
 | `SOLIPLEX_URL` | (empty) | Soliplex base URL as seen by browser (empty = same origin) |
 | `OLLAMA_API_KEY` | | Ollama Cloud API key |
