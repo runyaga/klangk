@@ -42,7 +42,12 @@ http {
       proxy_set_header Host \$http_host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-      proxy_set_header X-Forwarded-Proto \$scheme;
+      # Pass through X-Forwarded-* from outer proxy, or set defaults for direct access
+      set \$fwd_proto \$http_x_forwarded_proto;
+      if (\$fwd_proto = "") { set \$fwd_proto \$scheme; }
+      proxy_set_header X-Forwarded-Proto \$fwd_proto;
+      proxy_set_header X-Forwarded-Host \$http_x_forwarded_host;
+      proxy_set_header X-Forwarded-Prefix \$http_x_forwarded_prefix;
       proxy_http_version 1.1;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection \$connection_upgrade;
