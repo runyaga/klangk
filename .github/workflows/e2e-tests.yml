@@ -81,7 +81,9 @@ jobs:
           EOF
 
       - name: Install devenv
-        run: ./bootstrap --unattended
+        run: |
+          ./bootstrap --unattended
+          devenv shell --true
 
       - name: Build Docker image and Flutter web
         run: |
