@@ -42,7 +42,7 @@ EOF
 devenv processes up
 ```
 
-Open [http://localhost:8997](http://localhost:8997) and log in with `admin`/`admin`.
+Open [http://localhost:8995](http://localhost:8995) (nginx) and log in with `admin`/`admin`.
 
 ### What You Can Do
 
@@ -58,25 +58,24 @@ Open [http://localhost:8997](http://localhost:8997) and log in with `admin`/`adm
 
 All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` at low priority so `.env` values take precedence.
 
-| Variable                | Default           | Description                                                |
-| ----------------------- | ----------------- | ---------------------------------------------------------- |
-| `BARK_PORT`             | `8997`            | Backend (FastAPI/uvicorn) port                             |
-| `BARK_NGINX_PORT`       | `8995`            | nginx reverse proxy port                                   |
-| `BARK_SOLIPLEX_PORT`    | `8555`            | Soliplex backend port (for nginx proxy)                    |
-| `BARK_DATA_DIR`         | `~/.bark/data`    | Database, workspaces, Pi sessions                          |
-| `BARK_PLUGINS_DIR`      | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`)        |
-| `SOLIPLEX_URL`          | (empty)           | Soliplex base URL as seen by browser (empty = same origin) |
-| `OLLAMA_API_KEY`        |                   | Ollama Cloud API key                                       |
-| `OLLAMA_BASE_URL`       |                   | Ollama API URL (cloud or self-hosted)                      |
-| `OLLAMA_MODEL`          |                   | LLM model name                                             |
-| `BARK_JWT_SECRET`       |                   | JWT signing secret                                         |
-| `BARK_DEFAULT_USER`     |                   | Auto-seeded user on startup                                |
-| `BARK_DEFAULT_PASSWORD` |                   | Auto-seeded password on startup                            |
+| Variable                | Default           | Description                                                        |
+| ----------------------- | ----------------- | ------------------------------------------------------------------ |
+| `BARK_NGINX_PORT`       | `8995`            | **Primary access point** — nginx (UI, API, WebSocket, hosted apps) |
+| `BARK_PORT`             | `8997`            | Backend (FastAPI/uvicorn) — proxied through nginx                  |
+| `BARK_DATA_DIR`         | `~/.bark/data`    | Database, workspaces, Pi sessions                                  |
+| `BARK_PLUGINS_DIR`      | `~/.bark/plugins` | Fetched plugins (outside repo for `execIfModified`)                |
+| `SOLIPLEX_URL`          | (empty)           | Soliplex base URL as seen by browser (empty = same origin)         |
+| `OLLAMA_API_KEY`        |                   | Ollama Cloud API key                                               |
+| `OLLAMA_BASE_URL`       |                   | Ollama API URL (cloud or self-hosted)                              |
+| `OLLAMA_MODEL`          |                   | LLM model name                                                     |
+| `BARK_JWT_SECRET`       |                   | JWT signing secret                                                 |
+| `BARK_DEFAULT_USER`     |                   | Auto-seeded user on startup                                        |
+| `BARK_DEFAULT_PASSWORD` |                   | Auto-seeded password on startup                                    |
 
 ### Ports
 
-- `BARK_PORT` (default `8997`): Web UI + API (single FastAPI/uvicorn server)
-- `BARK_NGINX_PORT` (default `8995`): nginx reverse proxy
+- `BARK_NGINX_PORT` (default `8995`): **Primary access point** — nginx serves UI, API, WebSocket, and proxies hosted app URLs directly to container ports
+- `BARK_PORT` (default `8997`): Backend (FastAPI/uvicorn)
 - `9000+`: User app ports (5 per workspace, mapped to container ports 8000-8004)
 
 ### Rebuilding
@@ -96,15 +95,17 @@ Then restart the processes.
 ```
 Browser (Flutter Web)
     ↕ WebSocket (AG-UI protocol)
-Python/FastAPI backend
-    ↕ docker attach (JSON-RPC)
-Pi coding agent (Docker container)
-    ↕ bind mount
-Workspace files on disk
+nginx reverse proxy (port 8995)
+    ├── /hosted/ → container ports (direct proxy)
+    └── /        → FastAPI backend (port 8997)
+                     ↕ docker attach (JSON-RPC)
+                 Pi coding agent (Docker container)
+                     ↕ bind mount
+                 Workspace files on disk
 ```
 
 - **Frontend**: Flutter Web with markdown rendering, syntax-highlighted code blocks, file viewer, container terminal, debug panel
-- **Backend**: FastAPI serving both API and frontend static files on a single port
+- **Backend**: nginx reverse proxy + FastAPI serving API, WebSocket, and frontend static files
 - **Agent**: Pi coding agent in RPC mode with Ollama (cloud or self-hosted, configurable model)
 - **Protocol**: [AG-UI](https://docs.ag-ui.com/) for standardized agent-user communication
 

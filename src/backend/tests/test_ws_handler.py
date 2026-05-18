@@ -103,36 +103,63 @@ class TestDeriveHostingInfo:
         assert p == "https"
         assert b == "/app"
 
-    def test_falls_back_to_headers(self, monkeypatch):
+    def test_forwarded_host_used_as_is(self, monkeypatch):
+        """Behind external reverse proxy — trust X-Forwarded-Host."""
         monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
         monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
         monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
         ws = _mock_ws(
             headers={
-                "x-forwarded-host": "fwd.example.com",
+                "x-forwarded-host": "arctor.repoze.org",
                 "x-forwarded-proto": "https",
                 "x-forwarded-prefix": "/bark",
             }
         )
         h, p, b = _derive_hosting_info(ws)
-        assert h == "fwd.example.com"
+        assert h == "arctor.repoze.org"
         assert p == "https"
         assert b == "/bark"
 
-    def test_falls_back_to_host_header(self, monkeypatch):
+    def test_host_header_with_nginx_port(self, monkeypatch):
+        """Direct access (local dev) — substitute nginx port."""
         monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
         monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
         monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        ws = _mock_ws(headers={"host": "myhost:8997"})
+        h, p, b = _derive_hosting_info(ws)
+        assert h == "myhost:8995"
+        assert p == "http"
+        assert b == ""
+
+    def test_host_header_no_nginx_port(self, monkeypatch):
+        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.delenv("BARK_NGINX_PORT", raising=False)
         ws = _mock_ws(headers={"host": "myhost:8997"})
         h, p, b = _derive_hosting_info(ws)
         assert h == "myhost:8997"
         assert p == "http"
         assert b == ""
 
-    def test_defaults(self, monkeypatch):
+    def test_defaults_with_nginx_port(self, monkeypatch):
         monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
         monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
         monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        ws = _mock_ws(headers={})
+        h, p, b = _derive_hosting_info(ws)
+        assert h == "localhost:8995"
+        assert p == "http"
+        assert b == ""
+
+    def test_defaults_no_nginx_port(self, monkeypatch):
+        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.delenv("BARK_NGINX_PORT", raising=False)
         ws = _mock_ws(headers={})
         h, p, b = _derive_hosting_info(ws)
         assert h == "localhost"
@@ -583,11 +610,30 @@ class TestForwardEvents:
 
         async def fake_events():
             yield {"type": "agent_start"}
+            yield {"type": "agent_end", "messages": []}
 
         pi.events = fake_events
         await _forward_events(ws, pi, "ws-1", state)
 
-        assert state["agent_running"] is True
+        assert state["agent_running"] is False
+
+    async def test_records_activity_on_events(self):
+        ws = _mock_ws()
+        pi = _mock_pi_client()
+        state = _base_state()
+        state["container_id"] = "cid-1"
+        container_manager._containers["cid-1"] = {
+            "last_activity": 0,
+            "workspace_id": "ws-1",
+        }
+
+        async def fake_events():
+            yield {"type": "agent_start"}
+
+        pi.events = fake_events
+        await _forward_events(ws, pi, "ws-1", state)
+
+        assert container_manager._containers["cid-1"]["last_activity"] > 0
 
     async def test_ws_error_logged(self):
         ws = _mock_ws()

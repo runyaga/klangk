@@ -27,24 +27,19 @@ http {
   server {
     listen ${BARK_NGINX_PORT};
 
-    location /bark/ {
-      proxy_pass http://127.0.0.1:${BARK_PORT}/;
+    # Hosted app proxy: extract port from URL and proxy directly to container
+    location ~ ^/hosted/[^/]+/(\d+)/(.*)\$ {
+      proxy_pass http://127.0.0.1:\$1/\$2\$is_args\$args;
       proxy_set_header Host \$http_host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto \$scheme;
-      proxy_set_header X-Forwarded-Prefix /bark;
       proxy_http_version 1.1;
-      proxy_set_header Upgrade \$http_upgrade;
-      proxy_set_header Connection \$connection_upgrade;
-      proxy_set_header Accept-Encoding "";
-      sub_filter '<base href="/" />' '<base href="/bark/" />';
-      sub_filter_once on;
     }
 
     location / {
-      proxy_pass http://127.0.0.1:${BARK_SOLIPLEX_PORT}/;
-      proxy_set_header Host \$host;
+      proxy_pass http://127.0.0.1:${BARK_PORT}/;
+      proxy_set_header Host \$http_host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
       proxy_set_header X-Forwarded-Proto \$scheme;

@@ -153,6 +153,22 @@ class TestOnReadable:
         assert "\ufffd" in result
 
 
+class TestRemoveReader:
+    def test_valueerror_suppressed(self):
+        s = TerminalSession("cid")
+        s._master_fd = 99
+        loop = asyncio.get_event_loop()
+        with patch.object(loop, "remove_reader", side_effect=ValueError("bad fd")):
+            s._remove_reader()
+
+    def test_oserror_suppressed(self):
+        s = TerminalSession("cid")
+        s._master_fd = 99
+        loop = asyncio.get_event_loop()
+        with patch.object(loop, "remove_reader", side_effect=OSError("bad fd")):
+            s._remove_reader()
+
+
 class TestIsAlive:
     def test_alive(self):
         s = TerminalSession("cid")

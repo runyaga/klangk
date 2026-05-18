@@ -27,6 +27,10 @@ Testing and running:
 
 - Always run and test code yourself using bash before telling the user it's done
 - If something fails, fix it and try again
+- When starting a long-running server (e.g., `python3 -m http.server`,
+  `npx serve`, `node server.js`), always run it in the background with `&`
+  or `nohup ... &` so the bash tool returns and you can continue working.
+  A foreground server will block the bash tool forever.
 - For web apps: this container has mapped ports for serving apps to the user's
   browser. The $BARK_PORT_MAPPINGS env var lists container_port:host_port pairs
   (e.g., "8000:9000,8001:9001,..."). Only these mapped container ports are

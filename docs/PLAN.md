@@ -10,6 +10,8 @@ Bark is a multi-user web app that gives each user their own isolated Pi coding a
 Browser (Flutter Web + Chat UI + AG-UI)
     ├── AG-UI events over WebSocket (authenticated)
     ├── Extension UI responses (client-side tool results)
+nginx reverse proxy (port 8995, serves UI + API + hosted app proxy)
+    ↕
 Python/FastAPI backend (port 8997, serves API + frontend static files)
     ├── Auth (JWT sessions, SQLite user store)
     ├── Workspace registry (user → [workspace] → container)
@@ -63,7 +65,7 @@ bark/
     dockerbuild.sh             # Docker build: plugin staging, container cleanup, workspace image build (named build contexts)
     dockerbuild-base.sh        # Build and push base Docker image to GHCR
     nginx.sh                   # nginx reverse proxy: config generation and exec
-    synctoarctor.sh            # Deploy script for arctor.repoze.org
+
   src/dockerimage/
     Dockerfile                  # Workspace image: FROM bark-pi-base + plugin extensions + tools + entrypoint
     Dockerfile.base             # Base image: node:22-slim + Pi + Python3 + build-essential + SQLite + vim + emacs + net tools (pushed to GHCR)
@@ -75,7 +77,7 @@ bark/
   src/backend/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
     bark_backend/
-      main.py                   # FastAPI app, lifespan, hosted app proxy, default user seeding, static file serving
+      main.py                   # FastAPI app, lifespan, default user seeding, static file serving
       api.py                    # API route handlers (auth, workspaces, files, messages) via APIRouter
       auth.py                   # Register/login/logout, JWT, bcrypt password hashing
       user_store.py             # SQLite: users, workspaces, token blocklist, message history
@@ -158,13 +160,13 @@ bark/
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
 - Per-workspace port allocation: well-known container ports (8000+) mapped to host ports (9000+), persisted in SQLite (`port_allocations` table with per-port PRIMARY KEY preventing overlap). Ports allocated at workspace creation, stable across restarts, freed by CASCADE on workspace delete. `num_ports` column on workspaces table (default 5) controls how many; on container start, ports are added/removed to match. `BARK_PORT_MAPPINGS` env var passes container:host pairs to the container.
 - Built-in `get_hosted_url` tool converts container port to full user-facing URL using `BARK_PORT_MAPPINGS`, `BARK_HOSTING_HOSTNAME`, `BARK_HOSTING_PROTO`, and `BARK_HOSTING_BASE_PATH`
-- Hosted app proxy: user apps are accessible at `{base_path}/hosted/{workspace_id}/{port}/` — the backend streams requests to `localhost:{port}` on the host. No authentication required for hosted app URLs. nginx `X-Forwarded-Prefix` and `$http_host` headers provide the base path and hostname with port.
+- Hosted app proxy: user apps are accessible at `{base_path}/hosted/{workspace_id}/{port}/` — nginx proxies requests directly to `localhost:{port}` on the host (bypassing the Python backend). No authentication required for hosted app URLs.
 - LLM provider/model configured via `settings.json` FIFO (sets `defaultProvider` and `defaultModel`)
 - API key delivered via `models.json` FIFO (named pipe, written once at startup, deleted after Pi reads it — key never persists on disk)
 - Both config FIFOs written by a `nohup` background process that survives the `exec` to Pi — settings.json is written first (Pi's SettingsManager reads it), then models.json (Pi's ModelRegistry reads it)
 - All provider env vars (`OLLAMA_*`, `ANTHROPIC_*`, etc.) stripped from Pi's process environment before exec
 - System prompt stored as `src/dockerimage/system-prompt.md`, copied into image at build time
-- 30-minute idle timeout (configurable via `BARK_IDLE_TIMEOUT_SECONDS`) with automatic container stop, debug notification, and terminal overlay with restart button
+- 30-minute idle timeout (configurable via `BARK_IDLE_TIMEOUT_SECONDS`) with automatic container stop, debug notification, and terminal overlay with restart button. Activity is recorded on user actions (prompt, steer, terminal input) and on every Pi event (tool calls, text streaming), so containers stay alive during long-running LLM requests as long as events are flowing. Stuck tool executions (e.g., foreground server) produce no events and will eventually time out.
 - All user containers stopped on logout and backend shutdown
 - Read-only root filesystem (`ReadonlyRootfs: True`) — the agent cannot modify system files or install packages outside the workspace. Writable paths:
   - `/workspace` — bind mount to host (user files)
@@ -264,11 +266,12 @@ bark/
 
 ### Hosting
 
-- Single-port architecture: FastAPI serves both API and Flutter frontend static files
-- Subpath hosting behind nginx (e.g., `/bark/`) via `sub_filter` for `<base href>` rewriting
-- Frontend derives API URLs from `<base href>` — works on both root and subpath
-- WebSocket proxying via nginx `proxyWebsockets`
-- Deployment via `synctoarctor.sh` rsync script
+- **nginx is the primary access point** (port 8995 locally). It proxies API/WebSocket to uvicorn and proxies hosted app URLs directly to container ports (no Python in the hosted app path).
+- FastAPI serves API endpoints and Flutter frontend static files on port 8997 (not accessed directly by users).
+- Hosted app URLs (`/hosted/{workspace_id}/{port}/`) are handled by an nginx regex location that extracts the port and proxies to `127.0.0.1:{port}`.
+- Subpath hosting (e.g., `/bark/` on arctor) handled by an outer nginx that sends `X-Forwarded-Prefix`, `X-Forwarded-Host`, and `X-Forwarded-Proto` headers. Bark's `_derive_hosting_info` uses these to generate correct hosted app URLs. The outer nginx also rewrites `<base href>` via `sub_filter`.
+- Frontend derives API URLs from `<base href>` — works on both root and subpath.
+- WebSocket proxying via nginx `proxyWebsockets`.
 
 ## Development
 
@@ -304,38 +307,38 @@ devenv processes up -d
 export DEVENV_TUI=0
 
 # Open in browser
-open http://localhost:8997
+open http://localhost:8995
 ```
 
 ### Environment Variables
 
 All settings can be overridden in `.env`. Defaults (where appropriate) are provided in `devenv.nix` at low priority so `.env` values take precedence.
 
-| Variable                    | Default                              | Description                                                                                                               |
-| --------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `BARK_PORT`                 | `8997`                               | Backend (FastAPI/uvicorn) port                                                                                            |
-| `BARK_NGINX_PORT`           | `8995`                               | nginx reverse proxy port                                                                                                  |
-| `BARK_SOLIPLEX_PORT`        | `8555`                               | Soliplex backend port (for nginx proxy)                                                                                   |
-| `BARK_DATA_DIR`             | `~/.bark/data`                       | Database, workspaces, Pi sessions                                                                                         |
-| `BARK_PLUGINS_DIR`          | `~/.bark/plugins`                    | Fetched plugins (outside repo for `execIfModified`)                                                                       |
-| `BARK_IMAGE_NAME`           | `bark-pi`                            | Docker image name for workspace containers                                                                                |
-| `BARK_INSTANCE_ID`          | `default`                            | Instance identifier for multi-instance deployments on the same host — isolates containers, names, and cleanup             |
-| `BARK_HOSTING_HOSTNAME`     | (from `Host` header)                 | Hostname for user-facing app URLs. Auto-derived from `X-Forwarded-Host` or `Host` WebSocket header if not set             |
-| `BARK_HOSTING_PROTO`        | (from `X-Forwarded-Proto` or `http`) | Protocol for user-facing app URLs. Auto-derived from request headers if not set                                           |
-| `BARK_HOSTING_BASE_PATH`    | (from `X-Forwarded-Prefix` or empty) | Base path prefix for user-facing app URLs (e.g., `/bark`). Auto-derived from nginx `X-Forwarded-Prefix` header if not set |
-| `BARK_IDLE_TIMEOUT_SECONDS` | `1800`                               | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s)                             |
-| `SOLIPLEX_URL`              | (empty)                              | Soliplex base URL as seen by browser (empty = same origin)                                                                |
-| `OLLAMA_API_KEY`            |                                      | Ollama Cloud API key                                                                                                      |
-| `OLLAMA_BASE_URL`           |                                      | Ollama API URL (cloud or self-hosted)                                                                                     |
-| `OLLAMA_MODEL`              |                                      | LLM model name                                                                                                            |
-| `BARK_JWT_SECRET`           |                                      | JWT signing secret                                                                                                        |
-| `BARK_DEFAULT_USER`         |                                      | Auto-seeded user on startup                                                                                               |
-| `BARK_DEFAULT_PASSWORD`     |                                      | Auto-seeded password on startup                                                                                           |
+| Variable                    | Default                              | Description                                                                                                                                               |
+| --------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BARK_NGINX_PORT`           | `8995`                               | **Primary access point** — nginx reverse proxy port (UI, API, WebSocket, hosted apps)                                                                     |
+| `BARK_PORT`                 | `8997`                               | Backend (FastAPI/uvicorn) port — proxied through nginx, not accessed directly                                                                             |
+| `BARK_SOLIPLEX_PORT`        | `8555`                               | Soliplex backend port (unused unless Soliplex integration is configured)                                                                                  |
+| `BARK_DATA_DIR`             | `~/.bark/data`                       | Database, workspaces, Pi sessions                                                                                                                         |
+| `BARK_PLUGINS_DIR`          | `~/.bark/plugins`                    | Fetched plugins (outside repo for `execIfModified`)                                                                                                       |
+| `BARK_IMAGE_NAME`           | `bark-pi`                            | Docker image name for workspace containers                                                                                                                |
+| `BARK_INSTANCE_ID`          | `default`                            | Instance identifier for multi-instance deployments on the same host — isolates containers, names, and cleanup                                             |
+| `BARK_HOSTING_HOSTNAME`     | (auto-derived)                       | Hostname for hosted app URLs. Behind a reverse proxy: uses `X-Forwarded-Host` as-is. Direct access: uses `Host` header with `BARK_NGINX_PORT` substituted |
+| `BARK_HOSTING_PROTO`        | (from `X-Forwarded-Proto` or `http`) | Protocol for user-facing app URLs. Auto-derived from request headers if not set                                                                           |
+| `BARK_HOSTING_BASE_PATH`    | (from `X-Forwarded-Prefix` or empty) | Base path prefix for user-facing app URLs (e.g., `/bark`). Auto-derived from nginx `X-Forwarded-Prefix` header if not set                                 |
+| `BARK_IDLE_TIMEOUT_SECONDS` | `1800`                               | Container idle timeout in seconds (check interval auto-computed as timeout/3, clamped 10–60s)                                                             |
+| `SOLIPLEX_URL`              | (empty)                              | Soliplex base URL as seen by browser (empty = same origin)                                                                                                |
+| `OLLAMA_API_KEY`            |                                      | Ollama Cloud API key                                                                                                                                      |
+| `OLLAMA_BASE_URL`           |                                      | Ollama API URL (cloud or self-hosted)                                                                                                                     |
+| `OLLAMA_MODEL`              |                                      | LLM model name                                                                                                                                            |
+| `BARK_JWT_SECRET`           |                                      | JWT signing secret                                                                                                                                        |
+| `BARK_DEFAULT_USER`         |                                      | Auto-seeded user on startup                                                                                                                               |
+| `BARK_DEFAULT_PASSWORD`     |                                      | Auto-seeded password on startup                                                                                                                           |
 
 ### Ports
 
-- `BARK_PORT` (default `8997`): Web UI + API (single FastAPI/uvicorn server)
-- `BARK_NGINX_PORT` (default `8995`): nginx reverse proxy
+- `BARK_NGINX_PORT` (default `8995`): **Primary access point** — nginx serves UI, API, WebSocket, and proxies hosted app URLs directly to container ports
+- `BARK_PORT` (default `8997`): Backend (FastAPI/uvicorn)
 - `9000+`: User app ports (5 per workspace)
 
 ### Rebuild
@@ -533,7 +536,7 @@ LLM calls tool → Pi extension execute()
 
 ### Soliplex integration
 
-Soliplex has its own Bark plugins currently hosted on the `bark-integration` branch of the Soliplex repository within `bark-plugin`. The `bark` repository has some sops to Soliplex integration, namely that it starts an nginx service that is unnecessary for non-integraion scenarios.
+Soliplex has its own Bark plugins currently hosted on the `bark-integration` branch of the Soliplex repository within `bark-plugin`.
 
 The Soliplex tools run entirely in the browser, which has the user's Soliplex authentication cookies. When deployed behind nginx on the same domain, the browser can call Soliplex APIs directly with no CORS issues. Set `SOLIPLEX_URL` in `.env` to tell the frontend where Soliplex is (served via the `/api/config` endpoint). Leave it empty when Bark and Soliplex share the same origin (the typical nginx setup). Cross-origin setups require CORS configuration on the Soliplex side.
 
@@ -542,12 +545,21 @@ The query flow: frontend creates a thread in the Soliplex room, posts the user's
 - **soliplex_list_rooms** (external, via `plugins.yaml`): Lists available Soliplex knowledge base rooms
 - **soliplex_query** (external, via `plugins.yaml`): Queries a Soliplex room via AG-UI (creates thread, posts question, collects SSE response). Default room: `search`
 
-The devenv.nix currently runs nginx for local Soliplex development:
+The devenv.nix runs nginx as the primary access point:
 
 ```
 nginx reverse proxy (port 8995)
-    ├── /bark/     → Bark backend (port 8997)
-    └── /          → Soliplex backend (port 8555)
+    ├── /hosted/{ws_id}/{port}/ → container port (direct proxy)
+    └── /                       → Bark backend (port 8997)
+```
+
+On arctor (production), the external nginx handles the `/bark/` subpath:
+
+```
+arctor nginx (443)
+    ├── /bark/hosted/{ws_id}/{port}/ → container port (direct proxy)
+    └── /bark/                       → bark nginx (port 8995)
+                                         └── / → uvicorn (port 8997)
 ```
 
 ## TODO
@@ -572,10 +584,12 @@ nginx reverse proxy (port 8995)
 - **Investigate running Pi under bubblewrap**: Explore using [bubblewrap](https://github.com/containers/bubblewrap) (bwrap) as an alternative to Docker for sandboxing Pi. Bubblewrap is lighter-weight than Docker — no daemon, no image builds, no container overhead — and provides namespace-based isolation (mount, PID, network, user). This could significantly reduce startup time and resource usage. Trade-offs: no pre-built image caching, need to manage tool installations on the host, less isolation than full container. Could be offered as an alternative backend alongside Docker.
 - **Remove leading underscores from internal functions**: Functions like `_handle_prompt`, `_forward_events`, `_cleanup_connection`, `_derive_hosting_info`, etc. in `ws_handler.py` and helper functions in other modules use leading underscores to signal "module-private". Since these are now tested directly via imports, the underscores are unnecessary and make the test imports look odd. Rename to drop the underscores.
 - **Test workspace_page.dart, app.dart, and main.dart**: `workspace_page.dart` depends on the `bark_plugins` package (generated by `import_dart_plugins.py`), so tests require codegen to have run first. `app.dart` needs GoRouter/navigation mocking.
+- **Copyable links in chat bubbles**: Links in assistant response bubbles (e.g., hosted app URLs) should be selectable and copyable. Currently the markdown-rendered links in chat messages can't be easily copied.
 - **Clipboard image paste in chat**: Investigate whether Pi supports image inputs and, if so, allow pasting images from the clipboard into the chat input field. Would need to intercept paste events, detect image MIME types, convert to a format Pi can accept (base64 or URL), and pass via the `images` parameter of `prompt()`.
-- **Simplify deploy script**: Consider replacing `synctoarctor.sh` with a plain `rsync` of the entire project directory instead of the current approach of syncing specific files and directories individually. Would be simpler to maintain and less likely to miss new files.
+
 - **Hosted app URLs should respect external headers**: The `get_hosted_url` tool generates URLs using `BARK_HOSTING_*` env vars passed to the container. These are derived from `X-Forwarded-Host`/`X-Forwarded-Proto` headers at WebSocket connect time, but if the hosting environment changes (e.g., different reverse proxy), the container's cached values become stale. Consider re-deriving hosting info on each `get_hosted_url` call or providing a mechanism to update the container's env vars without restart.
 - **Backend busy loop during Pi/WS comms**: The backend occasionally goes into a busy loop during Pi RPC or WebSocket communication. Investigate and fix the root cause.
 - **E2E: use UI instead of API for setup/teardown**: E2E tests currently use the API directly to upload files, delete workspaces, etc. These should use the UI instead to better test real user flows and catch UI-level regressions.
 - ~~**Docker base image**~~: Done. `Dockerfile.base` pushed to `ghcr.io/mcdonc/bark/bark-pi-base:latest`. Workspace image (`Dockerfile`) builds on top in ~1s. Base image auto-rebuilds on push to main when `Dockerfile.base` changes, or via `workflow_dispatch`.
+
 - **E2E: cache Docker image build in CI**: The Docker image is rebuilt from scratch on every CI run. Options: (A) Push to GHCR (`ghcr.io/<repo>/bark-pi:<hash>`) keyed on a hash of Dockerfile + entrypoint + system-prompt + builtin-extensions + plugins — pull if exists, build and push if not. Requires `packages: write` permission but handles large images well. (B) Use GitHub Actions cache with `docker save`/`docker load` — simpler, no registry auth, but the 10 GB total cache limit is tight for a ~2-3 GB compressed tar. (C) Modify `dockerbuild.sh` to check a registry when `BARK_DOCKER_REGISTRY` is set — works for CI and anyone with registry access but couples the build script to a registry. Cache key should hash: `src/dockerimage/Dockerfile`, `src/dockerimage/entrypoint.sh`, `src/dockerimage/*.md`, `src/dockerimage/builtin-extensions/*.ts`, and `plugins/` contents.
