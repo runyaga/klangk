@@ -1,4 +1,4 @@
-name: Cleanup Skipped Runs
+name: Cleanup Runs
 
 on:
   schedule:
@@ -9,24 +9,13 @@ on:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     steps:
-      - name: Delete skipped and cancelled E2E runs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Delete E2E test runs older than 1 day that were
-          # skipped (no recent commits) or cancelled
-          REPO="${{ github.repository }}"
-          CUTOFF=$(date -d '1 day ago' -u +%Y-%m-%dT%H:%M:%SZ)
-
-          for STATUS in skipped cancelled; do
-            echo "Cleaning up $STATUS runs..."
-            gh api \
-              "repos/$REPO/actions/workflows/e2e-tests.yml/runs?status=$STATUS&per_page=100" \
-              --jq ".workflow_runs[] | select(.created_at < \"$CUTOFF\") | .id" \
-            | while read -r RUN_ID; do
-                echo "Deleting run $RUN_ID"
-                gh api -X DELETE "repos/$REPO/actions/runs/$RUN_ID" || true
-              done
-          done
-          echo "Cleanup complete"
+      - uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 0
+          delete_run_by_conclusion_pattern: "skipped,cancelled"
