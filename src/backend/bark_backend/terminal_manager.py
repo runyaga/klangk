@@ -96,6 +96,14 @@ class TerminalSession:
 
         logger.info("Terminal session started for container %s", self.container_id)
 
+    def _remove_reader(self) -> None:
+        """Deregister the PTY master fd from the event loop."""
+        if self._master_fd is not None:
+            try:
+                asyncio.get_event_loop().remove_reader(self._master_fd)
+            except (ValueError, OSError):
+                pass
+
     def _on_readable(self) -> None:
         """Called when data is available on the PTY master fd."""
         try:
@@ -103,8 +111,10 @@ class TerminalSession:
             if data:
                 self._output_queue.put_nowait(data.decode("utf-8", errors="replace"))
             else:
+                self._remove_reader()
                 self._output_queue.put_nowait(None)
         except OSError:
+            self._remove_reader()
             self._output_queue.put_nowait(None)
 
     @property
