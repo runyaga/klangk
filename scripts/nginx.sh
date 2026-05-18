@@ -37,6 +37,7 @@ http {
       proxy_http_version 1.1;
       proxy_set_header Upgrade \$http_upgrade;
       proxy_set_header Connection \$connection_upgrade;
+      proxy_set_header Accept-Encoding "";
       sub_filter '<base href="/" />' '<base href="/bark/" />';
       sub_filter_once on;
     }
