@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, rmSync } from "fs";
+import { execSync } from "child_process";
+import { existsSync, rmSync } from "fs";
 import { join } from "path";
 
 async function globalTeardown() {
@@ -8,29 +9,51 @@ async function globalTeardown() {
   if (pid) {
     const numPid = Number(pid);
     console.log(`Stopping E2E server (PID ${numPid})...`);
+
+    // Kill the process group (spawned with detached: true)
     try {
-      // Kill the process group so children (backend, nginx) also die
       process.kill(-numPid, "SIGTERM");
     } catch {
+      // Process group doesn't exist
+    }
+
+    // Wait up to 30s for graceful shutdown (needs time to stop all containers)
+    let alive = true;
+    for (let i = 0; i < 60; i++) {
       try {
-        process.kill(numPid, "SIGTERM");
+        process.kill(numPid, 0);
+        await new Promise((r) => setTimeout(r, 500));
+      } catch {
+        alive = false;
+        break;
+      }
+    }
+
+    // Force kill if still alive
+    if (alive) {
+      console.warn("Server did not exit gracefully, sending SIGKILL");
+      try {
+        process.kill(-numPid, "SIGKILL");
       } catch {
         // Already dead
       }
     }
-
-    // Wait up to 10s for it to exit
-    for (let i = 0; i < 20; i++) {
-      try {
-        process.kill(numPid, 0); // check if alive
-        await new Promise((r) => setTimeout(r, 500));
-      } catch {
-        break; // dead
-      }
-    }
   }
 
-  // Print backend log location (log persists until dataDir cleanup)
+  // Stop any containers that survived shutdown
+  try {
+    const ids = execSync('docker ps --filter "label=bark.managed=true" -q')
+      .toString()
+      .trim();
+    if (ids) {
+      execSync(`docker stop ${ids}`);
+      console.log("Stopped leftover bark containers");
+    }
+  } catch {
+    // Docker not available or no containers
+  }
+
+  // Print backend log location
   const logPath = process.env.BARK_E2E_LOG;
   if (logPath && existsSync(logPath)) {
     console.log(`Backend log: ${logPath}`);

@@ -200,6 +200,34 @@ async def add_port_allocations(workspace_id: str, ports: list[int]) -> None:
         await db.close()
 
 
+async def find_and_allocate_ports(
+    workspace_id: str, count: int, start: int
+) -> list[int]:
+    """Atomically find free ports and allocate them in a single transaction."""
+    db = await _get_db()
+    try:
+        cursor = await db.execute("SELECT port FROM port_allocations")
+        rows = await cursor.fetchall()
+        used = {row["port"] for row in rows}
+
+        ports = []
+        port = start
+        while len(ports) < count:
+            if port not in used:
+                ports.append(port)
+            port += 1
+
+        for p in ports:
+            await db.execute(
+                "INSERT INTO port_allocations (port, workspace_id) VALUES (?, ?)",
+                (p, workspace_id),
+            )
+        await db.commit()
+        return ports
+    finally:
+        await db.close()
+
+
 async def remove_port_allocations(workspace_id: str, ports: list[int]) -> None:
     """Remove specific port allocations from a workspace."""
     db = await _get_db()

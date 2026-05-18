@@ -49,19 +49,19 @@ _containers: dict[str, dict] = {}
 _idle_callbacks: dict[str, list] = {}
 _docker: aiodocker.Docker | None = None
 _cleanup_task: asyncio.Task | None = None
+# Serializes port allocation to prevent races between concurrent workspace
+# creations within this process. Sufficient because each Bark instance has
+# its own BARK_DATA_DIR/bark.db. If multiple processes ever shared a DB,
+# this would need a database-level lock instead.
+_port_lock: asyncio.Lock = asyncio.Lock()
 
 
 async def allocate_ports(workspace_id: str, count: int) -> list[int]:
     """Allocate additional ports for a workspace. Returns the newly allocated port numbers."""
-    used = await user_store.get_all_allocated_ports()
-    ports = []
-    port = PORT_RANGE_START
-    while len(ports) < count:
-        if port not in used:
-            ports.append(port)
-        port += 1
-    await user_store.add_port_allocations(workspace_id, ports)
-    return ports
+    async with _port_lock:
+        return await user_store.find_and_allocate_ports(
+            workspace_id, count, PORT_RANGE_START
+        )
 
 
 async def get_workspace_ports(workspace_id: str) -> list[int]:
@@ -309,26 +309,22 @@ async def shutdown() -> None:
     if _cleanup_task:
         _cleanup_task.cancel()
         _cleanup_task = None
-    # Stop all tracked containers
-    for cid in list(_containers.keys()):
-        await stop_container(cid)
+    # Stop all tracked containers in parallel
+    tasks = [stop_container(cid) for cid in list(_containers.keys())]
     # Also stop any orphaned bark containers (not in _containers but have our label)
     try:
         docker = await get_docker()
         containers = await docker.containers.list(
-            all=True,
             filters={"label": [f"bark.instance={INSTANCE_ID}"]},
         )
         for c in containers:
-            cid = c.id
-            if cid not in _containers:
-                logger.info("Stopping orphaned bark container %s", cid)
-                try:
-                    await c.stop()
-                except aiodocker.exceptions.DockerError:
-                    pass
+            if c.id not in _containers:
+                logger.info("Stopping orphaned bark container %s", c.id)
+                tasks.append(c.stop())
     except (aiodocker.exceptions.DockerError, OSError) as e:
-        logger.warning("Error cleaning up orphaned containers: %s", e)
+        logger.warning("Error listing orphaned containers: %s", e)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
     if _docker:
         await _docker.close()
         _docker = None

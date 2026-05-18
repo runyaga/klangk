@@ -23,13 +23,37 @@ async function getAuthToken(request: APIRequestContext): Promise<string> {
 async function waitForFlutter(page: Page) {
   await page.waitForFunction(
     () => !document.body.textContent?.includes("Loading, please wait"),
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   );
   await page.waitForTimeout(1000);
 }
 
 function fv(page: Page) {
   return page.locator("flutter-view");
+}
+
+/** Poll the files API until a specific file appears. */
+async function waitForFile(
+  request: APIRequestContext,
+  workspaceId: string,
+  path: string,
+  headers: Record<string, string>,
+  timeout = 30_000,
+) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const resp = await request.get(
+        `${API_BASE}/workspaces/${workspaceId}/files/content?path=${encodeURIComponent(path)}`,
+        { headers },
+      );
+      if (resp.ok()) return;
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`File ${path} did not appear within ${timeout}ms`);
 }
 
 function vp(page: Page) {
@@ -79,13 +103,33 @@ async function createAndOpenWorkspace(
     `${API_BASE}/workspaces?name=${encodeURIComponent(name)}`,
     { headers },
   );
-  expect(createResp.ok()).toBeTruthy();
+  if (!createResp.ok()) {
+    const body = await createResp.text();
+    throw new Error(
+      `Workspace creation failed: ${createResp.status()} ${body}`,
+    );
+  }
   const workspace = await createResp.json();
   const workspaceId = workspace.id;
 
   await login(page);
   await page.goto(`#/workspace/${workspaceId}`);
-  await page.waitForTimeout(8000);
+
+  // Wait for container to be ready by polling the files API
+  for (let i = 0; i < 60; i++) {
+    try {
+      const resp = await request.get(
+        `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
+        { headers },
+      );
+      if (resp.ok()) break;
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  // Extra settle time for the UI to render after container ready
+  await page.waitForTimeout(2000);
 
   return {
     workspaceId,
@@ -161,7 +205,7 @@ test.describe("Bark E2E", () => {
     page,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { cleanup } = await createAndOpenWorkspace(page, request, "ide");
 
     try {
@@ -174,7 +218,7 @@ test.describe("Bark E2E", () => {
   });
 
   test("workspace shows terminal tab", async ({ page, request }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { cleanup } = await createAndOpenWorkspace(page, request, "term");
 
     try {
@@ -186,7 +230,7 @@ test.describe("Bark E2E", () => {
   });
 
   test("switch to Files tab and back", async ({ page, request }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -222,7 +266,7 @@ test.describe("Bark E2E", () => {
       await page.waitForTimeout(500);
       await page.keyboard.type("echo tab-switch-ok > /workspace/.tab-test");
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(2000);
+      await waitForFile(request, workspaceId, ".tab-test", headers);
 
       const readResp = await request.get(
         `${API_BASE}/workspaces/${workspaceId}/files/content?path=.tab-test`,
@@ -237,7 +281,7 @@ test.describe("Bark E2E", () => {
   });
 
   test("terminal accepts keyboard input", async ({ page, request }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -256,7 +300,7 @@ test.describe("Bark E2E", () => {
         "echo playwright-terminal-test > /workspace/.term-test",
       );
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(2000);
+      await waitForFile(request, workspaceId, ".term-test", headers);
 
       const readResp = await request.get(
         `${API_BASE}/workspaces/${workspaceId}/files/content?path=.term-test`,
@@ -271,12 +315,12 @@ test.describe("Bark E2E", () => {
   });
 
   test("navigate back to workspaces", async ({ page, request }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { cleanup } = await createAndOpenWorkspace(page, request, "nav-back");
 
     try {
       await fv(page).click({ position: { x: 25, y: 28 }, force: true });
-      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
+      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 30_000 });
     } finally {
       await cleanup();
     }
@@ -332,7 +376,7 @@ test.describe("Bark E2E", () => {
     page,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -349,16 +393,7 @@ test.describe("Bark E2E", () => {
       await page.waitForTimeout(500);
       await page.keyboard.type('echo "foo" > /workspace/foo.txt');
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(2000);
-
-      const listResp = await request.get(
-        `${API_BASE}/workspaces/${workspaceId}/files?path=.`,
-        { headers },
-      );
-      expect(listResp.ok()).toBeTruthy();
-      const files = await listResp.json();
-      const names = files.map((f: any) => f.name);
-      expect(names).toContain("foo.txt");
+      await waitForFile(request, workspaceId, "foo.txt", headers);
 
       const readResp = await request.get(
         `${API_BASE}/workspaces/${workspaceId}/files/content?path=foo.txt`,
@@ -797,7 +832,7 @@ test.describe("Bark E2E", () => {
     page,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -819,17 +854,12 @@ test.describe("Bark E2E", () => {
         "mkdir -p /workspace/.e2e-multitest/sub && echo done > /workspace/.e2e-multitest/sub/result.txt",
       );
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(3000);
-
-      // Verify directory was created
-      const listResp = await request.get(
-        `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-multitest/sub`,
-        { headers },
+      await waitForFile(
+        request,
+        workspaceId,
+        ".e2e-multitest/sub/result.txt",
+        headers,
       );
-      expect(listResp.ok()).toBeTruthy();
-      const entries = await listResp.json();
-      const names = entries.map((e: any) => e.name);
-      expect(names).toContain("result.txt");
 
       // Verify file content
       const readResp = await request.get(
@@ -845,7 +875,7 @@ test.describe("Bark E2E", () => {
   });
 
   test("terminal works after tab switching", async ({ page, request }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -880,7 +910,7 @@ test.describe("Bark E2E", () => {
         "echo tab-survive-test > /workspace/.tab-survive",
       );
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(2000);
+      await waitForFile(request, workspaceId, ".tab-survive", headers);
 
       const readResp = await request.get(
         `${API_BASE}/workspaces/${workspaceId}/files/content?path=.tab-survive`,
@@ -988,7 +1018,7 @@ test.describe("Bark E2E", () => {
     page,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
 
     const token = await getAuthToken(request);
     const headers = { Authorization: `Bearer ${token}` };
@@ -1029,20 +1059,32 @@ test.describe("Bark E2E", () => {
       // Open the workspace — this starts a container
       await login(page);
       await page.goto(`#/workspace/${workspaceId}`);
-      await page.waitForTimeout(10000);
 
-      // After opening: docker should show a running container
-      expect(dockerContainersForWorkspace(workspaceId).length).toBeGreaterThan(
-        0,
-      );
+      // Wait for container to start (poll up to 60s)
+      let started = false;
+      for (let i = 0; i < 60; i++) {
+        if (dockerContainersForWorkspace(workspaceId).length > 0) {
+          started = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      expect(started).toBeTruthy();
 
       // Navigate away (click back button)
       await fv(page).click({ position: { x: 25, y: 28 }, force: true });
-      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
-      await page.waitForTimeout(3000);
+      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 30_000 });
 
-      // After navigating away: container should be stopped
-      expect(dockerContainersForWorkspace(workspaceId)).toHaveLength(0);
+      // Wait for container to stop (poll up to 30s)
+      let stopped = false;
+      for (let i = 0; i < 30; i++) {
+        if (dockerContainersForWorkspace(workspaceId).length === 0) {
+          stopped = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+      expect(stopped).toBeTruthy();
     } finally {
       await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
         headers,
@@ -1116,7 +1158,7 @@ test.describe("Bark E2E", () => {
     page,
     request,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
       page,
       request,
@@ -1134,7 +1176,12 @@ test.describe("Bark E2E", () => {
         "mkdir -p /workspace/.e2e-nav/inner && echo nav-test > /workspace/.e2e-nav/inner/file.txt",
       );
       await page.keyboard.press("Enter");
-      await page.waitForTimeout(2000);
+      await waitForFile(
+        request,
+        workspaceId,
+        ".e2e-nav/inner/file.txt",
+        headers,
+      );
 
       // Verify structure via API
       const innerFiles = await request.get(

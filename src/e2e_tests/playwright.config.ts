@@ -9,6 +9,8 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: 0,
+  workers: parseInt(process.env.BARK_E2E_WORKERS || "4"),
+  fullyParallel: true,
   globalSetup: "./global-setup.ts",
   globalTeardown: "./global-teardown.ts",
   use: {

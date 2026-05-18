@@ -126,6 +126,18 @@ class TestPortAllocations:
         all_ports = await user_store.get_all_allocated_ports()
         assert all_ports == set()
 
+    async def test_find_and_allocate_ports(self, workspace):
+        ports = await user_store.find_and_allocate_ports(workspace["id"], 3, 9000)
+        assert ports == [9000, 9001, 9002]
+        stored = await user_store.get_workspace_ports(workspace["id"])
+        assert stored == [9000, 9001, 9002]
+
+    async def test_find_and_allocate_skips_used(self, workspace, user):
+        await user_store.add_port_allocations(workspace["id"], [9000, 9002])
+        ws2 = await user_store.create_workspace(user["id"], "ws2")
+        ports = await user_store.find_and_allocate_ports(ws2["id"], 3, 9000)
+        assert ports == [9001, 9003, 9004]
+
 
 class TestContainerTracking:
     async def test_update_workspace_container(self, workspace, user):

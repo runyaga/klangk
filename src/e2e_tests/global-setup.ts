@@ -22,6 +22,7 @@ async function globalSetup() {
     ["bark_backend.main:app", "--host", "0.0.0.0", "--port", backendPort],
     {
       cwd: join(projectRoot, "src", "backend"),
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
