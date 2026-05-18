@@ -149,8 +149,8 @@ def main():
         f.write(output)
 
     names = [p["class_name"] for p in plugins]
-    print(f"Generated {PUBSPEC} with {len(plugins)} plugin(s)")
-    print(f"Generated {OUTPUT}: {', '.join(names) or '(none)'}")
+    print(f"Generated Dart {PUBSPEC} with {len(plugins)} plugin(s)")
+    print(f"Generated Dart {OUTPUT}: {', '.join(names) or '(none)'}")
 
 
 if __name__ == "__main__":
