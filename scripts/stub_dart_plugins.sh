@@ -9,7 +9,6 @@ set -euo pipefail
 FRONTEND_DIR="$(cd "$(dirname "$0")/../src/frontend" && pwd)"
 
 if [ -e "$FRONTEND_DIR/pubspec_overrides.yaml" ]; then
-  echo "pubspec_overrides.yaml already exists, skipping stub"
   exit 0
 fi
 

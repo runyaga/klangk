@@ -58,6 +58,7 @@ bark/
   scripts/
     import_dart_plugins.py     # Codegen: generates $BARK_PLUGINS_DIR/.dart/ package with plugin deps
     update_plugins.py          # Fetches plugins from git repos, writes plugins.lock
+    stub_dart_plugins.sh       # Creates minimal bark_plugins stub for first-time checkout / CI
     flutterbuildweb.sh         # Flutter build: plugin auto-fetch, codegen, flutter build web
     dockerbuild.sh             # Docker build: plugin staging, container cleanup, image build (named build contexts)
     nginx.sh                   # nginx reverse proxy: config generation and exec
@@ -418,8 +419,8 @@ Hooks are installed automatically when entering the devenv shell.
 GitHub Actions run automatically on PRs and pushes to main (all also support `workflow_dispatch` for manual triggering):
 
 - **Backend tests** (`.github/workflows/backend-tests.yml`) — triggered by changes to `src/backend/` or `pytest.ini`
-- **Frontend tests** (`.github/workflows/frontend-tests.yml`) — triggered by changes to `src/frontend/lib/`, `src/frontend/test/`, or `src/frontend/pubspec.yaml`
-- **E2E tests** (`.github/workflows/e2e-tests.yml`) — runs hourly via schedule (skips if no commits in the last hour) and via manual `workflow_dispatch`. Requires `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` secrets. Uses Nix/devenv to build and run the full stack, then runs Playwright against the running server. Uploads test results as artifacts on failure.
+- **Frontend tests** (`.github/workflows/frontend-tests.yml`) — triggered by changes to `src/frontend/lib/`, `src/frontend/test/`, or `src/frontend/pubspec.yaml`. Uses `stub_dart_plugins.sh` to create a minimal `bark_plugins` package so `flutter pub get` works without the full plugin codegen.
+- **E2E tests** (`.github/workflows/e2e-tests.yml`) — runs hourly via schedule (skips if no commits in the last hour) and via manual `workflow_dispatch`. Requires `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` secrets. Uses Nix/devenv to build and run the full stack, then runs Playwright against the running server. Uploads test results as artifacts on failure. Nix store cached via FlakeHub (OIDC) and `magic-nix-cache-action`.
 
 ### Plugin System
 
@@ -439,7 +440,8 @@ A plugin needs at minimum an `extension.ts`. The `dart/` subdirectory is only ne
 - `scripts/import_dart_plugins.py` scans `$BARK_PLUGINS_DIR/*/dart/` for plugin Dart packages and generates `$BARK_PLUGINS_DIR/.dart/` (the `bark_plugins` package with path deps and `createAllPlugins()`)
 - `dockerbuild` stages `extension.ts` and `tools/` files from all plugins into `$BARK_PLUGINS_DIR/.docker/` and passes them via named Docker build contexts (`plugin-extensions`, `plugin-tools`)
 - `flutterbuildweb` runs the codegen before compiling
-- Both are triggered automatically by `devenv up` via `execIfModified`
+- `stub_dart_plugins.sh` creates a minimal stub at `$BARK_PLUGINS_DIR/.dart/` so `flutter pub get` works before plugins are fetched (runs automatically at devenv shell startup via `enterShell`; skips if `pubspec_overrides.yaml` already exists)
+- Both build tasks are triggered automatically by `devenv up` via `execIfModified`
 
 **Adding a plugin:**
 
@@ -570,5 +572,5 @@ nginx reverse proxy (port 8995)
 - **Backend busy loop during Pi/WS comms**: The backend occasionally goes into a busy loop during Pi RPC or WebSocket communication. Investigate and fix the root cause.
 - **E2E: eliminate .env.e2e**: Instead of writing a special `.env.e2e` file, pass necessary env vars as exports to the devenv shell command, e.g. `devenv shell -- bash -c 'export FOO=bar; test-e2e'`. Simplifies setup/teardown and avoids file-based side effects.
 - **E2E: use UI instead of API for setup/teardown**: E2E tests currently use the API directly to upload files, delete workspaces, etc. These should use the UI instead to better test real user flows and catch UI-level regressions.
-- **E2E: reduce CI run time**: The E2E CI workflow spends significant time bootstrapping Nix/devenv. Investigate caching the bootstrap results, using a GitHub-supplied Nix runner image, or pre-built devenv shell caching to reduce wall-clock time.
+- **E2E: reduce CI run time**: Nix store is now cached via FlakeHub and magic-nix-cache-action. Remaining bottleneck is Docker image + Flutter web build (~6 min) which runs fresh each time via `execIfModified` (no stored hashes on CI). Investigate caching the `execIfModified` state or the build artifacts themselves.
 - **E2E: redirect backend logs to file**: During E2E test runs, have the backend send logging output to a file instead of stdout to reduce noise in test output and make failures easier to read.
