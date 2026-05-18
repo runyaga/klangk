@@ -569,46 +569,17 @@ test.describe("Bark E2E", () => {
   test("agent creates pong game with hosted URL", async ({ page, request }) => {
     test.setTimeout(600_000); // LLM interaction can be slow, especially on CI
 
-    const token = await getAuthToken(request);
-    const headers = { Authorization: `Bearer ${token}` };
-
-    // Clean up any leftover workspace with the same name
-    const existingResp = await request.get(`${API_BASE}/workspaces`, {
-      headers,
-    });
-    if (existingResp.ok()) {
-      for (const ws of await existingResp.json()) {
-        if (ws.name === "e2e-pong-test") {
-          await request.delete(`${API_BASE}/workspaces/${ws.id}`, { headers });
-        }
-      }
-    }
-
-    // Create a fresh workspace for this test
-    const createResp = await request.post(
-      `${API_BASE}/workspaces?name=e2e-pong-test`,
-      { headers },
+    const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
+      page,
+      request,
+      "e2e-pong-test",
     );
-    expect(createResp.ok()).toBeTruthy();
-    const workspace = await createResp.json();
-    const workspaceId = workspace.id;
 
     try {
-      // Navigate to the new workspace
-      await login(page);
-      await page.goto(`#/workspace/${workspaceId}`);
-      await page.waitForTimeout(10000); // wait for container to start
-
       // Click chat input and type the prompt
       const { height } = vp(page);
       const f = fv(page);
-      const chatInputX = 240;
-      const chatInputY = height - 30;
-
-      await f.click({
-        position: { x: chatInputX, y: chatInputY },
-        force: true,
-      });
+      await f.click({ position: { x: 240, y: height - 30 }, force: true });
       await page.waitForTimeout(500);
       await page.keyboard.type(
         "write me a javascript application that creates a pong game and serve it through a node web server",
@@ -673,10 +644,7 @@ test.describe("Bark E2E", () => {
       // container itself is alive. The URL format is verified by
       // the regex match above.
     } finally {
-      // Clean up: delete the test workspace
-      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
-        headers,
-      });
+      await cleanup();
     }
   });
 
