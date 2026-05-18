@@ -52,8 +52,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: DeterminateSystems/determinate-nix-action@main
-        with:
-          flakehub: true
 
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
