@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - "src/dockerimage/Dockerfile.base"
+      - ".github/workflows/docker-base.yml"
 
 jobs:
   build:
