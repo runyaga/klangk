@@ -102,7 +102,7 @@ jobs:
               echo "Server ready (attempt $i)"
               exit 0
             fi
-            echo "Waiting for server... (attempt $i, status=$code)"
+            echo "Waiting for server... (attempt $i, status=$code), last line from devenv-up.log was"
             echo -e "\033[32m$(tail -1 /tmp/devenv-up.log 2>/dev/null)\033[0m"
             sleep 2
           done

@@ -29,7 +29,7 @@ $BARK_DATA_DIR/workspaces/<user-id>/data/<workspace-id>/
 
 - **Backend** (`src/backend/`): Python/FastAPI — single-port server for API, WebSocket, and frontend static files
 - **Frontend** (`src/frontend/`): Flutter Web — chat with markdown rendering, syntax-highlighted code blocks, file viewer, debug panel
-- **Docker** (`src/dockerimage/`): Custom Dockerfile for Pi agent containers with Python3, Node.js, Dart, Flutter, Rust, build-essential, PostgreSQL, SQLite, vim, emacs, network tools, Pi extensions
+- **Docker** (`src/dockerimage/`): Custom Dockerfile for Pi agent containers with Python3, Node.js, Rust, build-essential, PostgreSQL, SQLite, vim, emacs, network tools, Pi extensions
 
 ### Key Technologies
 
@@ -64,7 +64,7 @@ bark/
     nginx.sh                   # nginx reverse proxy: config generation and exec
     synctoarctor.sh            # Deploy script for arctor.repoze.org
   src/dockerimage/
-    Dockerfile                  # Pi agent image: node:22-slim + Pi + Python3 + Dart + Flutter + Rust + build-essential + PostgreSQL + SQLite + vim + emacs + net tools
+    Dockerfile                  # Pi agent image: node:22-slim + Pi + Python3 + Rust + build-essential + PostgreSQL + SQLite + vim + emacs + net tools
     entrypoint.sh               # Sets up Pi config (FIFO for models.json, system prompt), starts Pi in RPC mode
     system-prompt.md            # Static system prompt for Pi (copied into image)
     builtin-extensions/         # Built-in Pi extensions (port-map.ts, etc.) — not from plugins
@@ -573,4 +573,5 @@ nginx reverse proxy (port 8995)
 - **E2E: eliminate .env.e2e**: Instead of writing a special `.env.e2e` file, pass necessary env vars as exports to the devenv shell command, e.g. `devenv shell -- bash -c 'export FOO=bar; test-e2e'`. Simplifies setup/teardown and avoids file-based side effects.
 - **E2E: use UI instead of API for setup/teardown**: E2E tests currently use the API directly to upload files, delete workspaces, etc. These should use the UI instead to better test real user flows and catch UI-level regressions.
 - **E2E: reduce CI run time**: Nix store is now cached via FlakeHub and magic-nix-cache-action. Remaining bottleneck is Docker image + Flutter web build (~6 min) which runs fresh each time via `execIfModified` (no stored hashes on CI). Investigate caching the `execIfModified` state or the build artifacts themselves.
+- **E2E: cache Docker image build in CI**: The Docker image is rebuilt from scratch on every CI run. Options: (A) Push to GHCR (`ghcr.io/<repo>/bark-pi:<hash>`) keyed on a hash of Dockerfile + entrypoint + system-prompt + builtin-extensions + plugins — pull if exists, build and push if not. Requires `packages: write` permission but handles large images well. (B) Use GitHub Actions cache with `docker save`/`docker load` — simpler, no registry auth, but the 10 GB total cache limit is tight for a ~2-3 GB compressed tar. (C) Modify `dockerbuild.sh` to check a registry when `BARK_DOCKER_REGISTRY` is set — works for CI and anyone with registry access but couples the build script to a registry. Cache key should hash: `src/dockerimage/Dockerfile`, `src/dockerimage/entrypoint.sh`, `src/dockerimage/*.md`, `src/dockerimage/builtin-extensions/*.ts`, and `plugins/` contents.
 - **E2E: redirect backend logs to file**: During E2E test runs, have the backend send logging output to a file instead of stdout to reduce noise in test output and make failures easier to read.

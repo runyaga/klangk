@@ -24,24 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Node/npm already present from base image
 RUN npm install -g @mariozechner/pi-coding-agent
 
-# Dart SDK
-RUN curl -fsSL https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/dartsdk-linux-x64-release.zip -o /tmp/dart.zip \
-    && unzip -q /tmp/dart.zip -d /opt \
-    && rm /tmp/dart.zip
-ENV PATH="/opt/dart-sdk/bin:$PATH"
-
-# Flutter SDK
-RUN git config --global --add safe.directory /opt/flutter \
-    && curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.27.4-stable.tar.xz -o /tmp/flutter.tar.xz \
-    && tar xf /tmp/flutter.tar.xz -C /opt \
-    && rm /tmp/flutter.tar.xz \
-    && /opt/flutter/bin/flutter precache --web
-ENV PATH="/opt/flutter/bin:$PATH"
-
-# Rust via rustup (install to /opt/rust so it's available to any user)
+# Rust via rustup — minimal profile (no docs, clippy, or rustfmt)
 ENV RUSTUP_HOME=/opt/rust/rustup
 ENV CARGO_HOME=/opt/rust/cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && rm -rf /opt/rust/rustup/downloads /opt/rust/rustup/tmp
 ENV PATH="/opt/rust/cargo/bin:$PATH"
 
 # Create bark user with host UID/GID (passed as build args)
