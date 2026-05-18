@@ -92,7 +92,7 @@ jobs:
           devenv up --no-tui > /tmp/devenv-up.log 2>&1 &
           DEVENV_PID=$!
           echo "devenv up started as PID $DEVENV_PID"
-          for i in $(seq 1 120); do
+          for i in $(seq 1 300); do
             if ! kill -0 $DEVENV_PID 2>/dev/null; then
               echo "devenv up exited unexpectedly, logs:"
               cat /tmp/devenv-up.log
@@ -108,7 +108,7 @@ jobs:
             echo -e "\033[32m$(tail -1 /tmp/devenv-up.log 2>/dev/null)\033[0m"
             sleep 2
           done
-          echo "Server failed to start after 4 minutes, logs:"
+          echo "Server failed to start after 10 minutes, logs:"
           cat /tmp/devenv-up.log
           exit 1
 
