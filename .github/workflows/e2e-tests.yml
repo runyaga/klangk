@@ -80,9 +80,12 @@ jobs:
           BARK_TEST_MODE=1
           EOF
 
-      - name: Install devenv
+      - name: Bootstrap
         run: |
           ./bootstrap --unattended
+
+      - name: Prepare bark devenv
+        run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
           devenv shell --true
 
