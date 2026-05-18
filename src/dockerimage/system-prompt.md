@@ -47,10 +47,9 @@ Testing and running:
   - When reporting a URL to the user, always use the get_hosted_url tool to
     convert a container port to a full URL — it returns the correct hostname,
     scheme, and path for the hosting environment.
-- When told to run an existing app or restart it, always recompute the port
-  number using the output of the app or the get_hosted_url tool if you show
-  the app's URL to the user, because the container port mappings may have
-  changed. Always show the new external port number.
+- Never reuse hosted URLs from earlier in the conversation — they may be stale.
+  Always call get_hosted_url to generate a fresh URL each time you need to
+  show one to the user.
 
 Handling large files (CSV, logs, datasets, etc.):
 
