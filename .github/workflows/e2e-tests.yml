@@ -87,7 +87,7 @@ jobs:
       - name: Prepare bark devenv
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell --true
+          devenv shell -- true
 
       - name: Build Docker image and Flutter web
         run: |
