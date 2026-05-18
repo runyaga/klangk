@@ -13,7 +13,8 @@ if [ -e "$FRONTEND_DIR/pubspec_overrides.yaml" ]; then
   exit 0
 fi
 
-STUB_DIR="$FRONTEND_DIR/.dart_plugins_stub"
+PLUGINS_DIR="${BARK_PLUGINS_DIR:-$HOME/.bark/plugins}"
+STUB_DIR="$PLUGINS_DIR/.dart"
 mkdir -p "$STUB_DIR/lib"
 
 cat > "$STUB_DIR/pubspec.yaml" << 'EOF'
@@ -37,10 +38,13 @@ import 'package:bark_plugin_api/bark_plugin_api.dart';
 List<ToolPlugin> createAllPlugins() => [];
 EOF
 
-cat > "$FRONTEND_DIR/pubspec_overrides.yaml" << EOF
+# Write overrides file and symlink into frontend
+OVERRIDES="$STUB_DIR/pubspec_overrides.yaml"
+cat > "$OVERRIDES" << EOF
 dependency_overrides:
   bark_plugins:
     path: $STUB_DIR
 EOF
+ln -sf "$OVERRIDES" "$FRONTEND_DIR/pubspec_overrides.yaml"
 
 echo "Created stub bark_plugins at $STUB_DIR"
