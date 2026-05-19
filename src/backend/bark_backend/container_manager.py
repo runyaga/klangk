@@ -56,8 +56,16 @@ _cleanup_task: asyncio.Task | None = None
 # its own BARK_DATA_DIR/bark.db. If multiple processes ever shared a DB,
 # this would need a database-level lock instead.
 _port_lock: asyncio.Lock = asyncio.Lock()
-# Signals the cleanup loop to wake up early when a short timeout is set
-_cleanup_wake: asyncio.Event = asyncio.Event()
+# Signals the cleanup loop to wake up early when a short timeout is set.
+# Created lazily to avoid binding to the wrong event loop at import time.
+_cleanup_wake: asyncio.Event | None = None
+
+
+def _get_cleanup_wake() -> asyncio.Event:
+    global _cleanup_wake
+    if _cleanup_wake is None:
+        _cleanup_wake = asyncio.Event()
+    return _cleanup_wake
 
 
 async def allocate_ports(workspace_id: str, count: int) -> list[int]:
@@ -253,7 +261,7 @@ def set_workspace_idle_timeout(workspace_id: str, seconds: int) -> None:
     _workspace_idle_timeouts[workspace_id] = seconds
     # Wake the cleanup loop so it picks up the new short timeout immediately
     # instead of waiting for its current (potentially long) sleep to finish.
-    _cleanup_wake.set()
+    _get_cleanup_wake().set()
 
 
 def get_workspace_idle_timeout(workspace_id: str) -> int:
@@ -282,14 +290,15 @@ async def _cleanup_idle_containers() -> None:
         if _workspace_idle_timeouts:
             min_timeout = min(_workspace_idle_timeouts.values())
             interval = max(2, min_timeout // 2)
+            # Use Event-based wait so set_workspace_idle_timeout can wake us
+            wake = _get_cleanup_wake()
+            wake.clear()
+            try:
+                await asyncio.wait_for(wake.wait(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
         else:
-            interval = CHECK_INTERVAL_SECONDS
-        # Wait for the interval OR until woken early by a new short timeout
-        _cleanup_wake.clear()
-        try:
-            await asyncio.wait_for(_cleanup_wake.wait(), timeout=interval)
-        except asyncio.TimeoutError:
-            pass
+            await asyncio.sleep(CHECK_INTERVAL_SECONDS)
         now = time.time()
         to_stop = []
         for cid, info in list(_containers.items()):

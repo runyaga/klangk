@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from bark_backend.pi_rpc_client import PiRpcClient
 
 
-def _mock_proc(stdout_data=b"", returncode=None):
+def _mock_proc(stdout_data=b"", returncode=None, stderr_data=b""):
     """Create a mock asyncio subprocess."""
     proc = MagicMock()
     proc.returncode = returncode
@@ -29,6 +29,10 @@ def _mock_proc(stdout_data=b"", returncode=None):
     stdout.read = _read
     stdout.at_eof = MagicMock(return_value=False)
     proc.stdout = stdout
+
+    stderr = MagicMock()
+    stderr.read = MagicMock(return_value=stderr_data)
+    proc.stderr = stderr
 
     stdin = MagicMock()
     stdin.write = MagicMock()
@@ -265,6 +269,37 @@ class TestReadLoop:
         await client._read_loop()
 
         # Should still get sentinel
+        assert await client._event_queue.get() is None
+
+    async def test_logs_stderr_on_exit(self):
+        client = PiRpcClient("cid")
+        client._proc = _mock_proc(stderr_data=b"some error output")
+        client._running = True
+
+        await client._read_loop()
+        assert await client._event_queue.get() is None
+
+    async def test_logs_stderr_awaitable(self):
+        """When stderr.read() returns a coroutine, it should be awaited."""
+        client = PiRpcClient("cid")
+        client._proc = _mock_proc()
+        client._running = True
+
+        async def async_stderr_read():
+            return b"async error"
+
+        client._proc.stderr.read = MagicMock(return_value=async_stderr_read())
+
+        await client._read_loop()
+        assert await client._event_queue.get() is None
+
+    async def test_stderr_read_exception_handled(self):
+        client = PiRpcClient("cid")
+        client._proc = _mock_proc()
+        client._running = True
+        client._proc.stderr.read = MagicMock(side_effect=OSError("stderr broken"))
+
+        await client._read_loop()
         assert await client._event_queue.get() is None
 
 

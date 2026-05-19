@@ -665,6 +665,85 @@ class TestCleanupIdleContainers:
         # Container should still be stopped despite callback error
         mock_c.stop.assert_awaited()
 
+    async def test_per_workspace_timeout_uses_event_wait(self):
+        """When per-workspace timeouts exist, cleanup uses Event-based wait."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.get = AsyncMock(return_value=mock_c)
+
+        container_manager._containers["cid"] = {
+            "last_activity": time.time() - 100,
+            "workspace_id": "ws-fast",
+        }
+        container_manager._workspace_idle_timeouts["ws-fast"] = 5
+
+        try:
+            with patch.object(
+                container_manager, "get_docker", return_value=mock_docker
+            ):
+                # The Event-based wait will timeout after max(2, 5//2)=2s,
+                # then check containers. We cancel after one iteration.
+                task = asyncio.create_task(container_manager._cleanup_idle_containers())
+                await asyncio.sleep(0.1)  # Let it start
+                # Wake it immediately via the event
+                container_manager._get_cleanup_wake().set()
+                await asyncio.sleep(0.1)  # Let it process
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            mock_c.stop.assert_awaited()
+        finally:
+            container_manager._workspace_idle_timeouts.clear()
+            container_manager._containers.clear()
+
+    async def test_per_workspace_timeout_event_timeout(self):
+        """Event-based wait times out when no wake signal is sent."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.get = AsyncMock(return_value=mock_c)
+
+        container_manager._containers["cid"] = {
+            "last_activity": time.time() - 100,
+            "workspace_id": "ws-fast",
+        }
+        container_manager._workspace_idle_timeouts["ws-fast"] = 4
+
+        try:
+            with patch.object(
+                container_manager, "get_docker", return_value=mock_docker
+            ):
+                # Patch wait_for to immediately raise TimeoutError (simulates
+                # the event not being set within the interval)
+                async def fast_timeout(coro, timeout):
+                    # Cancel the coroutine and raise TimeoutError
+                    if hasattr(coro, "close"):
+                        coro.close()
+                    raise asyncio.TimeoutError
+
+                call_count = 0
+
+                async def patched_wait_for(coro, timeout):
+                    nonlocal call_count
+                    call_count += 1
+                    if call_count == 1:
+                        return await fast_timeout(coro, timeout)
+                    # Second call: cancel the loop
+                    if hasattr(coro, "close"):
+                        coro.close()
+                    raise asyncio.CancelledError
+
+                with patch("asyncio.wait_for", side_effect=patched_wait_for):
+                    try:
+                        await container_manager._cleanup_idle_containers()
+                    except asyncio.CancelledError:
+                        pass
+            mock_c.stop.assert_awaited()
+        finally:
+            container_manager._workspace_idle_timeouts.clear()
+            container_manager._containers.clear()
+
 
 class TestStartCleanupLoop:
     def setup_method(self):

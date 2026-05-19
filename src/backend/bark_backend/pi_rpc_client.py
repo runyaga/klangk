@@ -73,16 +73,18 @@ class PiRpcClient:
                 )
                 if self._proc.stderr:
                     try:
-                        stderr = await asyncio.wait_for(
-                            self._proc.stderr.read(), timeout=2
-                        )
-                        if stderr:
+                        stderr_data = self._proc.stderr.read()
+                        if asyncio.iscoroutine(stderr_data) or asyncio.isfuture(
+                            stderr_data
+                        ):
+                            stderr_data = await asyncio.wait_for(stderr_data, timeout=2)
+                        if stderr_data:
                             logger.warning(
                                 "Pi stderr for %s: %s",
                                 self.container_id[:12],
-                                stderr.decode("utf-8", errors="replace")[:500],
+                                stderr_data.decode("utf-8", errors="replace")[:500],
                             )
-                    except (asyncio.TimeoutError, OSError):
+                    except (asyncio.TimeoutError, OSError, TypeError):
                         pass
             await self._event_queue.put(None)
 
