@@ -79,10 +79,10 @@ bark/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
     bark_backend/
       main.py                   # FastAPI app, lifespan, default user seeding, static file serving
-      api.py                    # API route handlers (auth, workspaces, files, messages) via APIRouter
-      auth.py                   # Register/login/logout, JWT, bcrypt password hashing
-      user_store.py             # SQLite: users, workspaces, token blocklist, message history
-      workspace_manager.py      # Workspace CRUD + host directory management
+      api.py                    # API route handlers (auth, workspaces, files, messages, admin) via APIRouter
+      auth.py                   # Register/login/logout, JWT with roles, bcrypt, require_role() dependency
+      user_store.py             # SQLite: users, workspaces, roles, user_roles, token blocklist, message history
+      workspace_manager.py      # Workspace CRUD + host directory management + user data archival
       container_manager.py      # Docker lifecycle, port allocation, idle timeout, session resume env, shutdown cleanup
       pi_rpc_client.py          # docker attach subprocess for Pi stdin/stdout JSON-RPC (chunked reads for large events)
       agui_translator.py        # Pi RPC events → AG-UI events mapping, file-change detection
@@ -106,8 +106,10 @@ bark/
       (ToolPlugin and ToolPluginRegistry are in the bark_plugin_api package)
       (Plugin registration is in the bark_plugins package at $BARK_PLUGINS_DIR/.dart/)
       auth/
-        auth_service.dart       # JWT storage, login/register/logout, async init
+        auth_service.dart       # JWT storage, login/register/logout, async init, roles/isAdmin from JWT payload
         login_page.dart         # Login/register form
+      admin/
+        admin_users_page.dart   # Admin user management: list, add, edit, delete users, toggle roles
       workspace/
         workspace_list_page.dart  # Workspace CRUD UI
         workspace_page.dart     # IDE view: WebSocket, container lifecycle, ui_ready handshake
@@ -138,8 +140,11 @@ bark/
 ### Authentication
 
 - Username/password with bcrypt hashing
-- JWT tokens (24hr expiry, secret configurable via BARK_JWT_SECRET) with token blocklist for logout
-- Default user auto-seeded on startup (configurable via BARK_DEFAULT_USER/PASSWORD in .env)
+- JWT tokens (24hr expiry, secret configurable via BARK_JWT_SECRET) with token blocklist for logout, roles claim in JWT payload
+- Role-based access control: `roles` and `user_roles` tables, `require_role()` FastAPI dependency for endpoint protection
+- Default user auto-seeded on startup with admin role (configurable via BARK_DEFAULT_USER/PASSWORD in .env)
+- Admin user management: list/add/edit/delete users, toggle roles, user data archived to tar.xz on deletion, self-deletion prevented
+- Registration restricted to admin users (except in test mode)
 - Session persists across page reloads (async token loading before routing)
 
 ### Workspaces
@@ -577,7 +582,7 @@ arctor nginx (443)
 - **Syntax highlighting language detection**: Improve code block language detection for unlabeled blocks.
 - **Terminal focus requires precise click target**: In Firefox, the terminal only receives keyboard focus when clicking very specific areas of the terminal pane. Clicking elsewhere in the pane does nothing — the cursor doesn't appear and typing has no effect. The entire terminal pane should grant focus on click.
 - **Strip env vars from terminal session**: Currently `docker exec -e VAR=` blanks sensitive env vars (API keys, BARK_RESUME_SESSION) but they still appear in `env` output as empty strings. Investigate using `env -u` inside the exec command or wrapping the shell invocation to fully unset them rather than just blanking.
-- **Admin user management UI**: Add a UI accessible only to admin-role users for managing users and roles. Should allow admins to: (1) list all users, (2) add new users, (3) delete users (with confirmation — cascades to workspaces, containers, roles), (4) view and modify user role assignments. Could be a separate page (e.g., `/admin/users`) or a panel within the existing UI, guarded by the admin role check on both the API and Flutter routing sides.
+- **Admin user management UI**: ~~Done~~ — `/admin/users` page with list/add/edit/delete users, role toggling, self-protection (can't delete yourself). API endpoints guarded by `require_role("admin")`. User data archived to tar.xz before deletion.
 - **Same-workspace multi-window**: Opening the same workspace in two browser windows simultaneously has undefined behavior — both WebSocket connections share one Pi container/session, and prompts from either window could collide or interleave unpredictably. Consider either locking a workspace to one connection at a time, or multiplexing both windows onto the same event stream.
 - **Workspace disk quotas**: Limit how much disk space each workspace can consume. Options: use filesystem quotas (XFS/ext4 project quotas on the host), overlay2 with size limits, or a loopback-mounted filesystem per workspace with a fixed size. Should also surface current disk usage in the UI (file viewer header or workspace list) so users can see how much space they've used.
 - **Retain shell history across container restarts**: Bash history is lost when a container is stopped because `/home/bark` is a tmpfs. Bind-mount a per-workspace history file (e.g., `$BARK_DATA_DIR/workspaces/<user>/<ws>/.bash_history`) into the container so terminal history persists.
@@ -596,4 +601,5 @@ arctor nginx (443)
 - **E2E: end-to-end hosted app test**: Add a test that asks the LLM to create an app (e.g., a pong game) and serve it, then verifies the hosted URL returns a 200 response. Currently the hosted URL test only checks that `get_hosted_url` returns a URL — it doesn't verify a real server is running behind it. This test would exercise the full flow: LLM writes code → starts server on a mapped port → `get_hosted_url` returns the URL → HTTP GET on the URL succeeds. May need a longer timeout and a simpler app prompt to be reliable.
 - **devenv MCP memory leak**: The `devenv mcp` process grows to ~18GB virtual memory over time. Investigate root cause — may be in devenv itself or in the MCP server implementation.
 - **Cache-busting for Flutter web assets**: Implement URL-path versioning so browsers cache aggressively without serving stale assets. After `flutter build web`, a post-build script reorganizes assets into a directory named by git tag or commit hash (e.g., `/v0.1.0/` or `/a177df25/`), patches `flutter_bootstrap.js` to set `entrypointBaseUrl`, `assetBase`, and `canvasKitBaseUrl` to the versioned directory, and updates `index.html` references. Nginx serves three tiers: `index.html` with `no-cache, no-store, must-revalidate` (never cached — always discovers latest versioned paths); versioned assets (`/v1.2.3/...` or `/[sha]/...`) with `max-age=31536000, immutable` (cached 1 year); root PWA files (favicon, manifest, icons) with `max-age=86400` (cached 1 day). Service worker is disabled (`--pwa-strategy=none`) — caching is handled entirely via URL hashing. Each release produces a new directory path, so old cached assets don't conflict. Or investigate the PWA service worker cache busting approach as an alternative.
+- **Fix Cleanup Runs GH action**: The `cleanup-runs.yml` workflow doesn't actually clean up cancelled old runs right now. Investigate and fix.
 - **E2E: cache Docker image build in CI**: The Docker image is rebuilt from scratch on every CI run. Options: (A) Push to GHCR (`ghcr.io/<repo>/bark-pi:<hash>`) keyed on a hash of Dockerfile + entrypoint + system-prompt + builtin-extensions + plugins — pull if exists, build and push if not. Requires `packages: write` permission but handles large images well. (B) Use GitHub Actions cache with `docker save`/`docker load` — simpler, no registry auth, but the 10 GB total cache limit is tight for a ~2-3 GB compressed tar. (C) Modify `dockerbuild.sh` to check a registry when `BARK_DOCKER_REGISTRY` is set — works for CI and anyone with registry access but couples the build script to a registry. Cache key should hash: `src/dockerimage/Dockerfile`, `src/dockerimage/entrypoint.sh`, `src/dockerimage/*.md`, `src/dockerimage/builtin-extensions/*.ts`, and `plugins/` contents.

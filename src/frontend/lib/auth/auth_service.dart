@@ -22,26 +22,27 @@ class AuthService extends ChangeNotifier {
   bool get loading => _loading;
   bool get initialized => _initialized;
 
-  /// Decode the JWT payload to extract roles.
-  List<String> get roles {
-    if (_token == null) return [];
+  /// Decode the JWT payload.
+  Map<String, dynamic>? get _payload {
+    if (_token == null) return null;
     try {
       final parts = _token!.split('.');
-      if (parts.length != 3) return [];
+      if (parts.length != 3) return null;
       final payload = parts[1];
-      // Add padding if needed
       final padded = payload.padRight(
         payload.length + (4 - payload.length % 4) % 4,
         '=',
       );
       final decoded = utf8.decode(base64Url.decode(padded));
-      final data = jsonDecode(decoded) as Map<String, dynamic>;
-      return List<String>.from(data['roles'] ?? []);
+      return jsonDecode(decoded) as Map<String, dynamic>;
     } catch (_) {
-      return [];
+      return null;
     }
   }
 
+  String? get userId => _payload?['sub'] as String?;
+  List<String> get roles =>
+      List<String>.from(_payload?['roles'] as List? ?? []);
   bool get isAdmin => roles.contains('admin');
 
   AuthService() {

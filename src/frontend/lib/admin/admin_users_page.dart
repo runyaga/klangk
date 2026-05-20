@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_service.dart';
+import '../widgets/bark_logo.dart';
 
 class AdminUsersPage extends StatefulWidget {
   const AdminUsersPage({super.key});
@@ -150,11 +152,34 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('User Management'),
+        title: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => context.go('/'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BarkLogo(height: 36),
+                SizedBox(width: 12),
+                Text('User Management', style: TextStyle(fontSize: 16)),
+              ],
+            ),
+          ),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => context.go('/workspaces'),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Color(0xFF1A237E)),
+            tooltip: 'Logout',
+            onPressed: () async {
+              await context.read<AuthService>().logout();
+              if (context.mounted) context.go('/login');
+            },
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addUser,
@@ -173,6 +198,8 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                         final user = _users[i];
                         final roles = List<String>.from(user['roles'] ?? []);
                         final isAdmin = roles.contains('admin');
+                        final isSelf =
+                            user['id'] == context.read<AuthService>().userId;
                         return ListTile(
                           leading: Icon(
                             isAdmin ? Icons.admin_panel_settings : Icons.person,
@@ -195,33 +222,35 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
                                 tooltip: 'Edit user',
                                 onPressed: () => _editUser(user),
                               ),
-                              // Toggle admin role
-                              IconButton(
-                                icon: Icon(
-                                  isAdmin
-                                      ? Icons.shield
-                                      : Icons.shield_outlined,
-                                  color: isAdmin ? Colors.amber : Colors.grey,
+                              if (!isSelf) ...[
+                                // Toggle admin role
+                                IconButton(
+                                  icon: Icon(
+                                    isAdmin
+                                        ? Icons.shield
+                                        : Icons.shield_outlined,
+                                    color: isAdmin ? Colors.amber : Colors.grey,
+                                  ),
+                                  tooltip: isAdmin
+                                      ? 'Remove admin role'
+                                      : 'Grant admin role',
+                                  onPressed: () => _toggleRole(
+                                    user['id'],
+                                    'admin',
+                                    isAdmin,
+                                  ),
                                 ),
-                                tooltip: isAdmin
-                                    ? 'Remove admin role'
-                                    : 'Grant admin role',
-                                onPressed: () => _toggleRole(
-                                  user['id'],
-                                  'admin',
-                                  isAdmin,
+                                // Delete user
+                                IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
+                                  tooltip: 'Delete user',
+                                  onPressed: () => _deleteUser(
+                                    user['id'],
+                                    user['username'],
+                                  ),
                                 ),
-                              ),
-                              // Delete user
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete user',
-                                onPressed: () => _deleteUser(
-                                  user['id'],
-                                  user['username'],
-                                ),
-                              ),
+                              ],
                             ],
                           ),
                         );

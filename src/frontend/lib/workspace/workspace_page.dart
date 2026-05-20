@@ -222,15 +222,21 @@ class _WorkspacePageState extends State<WorkspacePage> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF1A237E)),
           onPressed: () => context.go('/workspaces'),
         ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const BarkLogo(height: 36),
-            if (_workspaceName.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              Text(_workspaceName, style: const TextStyle(fontSize: 16)),
-            ],
-          ],
+        title: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => context.go('/'),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const BarkLogo(height: 36),
+                if (_workspaceName.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Text(_workspaceName, style: const TextStyle(fontSize: 16)),
+                ],
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(

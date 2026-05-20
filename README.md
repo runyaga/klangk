@@ -42,7 +42,7 @@ EOF
 devenv processes up
 ```
 
-Open [http://localhost:8995](http://localhost:8995) (nginx) and log in with `admin`/`admin`.
+Open [http://localhost:8995](http://localhost:8995) (nginx) and log in with `admin`/`admin`. The default user has the admin role and can manage other users at `/admin/users`.
 
 ### What You Can Do
 
@@ -53,6 +53,7 @@ Open [http://localhost:8995](http://localhost:8995) (nginx) and log in with `adm
 5. **View files** in the file viewer panel, drag-and-drop files or folders to upload, right-click to download, rename, or delete
 6. **Use the terminal** for direct shell access to the container (bash with tab completion and colors)
 7. **Monitor activity** in the debug panel
+8. **Manage users** (admin only) — add, edit, delete users and toggle admin roles
 
 ### Environment Variables
 
@@ -104,8 +105,8 @@ nginx reverse proxy (port 8995)
                  Workspace files on disk
 ```
 
-- **Frontend**: Flutter Web with markdown rendering, syntax-highlighted code blocks, file viewer, container terminal, debug panel
-- **Backend**: nginx reverse proxy + FastAPI serving API, WebSocket, and frontend static files
+- **Frontend**: Flutter Web with markdown rendering, syntax-highlighted code blocks, file viewer, container terminal, debug panel, admin user management
+- **Backend**: nginx reverse proxy + FastAPI serving API, WebSocket, and frontend static files. Role-based access control with JWT roles claim
 - **Agent**: Pi coding agent in RPC mode with Ollama (cloud or self-hosted, configurable model)
 - **Protocol**: [AG-UI](https://docs.ag-ui.com/) for standardized agent-user communication
 

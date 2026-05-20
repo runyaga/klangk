@@ -154,16 +154,22 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            BarkLogo(height: 36),
-            SizedBox(width: 12),
-            Text('Workspaces', style: TextStyle(fontSize: 16)),
-          ],
+        title: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => context.go('/'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                BarkLogo(height: 36),
+                SizedBox(width: 12),
+                Text('Workspaces', style: TextStyle(fontSize: 16)),
+              ],
+            ),
+          ),
         ),
         actions: [
-          if (context.read<AuthService>().isAdmin)
+          if (context.watch<AuthService>().isAdmin)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings,
                   color: Color(0xFF1A237E)),
