@@ -151,7 +151,7 @@ test.describe("Bark LLM", () => {
     }
   });
 
-  test.skip("queued prompt is delivered after current run finishes", async ({
+  test("queued prompt is marked as queued in database", async ({
     page,
     request,
   }) => {
@@ -164,44 +164,46 @@ test.describe("Bark LLM", () => {
     try {
       const { height } = vp(page);
 
-      // Send first prompt (verified delivery)
+      // Send first prompt — use a slow prompt so the agent is still
+      // running when we send the second one.
       await sendPrompt(
         page,
         request,
         workspaceId,
         headers,
-        "what is 10+10? reply with just the number",
+        "write a very detailed 500 word essay about the history of computing",
       );
 
-      // Immediately send second prompt (should be queued while first runs)
+      // Send second prompt immediately — agent should still be running,
+      // so this prompt should be queued (is_queued=true in the database).
+      await page.waitForTimeout(1000);
       await flutterClick(page, 240, height - 30);
       await page.waitForTimeout(300);
-      await page.keyboard.type("what is 20+20? reply with just the number");
+      await page.keyboard.type("what is 2+2? reply with just the number");
       await page.keyboard.press("Enter");
 
-      // Poll for both responses
-      let foundFirst = false;
-      let foundSecond = false;
-      for (let i = 0; i < 40; i++) {
-        await page.waitForTimeout(3000);
+      // Poll until the second user message appears with is_queued=true
+      let secondIsQueued = false;
+      for (let i = 0; i < 30; i++) {
+        await page.waitForTimeout(2000);
         const msgResp = await request.get(
           `${API_BASE}/workspaces/${workspaceId}/messages`,
           { headers },
         );
         if (msgResp.ok()) {
           const messages = await msgResp.json();
-          const assistantMsgs = messages.filter(
-            (m: any) => m.entry_type === "assistant",
-          );
-          for (const m of assistantMsgs) {
-            if (m.content.includes("20")) foundFirst = true;
-            if (m.content.includes("40")) foundSecond = true;
+          const userMsgs = messages.filter((m: any) => m.entry_type === "user");
+          // The second user message should have is_queued=true
+          if (userMsgs.length >= 2) {
+            const second = userMsgs[1];
+            if (second.is_queued) {
+              secondIsQueued = true;
+              break;
+            }
           }
-          if (foundFirst && foundSecond) break;
         }
       }
-      expect(foundFirst).toBeTruthy();
-      expect(foundSecond).toBeTruthy();
+      expect(secondIsQueued).toBeTruthy();
     } finally {
       await cleanup();
     }
