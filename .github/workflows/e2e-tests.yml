@@ -86,10 +86,11 @@ jobs:
           devenv shell -- test-e2e
 
       - name: Upload test results
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-results
+          retention-days: 7
           path: |
             src/e2e_tests/test-results/
-            src/e2e_tests/backend*.log
+            src/e2e_tests/logs/

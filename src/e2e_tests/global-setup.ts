@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { createWriteStream, mkdtempSync } from "fs";
+import { createWriteStream, mkdirSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -74,12 +74,9 @@ async function globalSetup() {
   // Write backend output to a per-run log file so logs aren't overwritten
   // when test-e2e runs each browser sequentially.
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const logPath = join(
-    projectRoot,
-    "src",
-    "e2e_tests",
-    `backend-${timestamp}.log`,
-  );
+  const logDir = join(projectRoot, "src", "e2e_tests", "logs");
+  mkdirSync(logDir, { recursive: true });
+  const logPath = join(logDir, `backend-${timestamp}.log`);
   const logStream = createWriteStream(logPath);
   process.env.BARK_E2E_LOG = logPath;
   backendProcess.stdout?.pipe(logStream);

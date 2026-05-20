@@ -122,17 +122,7 @@
   scripts.test-e2e.exec = ''
     cd $DEVENV_ROOT/src/e2e_tests
     npm install --silent
-    # If --project is passed explicitly, run once with the given args;
-    # otherwise run each browser sequentially to avoid memory pressure.
-    if echo "$@" | grep -q -- '--project'; then
-      exec npx playwright test --reporter=list "$@"
-    fi
-    rc=0
-    for browser in chromium firefox webkit; do
-      echo "==> Running $browser tests"
-      npx playwright test --project=$browser --reporter=list "$@" || rc=1
-    done
-    exit $rc
+    exec npx playwright test --reporter=list "$@"
   '';
 
   scripts.test-frontend.exec = ''

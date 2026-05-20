@@ -1,288 +1,22 @@
-import { test, expect, Page, APIRequestContext } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import AdmZip from "adm-zip";
-import { execSync } from "child_process";
-
-// Each test registers its own user and creates its own workspace. This ensures
-// tests are fully isolated — logout in one test can't kill another test's
-// containers, and parallel execution is safe because no state is shared.
-
-const BACKEND_PORT = process.env.BARK_E2E_PORT || "18997";
-const API_BASE = `http://localhost:${BACKEND_PORT}`;
-const TEST_PASSWORD = "testpass";
-
-/** Register a new user via API (test mode allows unauthenticated registration).
- *  Returns { token, headers }. */
-async function registerUser(
-  request: APIRequestContext,
-  username: string,
-): Promise<{ token: string; headers: Record<string, string> }> {
-  const resp = await request.post(`${API_BASE}/auth/register`, {
-    data: { username, password: TEST_PASSWORD },
-  });
-  if (!resp.ok()) {
-    const body = await resp.text();
-    throw new Error(`Register failed: ${resp.status()} ${body}`);
-  }
-  const data = await resp.json();
-  const token = data.access_token;
-  return { token, headers: { Authorization: `Bearer ${token}` } };
-}
-
-/** Log in via the UI by typing credentials into the Flutter login form. */
-async function loginViaUI(page: Page, username: string, password: string) {
-  await page.goto("/");
-  await waitForFlutter(page);
-
-  const { width, height } = vp(page);
-  const cx = width / 2;
-  const f = fv(page);
-
-  await f.click({ position: { x: cx, y: height * 0.47 }, force: true });
-  await page.waitForTimeout(300);
-  await page.keyboard.type(username);
-
-  await f.click({ position: { x: cx, y: height * 0.55 }, force: true });
-  await page.waitForTimeout(300);
-  await page.keyboard.type(password);
-
-  await f.click({ position: { x: cx, y: height * 0.66 }, force: true });
-  await expect(page).toHaveTitle(/Workspaces/i, { timeout: 15_000 });
-}
-
-// Flutter Web renders to <canvas> inside <flutter-view>, so standard DOM
-// locators (text=, role=, input) don't work. We interact via coordinate
-// clicks on <flutter-view> and verify state via page title and screenshots.
-
-async function waitForFlutter(page: Page) {
-  await page.waitForFunction(
-    () => !document.body.textContent?.includes("Loading, please wait"),
-    { timeout: 90_000 },
-  );
-  await page.waitForTimeout(1000);
-}
-
-function fv(page: Page) {
-  return page.locator("flutter-view");
-}
-
-/** Click a position on the Flutter canvas using raw mouse events.
- *  Locator clicks with force:true sometimes don't fire Flutter's tap
- *  recognizer (especially on small targets like IconButtons). Using
- *  page.mouse.move + click sends proper pointer events that Flutter
- *  handles reliably across all browser engines. */
-async function flutterClick(page: Page, x: number, y: number) {
-  const box = await fv(page).boundingBox();
-  const absX = (box?.x ?? 0) + x;
-  const absY = (box?.y ?? 0) + y;
-  await page.mouse.move(absX, absY);
-  await page.waitForTimeout(200);
-  await page.mouse.click(absX, absY);
-}
-
-/** Poll the files API until a specific file appears. */
-async function waitForFile(
-  request: APIRequestContext,
-  workspaceId: string,
-  path: string,
-  headers: Record<string, string>,
-  timeout = 30_000,
-) {
-  const start = Date.now();
-  while (Date.now() - start < timeout) {
-    try {
-      const resp = await request.get(
-        `${API_BASE}/workspaces/${workspaceId}/files/content?path=${encodeURIComponent(path)}`,
-        { headers },
-      );
-      if (resp.ok()) return;
-    } catch {
-      // Not ready yet
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`File ${path} did not appear within ${timeout}ms`);
-}
-
-function vp(page: Page) {
-  return page.viewportSize() || { width: 1280, height: 720 };
-}
-
-/** Type a prompt into the chat input and verify it was received by the backend.
- *  On slower environments (CI, WebKit), the Flutter chat widget may not be
- *  fully wired up when container_ready fires. This function retries once
- *  if the user message doesn't appear in the backend within 10s. */
-async function sendPrompt(
-  page: Page,
-  request: APIRequestContext,
-  workspaceId: string,
-  headers: Record<string, string>,
-  text: string,
-) {
-  const { height } = vp(page);
-
-  const typeAndSend = async () => {
-    await flutterClick(page, 240, height - 30);
-    await page.waitForTimeout(500);
-    // Select all + delete to clear any leftover text from a failed attempt
-    await page.keyboard.press("Control+a");
-    await page.keyboard.press("Backspace");
-    await page.waitForTimeout(200);
-    await page.keyboard.type(text);
-    await page.waitForTimeout(300);
-    await page.keyboard.press("Enter");
-  };
-
-  const checkReceived = async (): Promise<boolean> => {
-    for (let i = 0; i < 5; i++) {
-      await page.waitForTimeout(1000);
-      const msgResp = await request.get(
-        `${API_BASE}/workspaces/${workspaceId}/messages`,
-        { headers },
-      );
-      if (msgResp.ok()) {
-        const messages = await msgResp.json();
-        if (messages.some((m: any) => m.entry_type === "user")) return true;
-      }
-    }
-    return false;
-  };
-
-  await typeAndSend();
-  if (await checkReceived()) return;
-  // Retry once — the chat widget may not have been ready
-  await typeAndSend();
-  if (await checkReceived()) return;
-  throw new Error(
-    `Prompt "${text}" was not received by the backend after 2 attempts`,
-  );
-}
-
-/** Click the terminal area, wait for it to be interactive, then type a command and press Enter. */
-async function terminalType(
-  page: Page,
-  command: string,
-  termX?: number,
-  termY?: number,
-) {
-  const { width, height } = vp(page);
-  const x = termX ?? (492 + width) / 2;
-  const y = termY ?? height / 2;
-  const f = fv(page);
-
-  await f.click({ position: { x, y }, force: true });
-  await page.waitForTimeout(2000);
-  await page.keyboard.type(command);
-  await page.keyboard.press("Enter");
-}
-
-/** Create a workspace via API. Returns workspace ID and cleanup function. */
-async function createWorkspace(
-  request: APIRequestContext,
-  headers: Record<string, string>,
-  namePrefix: string,
-): Promise<{
-  workspaceId: string;
-  cleanup: () => Promise<void>;
-}> {
-  const name = `${namePrefix}-${Date.now()}`;
-  const createResp = await request.post(
-    `${API_BASE}/workspaces?name=${encodeURIComponent(name)}`,
-    { headers },
-  );
-  if (!createResp.ok()) {
-    const body = await createResp.text();
-    throw new Error(
-      `Workspace creation failed: ${createResp.status()} ${body}`,
-    );
-  }
-  const workspace = await createResp.json();
-  const workspaceId = workspace.id;
-
-  return {
-    workspaceId,
-    cleanup: async () => {
-      await request.delete(`${API_BASE}/workspaces/${workspaceId}`, {
-        headers,
-      });
-    },
-  };
-}
-
-/** Open a workspace in the browser and wait for the container to be ready. */
-async function openWorkspace(
-  page: Page,
-  username: string,
-  workspaceId: string,
-) {
-  // Set up WebSocket listener before login so we catch all WebSocket connections
-  const readyPromise = new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(
-      () => reject(new Error("Container did not become ready within 120s")),
-      120_000,
-    );
-    const listenForReady = (ws: { on: Function }) => {
-      ws.on("framereceived", (frame: { payload: string | Buffer }) => {
-        if (frame.payload.toString().includes("container_ready")) {
-          clearTimeout(timeout);
-          resolve();
-        }
-      });
-    };
-    // Listen on any new WebSocket connections
-    page.on("websocket", listenForReady);
-  });
-
-  await loginViaUI(page, username, TEST_PASSWORD);
-  // Use full URL (not just #fragment) so the page reloads and creates a new
-  // WebSocket — a hash-only change is handled internally by Flutter's router
-  // without opening a new WebSocket, so our listener would never fire.
-  await page.goto(`/#/workspace/${workspaceId}`);
-  await readyPromise;
-
-  // Extra settle time for the UI to render after container ready.
-  // WebKit on CI needs more time for Flutter to fully process the
-  // container_ready event and establish bidirectional chat.
-  await page.waitForTimeout(4000);
-}
-
-/** Convenience: register user, create workspace, open it. */
-async function createAndOpenWorkspace(
-  page: Page,
-  request: APIRequestContext,
-  namePrefix: string,
-): Promise<{
-  workspaceId: string;
-  username: string;
-  token: string;
-  headers: Record<string, string>;
-  cleanup: () => Promise<void>;
-}> {
-  const username = `${namePrefix}-${Date.now()}`;
-  const { token, headers } = await registerUser(request, username);
-  const { workspaceId, cleanup } = await createWorkspace(
-    request,
-    headers,
-    namePrefix,
-  );
-  await openWorkspace(page, username, workspaceId);
-  return { workspaceId, username, token, headers, cleanup };
-}
-
-function dockerContainersForWorkspace(workspaceId: string): string[] {
-  const output = execSync(
-    `docker ps --filter "label=bark.workspace-id=${workspaceId}" --format "{{.ID}}"`,
-    { encoding: "utf-8" },
-  );
-  return output.trim().split("\n").filter(Boolean);
-}
-
-// Layout coordinates at 1280x720:
-// Chat panel: x 0-486 (38%)
-// Right panel: x 492-1280
-// Tab bar (Terminal/Files): y ~0-32 in right panel
-// Chat input: bottom of left panel, ~y 690
-// Debug bar: bottom of right panel
-// Back button: x ~25, y ~28
+import {
+  API_BASE,
+  TEST_PASSWORD,
+  registerUser,
+  loginViaUI,
+  waitForFlutter,
+  fv,
+  flutterClick,
+  waitForFile,
+  vp,
+  sendPrompt,
+  terminalType,
+  createWorkspace,
+  openWorkspace,
+  createAndOpenWorkspace,
+  dockerContainersForWorkspace,
+} from "./helpers";
 
 test.describe("Bark E2E", () => {
   test("login with wrong password fails", async ({ page, request }) => {
@@ -976,248 +710,51 @@ test.describe("Bark E2E", () => {
     }
   });
 
-  test.describe("serial tests", () => {
-    /// serial tests run one after the other after all parallel tests complete
-    test.describe.configure({ mode: "serial" });
+  test("container stops after idle timeout", async ({ page, request }) => {
+    // Check if test mode is enabled
+    const getResp = await request.get(`${API_BASE}/api/test/idle-timeout`);
+    if (!getResp.ok()) {
+      test.skip(true, "BARK_TEST_MODE not enabled");
+      return;
+    }
 
-    test("container stops after idle timeout", async ({ page, request }) => {
-      // Check if test mode is enabled
-      const getResp = await request.get(`${API_BASE}/api/test/idle-timeout`);
-      if (!getResp.ok()) {
-        test.skip(true, "BARK_TEST_MODE not enabled");
-        return;
+    const { workspaceId, username, headers, cleanup } =
+      await createAndOpenWorkspace(page, request, "e2e-idle-test");
+
+    // Set a short idle timeout for this workspace only
+    await request.post(
+      `${API_BASE}/api/test/set-idle-timeout?seconds=5&workspace_id=${workspaceId}`,
+      { headers },
+    );
+
+    try {
+      // Wait for the container to actually stop
+      let stopped = false;
+      for (let i = 0; i < 30; i++) {
+        if (dockerContainersForWorkspace(workspaceId).length === 0) {
+          stopped = true;
+          break;
+        }
+        await page.waitForTimeout(1000);
       }
+      expect(stopped).toBeTruthy();
 
-      const { workspaceId, username, headers, cleanup } =
-        await createAndOpenWorkspace(page, request, "e2e-idle-test");
-
-      // Set a short idle timeout for this workspace only
+      // Reset per-workspace timeout so the restarted container isn't
+      // immediately killed again.
       await request.post(
-        `${API_BASE}/api/test/set-idle-timeout?seconds=5&workspace_id=${workspaceId}`,
+        `${API_BASE}/api/test/set-idle-timeout?seconds=300&workspace_id=${workspaceId}`,
         { headers },
       );
 
-      try {
-        // Wait for the container to actually stop
-        let stopped = false;
-        for (let i = 0; i < 30; i++) {
-          if (dockerContainersForWorkspace(workspaceId).length === 0) {
-            stopped = true;
-            break;
-          }
-          await page.waitForTimeout(1000);
-        }
-        expect(stopped).toBeTruthy();
+      // Re-open the workspace using openWorkspace which handles login,
+      // navigation, WebSocket lifecycle, and container_ready properly.
+      await openWorkspace(page, username, workspaceId);
 
-        // Reset per-workspace timeout so the restarted container isn't
-        // immediately killed again.
-        await request.post(
-          `${API_BASE}/api/test/set-idle-timeout?seconds=300&workspace_id=${workspaceId}`,
-          { headers },
-        );
-
-        // Re-open the workspace using openWorkspace which handles login,
-        // navigation, WebSocket lifecycle, and container_ready properly.
-        await openWorkspace(page, username, workspaceId);
-
-        expect(
-          dockerContainersForWorkspace(workspaceId).length,
-        ).toBeGreaterThan(0);
-      } finally {
-        await cleanup();
-      }
-    });
-
-    test("get_hosted_url returns a hosted URL", async ({ page, request }) => {
-      const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
-        page,
-        request,
-        "e2e-hosted-url",
+      expect(dockerContainersForWorkspace(workspaceId).length).toBeGreaterThan(
+        0,
       );
-
-      try {
-        // Ask the LLM to call get_hosted_url — don't ask it to create
-        // files or start a server. This tests the hosted URL mechanism
-        // without depending on LLM coding ability.
-        await sendPrompt(
-          page,
-          request,
-          workspaceId,
-          headers,
-          "what is the hosted url for a service running on port 8000? use the get_hosted_url tool to find out.",
-        );
-
-        // Poll for a hosted URL in the assistant messages
-        let hostedUrl: string | null = null;
-        for (let i = 0; i < 60; i++) {
-          await page.waitForTimeout(2000);
-          const msgResp = await request.get(
-            `${API_BASE}/workspaces/${workspaceId}/messages`,
-            { headers },
-          );
-          if (msgResp.ok()) {
-            const messages = await msgResp.json();
-            const match = messages.find(
-              (m: any) =>
-                m.entry_type === "assistant" &&
-                /https?:\/\/localhost:\d+\/(bark\/)?hosted\//.test(
-                  m.content ?? "",
-                ),
-            );
-            if (match) {
-              const urlMatch = (match.content as string).match(
-                /https?:\/\/localhost:\d+\/(bark\/)?hosted\/[^\s)]+/,
-              );
-              hostedUrl = urlMatch ? urlMatch[0] : null;
-            }
-          }
-          if (hostedUrl) break;
-        }
-        expect(hostedUrl).toBeTruthy();
-      } finally {
-        await cleanup();
-      }
-    });
-
-    test("agent creates a file with expected content", async ({
-      page,
-      request,
-    }) => {
-      const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
-        page,
-        request,
-        "e2e-file-create",
-      );
-
-      try {
-        await sendPrompt(
-          page,
-          request,
-          workspaceId,
-          headers,
-          'create a file called hello.txt containing exactly the text "bark-e2e-test-ok"',
-        );
-
-        // Poll for the file to appear with the expected content
-        let content: string | null = null;
-        for (let i = 0; i < 60; i++) {
-          await page.waitForTimeout(2000);
-          const resp = await request.get(
-            `${API_BASE}/workspaces/${workspaceId}/files/content?path=hello.txt`,
-            { headers },
-          );
-          if (resp.ok()) {
-            const data = await resp.json();
-            if (data.content && data.content.includes("bark-e2e-test-ok")) {
-              content = data.content;
-              break;
-            }
-          }
-        }
-        expect(content).toBeTruthy();
-        expect(content).toContain("bark-e2e-test-ok");
-      } finally {
-        await cleanup();
-      }
-    });
-
-    test("abort stops a running agent", async ({ page, request }) => {
-      const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
-        page,
-        request,
-        "e2e-abort-test",
-      );
-
-      try {
-        await sendPrompt(
-          page,
-          request,
-          workspaceId,
-          headers,
-          "write a very detailed 2000 word essay about the history of computing",
-        );
-
-        // Wait for the agent to start running
-        await page.waitForTimeout(5000);
-
-        // Click the abort button (red stop_circle icon, to the right of
-        // the chat input). It's at the send button position.
-        const { height } = vp(page);
-        await flutterClick(page, 460, height - 30);
-        await page.waitForTimeout(3000);
-
-        // Verify the agent stopped — check that messages contain the user prompt
-        const msgResp = await request.get(
-          `${API_BASE}/workspaces/${workspaceId}/messages`,
-          { headers },
-        );
-        expect(msgResp.ok()).toBeTruthy();
-        const messages = await msgResp.json();
-        expect(
-          messages.some(
-            (m: any) =>
-              m.entry_type === "user" && m.content.includes("computing"),
-          ),
-        ).toBeTruthy();
-      } finally {
-        await cleanup();
-      }
-    });
-
-    test("queued prompt is delivered after current run finishes", async ({
-      page,
-      request,
-    }) => {
-      const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
-        page,
-        request,
-        "e2e-queue-test",
-      );
-
-      try {
-        const { height } = vp(page);
-
-        // Send first prompt (verified delivery)
-        await sendPrompt(
-          page,
-          request,
-          workspaceId,
-          headers,
-          "what is 10+10? reply with just the number",
-        );
-
-        // Immediately send second prompt (should be queued while first runs)
-        await flutterClick(page, 240, height - 30);
-        await page.waitForTimeout(300);
-        await page.keyboard.type("what is 20+20? reply with just the number");
-        await page.keyboard.press("Enter");
-
-        // Poll for both responses
-        let foundFirst = false;
-        let foundSecond = false;
-        for (let i = 0; i < 40; i++) {
-          await page.waitForTimeout(3000);
-          const msgResp = await request.get(
-            `${API_BASE}/workspaces/${workspaceId}/messages`,
-            { headers },
-          );
-          if (msgResp.ok()) {
-            const messages = await msgResp.json();
-            const assistantMsgs = messages.filter(
-              (m: any) => m.entry_type === "assistant",
-            );
-            for (const m of assistantMsgs) {
-              if (m.content.includes("20")) foundFirst = true;
-              if (m.content.includes("40")) foundSecond = true;
-            }
-            if (foundFirst && foundSecond) break;
-          }
-        }
-        expect(foundFirst).toBeTruthy();
-        expect(foundSecond).toBeTruthy();
-      } finally {
-        await cleanup();
-      }
-    });
+    } finally {
+      await cleanup();
+    }
   });
 });

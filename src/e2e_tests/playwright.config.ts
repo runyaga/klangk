@@ -6,6 +6,31 @@ const BASE_URL =
   process.env.BARK_TEST_URL || `http://localhost:${BACKEND_PORT}`;
 const BROWSERS = process.env.PLAYWRIGHT_BROWSERS_PATH || "";
 
+const chromiumUse = {
+  launchOptions: {
+    executablePath:
+      process.env.CHROME_PATH ||
+      `${BROWSERS}/chromium-1217/chrome-linux64/chrome`,
+    args: ["--enable-unsafe-swiftshader"],
+  },
+};
+
+const firefoxUse = {
+  browserName: "firefox" as const,
+  launchOptions: {
+    executablePath: `${BROWSERS}/firefox-1511/firefox/firefox`,
+  },
+};
+
+const webkitUse = {
+  browserName: "webkit" as const,
+};
+
+// Browsers run sequentially (chromium → firefox → webkit) to avoid
+// overwhelming SQLite with concurrent writes from 60+ parallel tests.
+// Within each browser, LLM tests run first (while Ollama is warm from
+// global setup), then non-LLM tests run (parallel).
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 300_000,
@@ -20,31 +45,43 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
+    // Chromium: LLM first (Ollama warm from setup), then non-LLM
+    {
+      name: "chromium-llm",
+      testMatch: "bark-llm.spec.ts",
+      use: chromiumUse,
+    },
     {
       name: "chromium",
-      use: {
-        launchOptions: {
-          executablePath:
-            process.env.CHROME_PATH ||
-            `${BROWSERS}/chromium-1217/chrome-linux64/chrome`,
-          args: ["--enable-unsafe-swiftshader"],
-        },
-      },
+      testMatch: "bark.spec.ts",
+      dependencies: ["chromium-llm"],
+      use: chromiumUse,
+    },
+    // Firefox: after chromium completes
+    {
+      name: "firefox-llm",
+      testMatch: "bark-llm.spec.ts",
+      dependencies: ["chromium"],
+      use: firefoxUse,
     },
     {
       name: "firefox",
-      use: {
-        browserName: "firefox",
-        launchOptions: {
-          executablePath: `${BROWSERS}/firefox-1511/firefox/firefox`,
-        },
-      },
+      testMatch: "bark.spec.ts",
+      dependencies: ["firefox-llm"],
+      use: firefoxUse,
+    },
+    // WebKit: after firefox completes
+    {
+      name: "webkit-llm",
+      testMatch: "bark-llm.spec.ts",
+      dependencies: ["firefox"],
+      use: webkitUse,
     },
     {
       name: "webkit",
-      use: {
-        browserName: "webkit",
-      },
+      testMatch: "bark.spec.ts",
+      dependencies: ["webkit-llm"],
+      use: webkitUse,
     },
   ],
 });
