@@ -298,7 +298,7 @@ OLLAMA_BASE_URL=https://ollama.com/v1       # or http://localhost:11434/v1 for s
 OLLAMA_MODEL=gemma4:31b                     # any model available on your Ollama instance
 BARK_JWT_SECRET=change-this-to-a-random-secret
 BARK_DEFAULT_USER=admin
-BARK_DEFAULT_PASSWORD=admin
+# BARK_DEFAULT_PASSWORD=admin  # omit to generate a random password on first run
 EOF
 
 # Install Nix and devenv (if not already installed)
@@ -340,7 +340,7 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `OLLAMA_MODEL`              |                                      | LLM model name                                                                                                                                            |
 | `BARK_JWT_SECRET`           |                                      | JWT signing secret                                                                                                                                        |
 | `BARK_DEFAULT_USER`         |                                      | Auto-seeded user on startup                                                                                                                               |
-| `BARK_DEFAULT_PASSWORD`     |                                      | Auto-seeded password on startup                                                                                                                           |
+| `BARK_DEFAULT_PASSWORD`     |                                      | Auto-seeded password on startup (omit to generate random)                                                                                                 |
 
 ### Ports
 
@@ -602,6 +602,5 @@ arctor nginx (443)
 - **devenv MCP memory leak**: The `devenv mcp` process grows to ~18GB virtual memory over time. Investigate root cause — may be in devenv itself or in the MCP server implementation.
 - **Cache-busting for Flutter web assets**: Implement URL-path versioning so browsers cache aggressively without serving stale assets. After `flutter build web`, a post-build script reorganizes assets into a directory named by git tag or commit hash (e.g., `/v0.1.0/` or `/a177df25/`), patches `flutter_bootstrap.js` to set `entrypointBaseUrl`, `assetBase`, and `canvasKitBaseUrl` to the versioned directory, and updates `index.html` references. Nginx serves three tiers: `index.html` with `no-cache, no-store, must-revalidate` (never cached — always discovers latest versioned paths); versioned assets (`/v1.2.3/...` or `/[sha]/...`) with `max-age=31536000, immutable` (cached 1 year); root PWA files (favicon, manifest, icons) with `max-age=86400` (cached 1 day). Service worker is disabled (`--pwa-strategy=none`) — caching is handled entirely via URL hashing. Each release produces a new directory path, so old cached assets don't conflict. Or investigate the PWA service worker cache busting approach as an alternative.
 - **Redirect to original URL after login**: When a user visits a deep link (e.g., `/workspace/abc123`) with an expired or invalid token, they get redirected to `/login`. After successful login, they should be redirected back to the original URL instead of always going to `/workspaces`.
-- **Generate admin password on first run**: Instead of using `BARK_DEFAULT_PASSWORD` from `.env`, generate a random password for the default admin user on first startup and print it to the console. This avoids the common case of deploying with `admin`/`admin` and forgetting to change it.
 - **Fix Cleanup Runs GH action**: The `cleanup-runs.yml` workflow doesn't actually clean up cancelled old runs right now. Investigate and fix.
 - **E2E: cache Docker image build in CI**: The Docker image is rebuilt from scratch on every CI run. Options: (A) Push to GHCR (`ghcr.io/<repo>/bark-pi:<hash>`) keyed on a hash of Dockerfile + entrypoint + system-prompt + builtin-extensions + plugins — pull if exists, build and push if not. Requires `packages: write` permission but handles large images well. (B) Use GitHub Actions cache with `docker save`/`docker load` — simpler, no registry auth, but the 10 GB total cache limit is tight for a ~2-3 GB compressed tar. (C) Modify `dockerbuild.sh` to check a registry when `BARK_DOCKER_REGISTRY` is set — works for CI and anyone with registry access but couples the build script to a registry. Cache key should hash: `src/dockerimage/Dockerfile`, `src/dockerimage/entrypoint.sh`, `src/dockerimage/*.md`, `src/dockerimage/builtin-extensions/*.ts`, and `plugins/` contents.
