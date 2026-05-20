@@ -435,7 +435,7 @@ GitHub Actions run automatically on PRs and pushes to main (all also support `wo
 
 - **Backend tests** (`.github/workflows/backend-tests.yml`) — triggered by changes to `src/backend/` or `pytest.ini`
 - **Frontend tests** (`.github/workflows/frontend-tests.yml`) — triggered by changes to `src/frontend/lib/`, `src/frontend/test/`, or `src/frontend/pubspec.yaml`. Uses `stub_dart_plugins.sh` to create a minimal `bark_plugins` package so `flutter pub get` works without the full plugin codegen.
-- **E2E tests** (`.github/workflows/e2e-tests.yml`) — manual `workflow_dispatch` only (schedule temporarily disabled). Requires `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` secrets. Runs Playwright against Chromium, Firefox, and WebKit sequentially (browsers from `playwright-driver.browsers` in nixpkgs, one worker per CPU core). Warms up Ollama before each browser run. Uploads test results and per-run backend logs as artifacts on failure.
+- **E2E tests** (`.github/workflows/e2e-tests.yml`) — runs hourly via cron (skips if no commits in the last hour) and on manual `workflow_dispatch`. Requires `OLLAMA_API_KEY`, `OLLAMA_BASE_URL`, and `OLLAMA_MODEL` secrets. Runs Playwright against Chromium, Firefox, and WebKit sequentially (browsers from `playwright-driver.browsers` in nixpkgs, one worker per CPU core). Warms up Ollama before each browser run. Uploads test results and per-run backend logs as artifacts on failure.
 
 ### Plugin System
 
