@@ -4,16 +4,19 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bark_frontend/auth/auth_service.dart';
 import 'package:bark_frontend/auth/login_page.dart';
+import 'package:bark_frontend/auth/pending_redirect.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 void main() {
   setUp(() {
     testBaseUrlOverride = 'http://localhost:8997';
     SharedPreferences.setMockInitialValues({});
+    pendingRedirect = null;
   });
 
   tearDown(() {
     testBaseUrlOverride = null;
+    pendingRedirect = null;
   });
 
   Widget buildLoginPage() {
@@ -85,6 +88,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Web Coding Agent'), findsOneWidget);
+    });
+
+    testWidgets('shows re-auth message when pendingRedirect is set',
+        (tester) async {
+      pendingRedirect = '/workspace/abc123';
+      await tester.pumpWidget(buildLoginPage());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please log in to continue.'), findsOneWidget);
+    });
+
+    testWidgets('does not show re-auth message when no pendingRedirect',
+        (tester) async {
+      await tester.pumpWidget(buildLoginPage());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Please log in to continue.'), findsNothing);
     });
 
     testWidgets('username validation requires 3 chars', (tester) async {

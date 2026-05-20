@@ -831,6 +831,44 @@ test.describe("Bark E2E", () => {
     expect(deletedUser).toBeUndefined();
   });
 
+  test("deep link redirects back after login", async ({ page, request }) => {
+    const username = `deeplink-${Date.now()}`;
+    const { headers } = await registerUser(request, username);
+    const { workspaceId } = await createWorkspace(request, headers, "deeplink");
+
+    // Navigate directly to a workspace URL without being logged in.
+    // The router should redirect to /login with a redirect query param.
+    await page.goto(`/#/workspace/${workspaceId}`);
+    await waitForFlutter(page);
+    await expect(page).toHaveTitle(/Login/i, { timeout: 10_000 });
+
+    // Should be on the login page
+    await expect(page).toHaveTitle(/Login/i, { timeout: 10_000 });
+
+    // Log in — should redirect to the workspace, not /workspaces
+    const { width, height } = vp(page);
+    const cx = width / 2;
+    const f = fv(page);
+
+    await f.click({ position: { x: cx, y: height * 0.47 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type(username);
+
+    await f.click({ position: { x: cx, y: height * 0.55 }, force: true });
+    await page.waitForTimeout(300);
+    await page.keyboard.type(TEST_PASSWORD);
+
+    await f.click({ position: { x: cx, y: height * 0.66 }, force: true });
+
+    // Should end up at the workspace, not the workspace list
+    await page.waitForTimeout(5000);
+    const finalUrl = page.url();
+    expect(finalUrl).toContain(workspaceId);
+
+    // Cleanup
+    await request.delete(`${API_BASE}/workspaces/${workspaceId}`, { headers });
+  });
+
   test("admin user management page loads and lists users", async ({
     page,
     request,

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'utils/web_helpers_stub.dart'
-    if (dart.library.html) 'utils/web_helpers_web.dart';
 import 'auth/auth_service.dart';
+import 'auth/pending_redirect.dart';
 import 'admin/admin_users_page.dart';
 import 'auth/login_page.dart';
 import 'workspace/workspace_list_page.dart';
 import 'workspace/workspace_page.dart';
 
 class BarkApp extends StatefulWidget {
-  const BarkApp({super.key});
+  final String initialLocation;
+
+  const BarkApp({super.key, this.initialLocation = '/'});
 
   @override
   State<BarkApp> createState() => _BarkAppState();
@@ -34,12 +35,7 @@ class _BarkAppState extends State<BarkApp> {
         }
 
         // Create router once after auth is initialized
-        if (_router == null) {
-          // Read initial location from browser hash fragment
-          final hash = getLocationHash();
-          final initialLoc = (hash.length > 1) ? hash.substring(1) : '/';
-          _router = _createRouter(auth, initialLoc);
-        }
+        _router ??= _createRouter(auth, widget.initialLocation);
 
         return MaterialApp.router(
           title: 'Bark',
@@ -58,9 +54,16 @@ class _BarkAppState extends State<BarkApp> {
       redirect: (context, state) {
         final isLoggedIn = auth.isLoggedIn;
         final loc = state.matchedLocation;
-
-        if (!isLoggedIn && loc != '/login') return '/login';
-        if (isLoggedIn && (loc == '/login' || loc == '/')) return '/workspaces';
+        if (!isLoggedIn && loc != '/login') {
+          if (loc != '/') {
+            pendingRedirect = state.uri.toString();
+          }
+          return '/login';
+        }
+        if (isLoggedIn && loc == '/login') {
+          return pendingRedirect ?? '/workspaces';
+        }
+        if (isLoggedIn && loc == '/') return '/workspaces';
         return null;
       },
       routes: [

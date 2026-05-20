@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'auth_service.dart';
+import 'pending_redirect.dart';
 import '../utils/page_title.dart';
 import '../widgets/bark_logo.dart';
 
@@ -49,9 +50,9 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     if (error != null) {
       setState(() => _error = error);
-    } else {
-      context.go('/workspaces');
     }
+    // On success, auth state change triggers GoRouter refreshListenable,
+    // which redirects from /login to pendingRedirect or /workspaces.
   }
 
   @override
@@ -75,6 +76,15 @@ class _LoginPageState extends State<LoginPage> {
                     'Web Coding Agent',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  if (pendingRedirect != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Please log in to continue.',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _usernameController,
