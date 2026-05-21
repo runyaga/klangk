@@ -61,7 +61,7 @@ export async function waitForFlutter(page: Page) {
     () => !document.body.textContent?.includes("Loading, please wait"),
     { timeout: 90_000 },
   );
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(500);
 }
 
 export function fv(page: Page) {
