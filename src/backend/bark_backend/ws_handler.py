@@ -98,13 +98,9 @@ async def handle_websocket(ws: WebSocket) -> None:
     except Exception as e:
         logger.error("WebSocket error: %s", e)
     finally:
-        container_id = conn_state.get("container_id")
         await _cleanup_connection(ws, conn_state)
-        if container_id:
-            try:
-                await container_manager.stop_and_remove_container(container_id)
-            except (OSError, RuntimeError, ConnectionError) as e:
-                logger.error("Error stopping container on disconnect: %s", e)
+        # Container is intentionally left running — idle timeout will clean it up.
+        # This allows instant reconnection when navigating back to the workspace.
         _connections.pop(ws, None)
 
 
@@ -270,10 +266,8 @@ async def _handle_workspace_connect(ws: WebSocket, state: dict, msg: dict) -> No
 
 
 async def _handle_workspace_disconnect(ws: WebSocket, state: dict) -> None:
-    container_id = state.get("container_id")
     await _cleanup_connection(ws, state)
-    if container_id:
-        await container_manager.stop_and_remove_container(container_id)
+    # Container is intentionally left running — idle timeout will clean it up.
     state["workspace_id"] = None
     state["container_id"] = None
     state["pi_client"] = None

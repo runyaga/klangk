@@ -1264,13 +1264,13 @@ class TestHandleWebsocketDispatch:
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         assert any("Not connected" in str(c) for c in calls)
 
-    async def test_container_stopped_on_disconnect(self, user):
+    async def test_container_not_stopped_on_disconnect(self, user):
+        """Container should be left running on disconnect (cleaned up by idle timeout)."""
         from bark_backend import auth as auth_mod
 
         token = auth_mod._create_token(user["id"], user["username"])
         ws = _mock_ws(query_params={"token": token})
 
-        # Connect to a workspace, then disconnect
         workspace = await workspace_manager.create_workspace(user["id"], "stop-ws")
         ws.receive_text = AsyncMock(
             side_effect=[
@@ -1296,44 +1296,7 @@ class TestHandleWebsocketDispatch:
         ):
             await handle_websocket(ws)
 
-        mock_stop.assert_awaited()
-        assert any(call.args == ("cid-stop",) for call in mock_stop.call_args_list)
-
-    async def test_container_stop_error_on_disconnect(self, user):
-        from bark_backend import auth as auth_mod
-
-        token = auth_mod._create_token(user["id"], user["username"])
-        ws = _mock_ws(query_params={"token": token})
-
-        workspace = await workspace_manager.create_workspace(user["id"], "err-ws")
-        ws.receive_text = AsyncMock(
-            side_effect=[
-                json.dumps(
-                    {"cmd": "workspace_connect", "workspaceId": workspace["id"]}
-                ),
-                WebSocketDisconnect(),
-            ]
-        )
-
-        async def fake_start(ws_arg, state, wid, ws_obj):
-            state["container_id"] = "cid-err"
-            state["pi_client"] = _mock_pi_client()
-
-        with (
-            patch.object(
-                ws_handler, "_start_workspace_container", side_effect=fake_start
-            ),
-            patch.object(container_manager, "get_workspace_ports", return_value=[]),
-            patch.object(
-                container_manager,
-                "stop_and_remove_container",
-                new_callable=AsyncMock,
-                side_effect=OSError("stop failed"),
-            ),
-        ):
-            await handle_websocket(ws)
-
-        assert ws not in ws_handler._connections
+        mock_stop.assert_not_awaited()
 
 
 # --- _handle_restart_container additional coverage ---
