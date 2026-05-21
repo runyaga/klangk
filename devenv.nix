@@ -101,7 +101,9 @@
 
   scripts.flutterbuildweb.exec = ''exec devenv tasks run bark:flutter-build --refresh-task-cache "$@"'';
   scripts.dockerbuild.exec = ''exec devenv tasks run bark:docker-build --refresh-task-cache "$@"'';
-  scripts.pull-base-image.exec = "exec bash $DEVENV_ROOT/scripts/pull-base-image.sh";
+  scripts.pull-base-image.exec = ''exec bash "$DEVENV_ROOT/scripts/pull-base-image.sh" "$@"'';
+  scripts.push-base-image.exec = ''exec bash "$DEVENV_ROOT/scripts/push-base-image.sh" "$@"'';
+  scripts.dockerbuild-base.exec = ''exec bash "$DEVENV_ROOT/scripts/dockerbuild-base.sh" "$@"'';
 
   scripts.rebuild.exec = ''
     echo "Rebuilding Docker image..."

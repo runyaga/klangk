@@ -587,9 +587,9 @@ arctor nginx (443)
 
 - **Local files pane**: Add a browser-side file pane where users can upload files into an in-browser-memory filesystem (e.g., using the File System Access API or an in-memory store). These files would be accessible to client-side plugins and could be passed to the REPL as context without uploading to the server. Useful for working with sensitive files that shouldn't leave the browser, or for quick one-off analysis without persisting to the workspace.
 
+- **Community Pi extensions**: Investigate the Pi extension ecosystem for useful community-built extensions that could be pre-installed or offered as optional plugins. Check the Pi documentation and GitHub for extensions related to code analysis, testing, deployment, documentation generation, etc.
 - **Plugin version numbers**: Plugins may want their own version numbers (in `plugin.yaml` or similar metadata) for compatibility checking, display in the UI, and meaningful pinning beyond git refs.
 - **Entrypoint nohup zombie**: The `nohup sh -c "cat ... > FIFO ..."` writer in `entrypoint.sh` (line 78) leaves one `[sh] <defunct>` zombie per container start. Its parent is the `su` process which doesn't call `wait()`. Harmless but cosmetic. Fix by restructuring the entrypoint so the writer finishes before the final `exec`, or by using a different mechanism to feed the FIFOs.
-- **Install gh, ssh and nano in container**: Add the GitHub CLI (`gh`) and SSH client to the Docker base image via `apt install` so users can interact with GitHub repos and remote servers from within their workspace and use the nano text editor.
 - **Container resource limits**: Add CPU/memory limits to containers to prevent runaway processes.
 - **Container network isolation**: Restrict container network access to prevent use as an attack platform. Use a custom Docker network with limited egress — allow only the Ollama API endpoint (cloud or self-hosted) and block all other outbound traffic. Consider using `--network=none` with a proxy sidecar for allowlisted domains only.
 - **Syntax highlighting language detection**: Improve code block language detection for unlabeled blocks.
