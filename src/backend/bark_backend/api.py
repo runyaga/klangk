@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+@router.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 # --- Test/debug endpoints (only when BARK_TEST_MODE is set) ---
 
 if os.environ.get("BARK_TEST_MODE"):  # pragma: no cover

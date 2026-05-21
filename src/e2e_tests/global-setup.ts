@@ -87,7 +87,7 @@ async function globalSetup() {
   const maxWait = 600;
   for (let i = 0; i < maxWait; i++) {
     try {
-      const resp = await fetch(`${baseUrl}/api/config`);
+      const resp = await fetch(`${baseUrl}/health`);
       if (resp.ok) {
         console.log(`E2E server ready after ${i} seconds`);
         return;

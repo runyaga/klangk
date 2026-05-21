@@ -35,6 +35,16 @@ async def _auth_headers(client):
     return {"Authorization": f"Bearer {token}"}
 
 
+# --- Health ---
+
+
+class TestHealth:
+    async def test_health(self, client):
+        resp = await client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+
 # --- Config ---
 
 

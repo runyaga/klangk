@@ -51,8 +51,17 @@ class TerminalSession:
         self._master_fd = master_fd
         self._running = True
 
-        # Build docker exec command, blanking sensitive env vars that the
-        # container inherited from container_manager.start_container()
+        # Build docker exec command that fully unsets sensitive env vars
+        # from the terminal session. Uses `env -u` inside the container
+        # instead of `docker exec -e KEY=` (which only blanks them).
+        env_unset = []
+        for key in os.environ:
+            if key.startswith(
+                ("OLLAMA_", "ANTHROPIC_", "OPENAI_", "GOOGLE_", "GROQ_", "MISTRAL_")
+            ):
+                env_unset.extend(["-u", key])
+        # BARK_RESUME_SESSION is set on the container (not host), strip it too
+        env_unset.extend(["-u", "BARK_RESUME_SESSION"])
         exec_cmd = [
             "docker",
             "exec",
@@ -63,14 +72,11 @@ class TerminalSession:
             "/workspace",
             "-e",
             "TERM=xterm-256color",
+            self.container_id,
+            "env",
+            *env_unset,
+            "/bin/bash",
         ]
-        for key in os.environ:
-            if key.startswith(
-                ("OLLAMA_", "ANTHROPIC_", "OPENAI_", "GOOGLE_", "GROQ_", "MISTRAL_")
-            ):
-                exec_cmd.extend(["-e", f"{key}="])
-        exec_cmd.extend(["-e", "BARK_RESUME_SESSION="])
-        exec_cmd.extend([self.container_id, "/bin/bash"])
 
         self._proc = await asyncio.create_subprocess_exec(
             *exec_cmd,

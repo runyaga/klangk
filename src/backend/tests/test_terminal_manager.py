@@ -91,7 +91,7 @@ class TestStart:
 
         loop.remove_reader(master_fd)
 
-    async def test_start_blanks_sensitive_env_vars(self, mock_os, monkeypatch):
+    async def test_start_unsets_sensitive_env_vars(self, mock_os, monkeypatch):
         monkeypatch.setenv("OLLAMA_API_KEY", "secret")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret2")
         proc = _mock_proc()
@@ -103,12 +103,15 @@ class TestStart:
             await s.start()
 
         exec_args = m_exec.call_args[0]
-        assert "-e" in exec_args
-        idx_list = [i for i, a in enumerate(exec_args) if a == "-e"]
-        blanked = [exec_args[i + 1] for i in idx_list]
-        assert "OLLAMA_API_KEY=" in blanked
-        assert "ANTHROPIC_API_KEY=" in blanked
-        assert "BARK_RESUME_SESSION=" in blanked
+        # The command should use `env -u KEY` inside the container
+        assert "env" in exec_args
+        env_idx = exec_args.index("env")
+        env_args = exec_args[env_idx:]
+        assert "-u" in env_args
+        unset_keys = [env_args[i + 1] for i, a in enumerate(env_args) if a == "-u"]
+        assert "OLLAMA_API_KEY" in unset_keys
+        assert "ANTHROPIC_API_KEY" in unset_keys
+        assert "BARK_RESUME_SESSION" in unset_keys
 
         loop.remove_reader(master_fd)
 

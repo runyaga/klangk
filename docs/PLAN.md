@@ -79,7 +79,7 @@ bark/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
     bark_backend/
       main.py                   # FastAPI app, lifespan, default user seeding, static file serving
-      api.py                    # API route handlers (auth, workspaces, files, messages, admin) via APIRouter
+      api.py                    # API route handlers (health, auth, workspaces, files, messages, admin) via APIRouter
       auth.py                   # Register/login/logout, JWT with roles, bcrypt, require_role(), email validation, verification tokens
       email_service.py          # Email sending via SMTP or sendmail (verification emails)
       user_store.py             # SQLite: users (with verified flag), workspaces, roles, user_roles, token blocklist, message history
@@ -595,7 +595,7 @@ arctor nginx (443)
 - **Syntax highlighting language detection**: Improve code block language detection for unlabeled blocks.
 - **Terminal focus requires precise click target**: In Firefox, the terminal only receives keyboard focus when clicking very specific areas of the terminal pane. Clicking elsewhere in the pane does nothing — the cursor doesn't appear and typing has no effect. The entire terminal pane should grant focus on click.
 - **Simplify container-down UX**: Investigate whether the per-panel "restart" overlays (terminal, chat) are the right approach when the container goes down, or if a single full-page reload overlay would be simpler and more reliable. Currently each panel independently detects `container_stopped` and shows its own restart button — a page-level overlay triggered by the WebSocket could avoid duplicated state and edge cases.
-- **Strip env vars from terminal session**: Currently `docker exec -e VAR=` blanks sensitive env vars (API keys, BARK_RESUME_SESSION) but they still appear in `env` output as empty strings. Investigate using `env -u` inside the exec command or wrapping the shell invocation to fully unset them rather than just blanking.
+- **Audit container env vars**: Investigate whether `BARK_PORT_MAPPINGS`, `BARK_WORKSPACE_ID`, `BARK_HOSTING_PROTOCOL`, and `BARK_HOSTING_HOSTNAME` need to be in the container environment. If they're only used by the entrypoint or Pi extensions, they may be safe to strip from the terminal session via `env -u`. If they're not needed at all, stop passing them at container creation time.
 - **Same-workspace multi-window**: Opening the same workspace in two browser windows simultaneously has undefined behavior — both WebSocket connections share one Pi container/session, and prompts from either window could collide or interleave unpredictably. Consider either locking a workspace to one connection at a time, or multiplexing both windows onto the same event stream.
 - **Workspace disk quotas**: Limit how much disk space each workspace can consume. Options: use filesystem quotas (XFS/ext4 project quotas on the host), overlay2 with size limits, or a loopback-mounted filesystem per workspace with a fixed size. Should also surface current disk usage in the UI (file viewer header or workspace list) so users can see how much space they've used.
 - **Retain shell history across container restarts**: Bash history is lost when a container is stopped because `/home/bark` is a tmpfs. Bind-mount a per-workspace history file (e.g., `$BARK_DATA_DIR/workspaces/<user>/<ws>/.bash_history`) into the container so terminal history persists.
