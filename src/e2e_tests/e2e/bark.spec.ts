@@ -702,10 +702,16 @@ test.describe("Bark E2E", () => {
     );
 
     try {
-      // Create a nested directory structure via API (faster than terminal)
-      await request.post(
-        `${API_BASE}/workspaces/${workspaceId}/files?path=.e2e-nav/inner/file.txt`,
-        { headers, data: "nav-test" },
+      // Create nested directory structure via terminal
+      await terminalType(
+        page,
+        "mkdir -p /workspace/.e2e-nav/inner && echo nav-test > /workspace/.e2e-nav/inner/file.txt",
+      );
+      await waitForFile(
+        request,
+        workspaceId,
+        ".e2e-nav/inner/file.txt",
+        headers,
       );
 
       // Verify structure via API
