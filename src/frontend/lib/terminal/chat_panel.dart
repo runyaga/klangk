@@ -29,7 +29,7 @@ class ChatPanel extends StatefulWidget {
 class _ChatPanelState extends State<ChatPanel> {
   final List<_ChatEntry> _entries = [];
   final _scrollController = ScrollController();
-  final _inputController = TextEditingController();
+  var _inputController = TextEditingController();
   final _inputFocus = FocusNode();
   late final StreamSubscription<AguiEvent> _eventSub;
   bool _agentRunning = false;
@@ -297,11 +297,12 @@ class _ChatPanelState extends State<ChatPanel> {
     _historyIndex = -1;
     _savedInput = '';
 
+    _inputController.dispose();
+    _inputController = TextEditingController();
     setState(() {
       _entries.add(_ChatEntry(type: _EntryType.user, content: text));
     });
     widget.aguiClient.sendPrompt(text);
-    _inputController.clear();
     _inputFocus.requestFocus();
     _scrollToBottom();
   }
