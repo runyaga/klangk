@@ -1,6 +1,6 @@
-"""Tests for main.py: lifespan, seed user, static files."""
+"""Tests for main.py: lifespan, seed user, static files, logfire."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
@@ -134,3 +134,23 @@ class TestSetupStaticFiles:
         ) as client:
             resp = await client.get("/image.png")
         assert "Cache-Control" not in resp.headers
+
+
+# --- Logfire ---
+
+
+class TestSetupLogfire:
+    def test_no_token_returns_false(self, monkeypatch):
+        monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
+        app = FastAPI()
+        assert main.setup_logfire(app) is False
+
+    def test_with_token_instruments_app(self, monkeypatch):
+        monkeypatch.setenv("LOGFIRE_TOKEN", "test-token")
+        mock_logfire = MagicMock()
+        with patch.dict("sys.modules", {"logfire": mock_logfire}):
+            app = FastAPI()
+            result = main.setup_logfire(app)
+        assert result is True
+        mock_logfire.configure.assert_called_once()
+        mock_logfire.instrument_fastapi.assert_called_once_with(app)

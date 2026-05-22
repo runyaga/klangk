@@ -70,6 +70,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Bark", lifespan=lifespan)
 
+
+def setup_logfire(app: FastAPI) -> bool:
+    """Enable Logfire instrumentation if LOGFIRE_TOKEN is set."""
+    if not os.environ.get("LOGFIRE_TOKEN"):
+        return False
+    import logfire
+
+    logfire.configure()
+    logfire.instrument_fastapi(app)
+    logger.info("Logfire instrumentation enabled")
+    return True
+
+
+setup_logfire(app)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
