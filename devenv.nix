@@ -41,8 +41,8 @@
       showOutput = true;
       execIfModified = [
         "scripts/flutterbuildweb.sh"
-        "src/frontend/lib"
-        "src/frontend/web"
+        "src/frontend/lib/**"
+        "src/frontend/web/**"
         "src/frontend/pubspec.yaml"
         "src/frontend/pubspec.lock"
         "${config.env.BARK_PLUGINS_DIR}/**/*.dart"
