@@ -148,6 +148,7 @@ async def start_container(
     env_vars.append(f"LLM_BASE_URL={proxy_url}")
     if ollama_model:
         env_vars.append(f"LLM_MODEL={ollama_model}")
+    env_vars.append("PI_SKIP_VERSION_CHECK=1")
     logger.info(
         "Container LLM proxy: %s (model: %s)",
         proxy_url,

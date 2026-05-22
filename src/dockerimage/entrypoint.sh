@@ -7,8 +7,12 @@
 # avoid stale files from previous container starts.
 PI_AGENT_DIR="/home/bark/.pi/agent"
 rm -rf "$PI_AGENT_DIR"
-mkdir -p "$PI_AGENT_DIR/extensions"
+mkdir -p "$PI_AGENT_DIR/extensions" "$PI_AGENT_DIR/bin"
 cp -r /opt/bark/pi-agent/extensions/* "$PI_AGENT_DIR/extensions/" 2>/dev/null
+
+# Symlink system fd/rg into Pi's bin dir so it doesn't re-download them
+ln -sf /usr/bin/fd "$PI_AGENT_DIR/bin/fd"
+ln -sf /usr/bin/rg "$PI_AGENT_DIR/bin/rg"
 
 # Write models.json — no secrets here since the LLM proxy injects the
 # API key on the host side. The container only sees the proxy URL.
@@ -34,14 +38,6 @@ cat >"$PI_AGENT_DIR/settings.json" <<EOF
 }
 EOF
 
-# Fix ownership: bark's home + workspace directory
-# /home/bark/.pi/sessions persists on the host via the /home/bark bind mount
-chown -R bark:bark /home/bark
-chown bark:bark /work
-
-# Allow bark to use git in /work
-su bark -c "git config --global --add safe.directory /work" 2>/dev/null
-
 # Build system prompt file from static template + registered extension tools
 SYSTEM_PROMPT_FILE="$PI_AGENT_DIR/system-prompt.md"
 cp /opt/bark/system-prompt.md "$SYSTEM_PROMPT_FILE"
@@ -57,6 +53,13 @@ if [ -d "$PI_AGENT_DIR/extensions" ] && [ "$(ls "$PI_AGENT_DIR/extensions"/*.ts 
     fi
   done
 fi
+
+# Fix ownership after all files are created
+chown -R bark:bark /home/bark
+chown bark:bark /work
+
+# Allow bark to use git in /work
+su bark -c "git config --global --add safe.directory /work" 2>/dev/null
 
 # Build Pi command line
 PI_CMD="exec pi --mode rpc --no-context-files --append-system-prompt $SYSTEM_PROMPT_FILE --session-dir /home/bark/.pi/sessions"
