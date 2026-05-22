@@ -55,4 +55,5 @@ src/e2e_tests/logs/
 # Generated config (created by devenv enterShell)
 .prettierignore
 .yamllint.yml
+.markdownlint.yaml
 .pre-commit-config.yaml

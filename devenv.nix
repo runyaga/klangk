@@ -215,6 +215,12 @@
       line-length:
         max: 200
     YAMLLINT
+
+    # Generate markdownlint config (not committed)
+    cat > "$DEVENV_ROOT/.markdownlint.yaml" <<'MDLINT'
+    MD013: false
+    MD034: false
+    MDLINT
   '';
 
   claude.code.mcpServers = { };
