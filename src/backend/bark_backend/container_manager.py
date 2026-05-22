@@ -5,12 +5,12 @@ import time
 
 import aiodocker
 
-from . import user_store
+from . import env_util, user_store
 
 logger = logging.getLogger(__name__)
 
-IMAGE_NAME = os.environ.get("BARK_IMAGE_NAME", "bark-pi")
-INSTANCE_ID = os.environ.get("BARK_INSTANCE_ID", "default")
+IMAGE_NAME = env_util.resolve_env_secret("BARK_IMAGE_NAME", "bark-pi")
+INSTANCE_ID = env_util.resolve_env_secret("BARK_INSTANCE_ID", "default")
 
 
 def parse_idle_timeout() -> tuple[int, int]:
@@ -19,7 +19,7 @@ def parse_idle_timeout() -> tuple[int, int]:
     Returns (idle_timeout_seconds, check_interval_seconds).
     """
     default = 30 * 60
-    env_val = os.environ.get("BARK_IDLE_TIMEOUT_SECONDS")
+    env_val = env_util.resolve_env_secret("BARK_IDLE_TIMEOUT_SECONDS")
     if env_val is not None:
         try:
             timeout = int(env_val)
@@ -153,12 +153,13 @@ async def start_container(
                 "OLLAMA_",
             )
         ):
-            env_vars.append(f"{key}={os.environ[key]}")
+            val = env_util.resolve_env_secret(key) or ""
+            env_vars.append(f"{key}={val}")
     # Log provider env vars for debugging
     provider_keys = [v.split("=", 1)[0] for v in env_vars]
     if provider_keys:
         logger.info("Container env vars: %s", ", ".join(provider_keys))
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "")
+    ollama_url = env_util.resolve_env_secret("OLLAMA_BASE_URL", "")
     if ollama_url:
         # Log just the hostname to verify connectivity without exposing secrets
         from urllib.parse import urlparse

@@ -1,14 +1,14 @@
 import logging
-import os
 import shutil
 from pathlib import Path
 
 from . import container_manager, user_store
+from .env_util import resolve_env_secret
 
 logger = logging.getLogger(__name__)
 
 _data_dir = Path(
-    os.environ.get("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
+    resolve_env_secret("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
 )
 WORKSPACES_ROOT = _data_dir / "workspaces"
 

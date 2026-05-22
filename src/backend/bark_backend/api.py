@@ -2,7 +2,6 @@
 
 import io
 import logging
-import os
 import sqlite3
 import time
 import zipfile
@@ -19,6 +18,7 @@ from . import (
     user_store,
     workspace_manager,
 )
+from .env_util import resolve_env_secret
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ async def health():
 
 # --- Test/debug endpoints (only when BARK_TEST_MODE is set) ---
 
-if os.environ.get("BARK_TEST_MODE"):  # pragma: no cover
+if resolve_env_secret("BARK_TEST_MODE"):  # pragma: no cover
 
     @router.get("/api/test/idle-timeout")
     async def get_idle_timeout(workspace_id: str | None = None):
@@ -60,7 +60,7 @@ if os.environ.get("BARK_TEST_MODE"):  # pragma: no cover
 
 # --- Config endpoint ---
 
-SOLIPLEX_URL = os.environ.get("SOLIPLEX_URL", "")
+SOLIPLEX_URL = resolve_env_secret("SOLIPLEX_URL", "")
 
 
 @router.get("/api/config")
@@ -76,7 +76,7 @@ async def register(
     req: auth.RegisterRequest,
     request: Request,
 ):
-    if os.environ.get("BARK_TEST_MODE"):
+    if resolve_env_secret("BARK_TEST_MODE"):
         # Test mode: auto-verify so E2E tests get immediate access
         result = await auth.register(req, verified=True)
         return result

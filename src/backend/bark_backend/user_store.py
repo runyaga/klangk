@@ -1,12 +1,13 @@
-import os
 from contextlib import asynccontextmanager
 
 import aiosqlite
 import uuid
 from pathlib import Path
 
+from .env_util import resolve_env_secret
+
 _data_dir = Path(
-    os.environ.get("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
+    resolve_env_secret("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
 )
 DB_PATH = _data_dir / "bark.db"
 

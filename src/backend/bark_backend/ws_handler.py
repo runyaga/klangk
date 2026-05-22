@@ -3,11 +3,11 @@
 import asyncio
 import json
 import logging
-import os
 
 from fastapi import WebSocket, WebSocketDisconnect
 
 from . import auth, container_manager, user_store, workspace_manager
+from .env_util import resolve_env_secret
 from .agui_translator import translate_event
 from .pi_rpc_client import PiRpcClient
 from .terminal_manager import TerminalSession
@@ -110,9 +110,9 @@ def derive_hosting_info(headers) -> tuple[str, str, str]:
     Returns (hostname, proto, base_path). Env vars take precedence over headers.
     Works with both Request.headers and WebSocket.headers.
     """
-    hostname = os.environ.get("BARK_HOSTING_HOSTNAME")
-    proto = os.environ.get("BARK_HOSTING_PROTO")
-    base_path = os.environ.get("BARK_HOSTING_BASE_PATH")
+    hostname = resolve_env_secret("BARK_HOSTING_HOSTNAME")
+    proto = resolve_env_secret("BARK_HOSTING_PROTO")
+    base_path = resolve_env_secret("BARK_HOSTING_BASE_PATH")
     if not hostname:
         forwarded_host = headers.get("x-forwarded-host")
         if forwarded_host:
@@ -120,7 +120,7 @@ def derive_hosting_info(headers) -> tuple[str, str, str]:
             hostname = forwarded_host
         else:
             # Direct access (local dev) — use nginx port for hosted app URLs
-            nginx_port = os.environ.get("BARK_NGINX_PORT")
+            nginx_port = resolve_env_secret("BARK_NGINX_PORT")
             host = headers.get("host") or "localhost"
             if nginx_port:
                 host_no_port = host.split(":")[0]

@@ -34,6 +34,26 @@ class TestBuildMessage:
         assert msg["From"] == "noreply@localhost"
 
 
+class TestResolvePassword:
+    def test_plain_password(self, monkeypatch):
+        monkeypatch.setenv("BARK_SMTP_PASSWORD", "secret123")
+        assert email_service._resolve_password() == "secret123"
+
+    def test_file_prefix_reads_file(self, monkeypatch, tmp_path):
+        pw_file = tmp_path / "smtp_pass"
+        pw_file.write_text("file-secret\n")
+        monkeypatch.setenv("BARK_SMTP_PASSWORD", f"file:{pw_file}")
+        assert email_service._resolve_password() == "file-secret"
+
+    def test_file_missing_returns_none(self, monkeypatch):
+        monkeypatch.setenv("BARK_SMTP_PASSWORD", "file:/nonexistent/file")
+        assert email_service._resolve_password() is None
+
+    def test_no_password(self, monkeypatch):
+        monkeypatch.delenv("BARK_SMTP_PASSWORD", raising=False)
+        assert email_service._resolve_password() is None
+
+
 class TestUseSmtp:
     def test_uses_smtp_when_host_set(self, monkeypatch):
         monkeypatch.setenv("BARK_SMTP_HOST", "mail.example.com")

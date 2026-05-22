@@ -2,30 +2,36 @@
 
 import asyncio
 import logging
-import os
 from email.message import EmailMessage
 
 import aiosmtplib
 
+from .env_util import resolve_env_secret
+
 logger = logging.getLogger(__name__)
+
+
+def _resolve_password() -> str | None:
+    """Resolve BARK_SMTP_PASSWORD via resolve_env_secret."""
+    return resolve_env_secret("BARK_SMTP_PASSWORD")
 
 
 def smtp_config() -> dict:
     """Read SMTP configuration from environment at call time."""
     return {
-        "host": os.environ.get("BARK_SMTP_HOST"),
-        "port": int(os.environ.get("BARK_SMTP_PORT", "587")),
-        "user": os.environ.get("BARK_SMTP_USER"),
-        "password": os.environ.get("BARK_SMTP_PASSWORD"),
-        "from_addr": os.environ.get("BARK_SMTP_FROM"),
-        "use_tls": os.environ.get("BARK_SMTP_USE_TLS", "true").lower()
+        "host": resolve_env_secret("BARK_SMTP_HOST"),
+        "port": int(resolve_env_secret("BARK_SMTP_PORT", "587")),
+        "user": resolve_env_secret("BARK_SMTP_USER"),
+        "password": _resolve_password(),
+        "from_addr": resolve_env_secret("BARK_SMTP_FROM"),
+        "use_tls": resolve_env_secret("BARK_SMTP_USE_TLS", "true").lower()
         in ("true", "1"),
     }
 
 
 def use_smtp() -> bool:
     """Return True if SMTP is configured, False to use sendmail."""
-    return bool(os.environ.get("BARK_SMTP_HOST"))
+    return bool(resolve_env_secret("BARK_SMTP_HOST"))
 
 
 def build_message(to: str, subject: str, body: str) -> EmailMessage:
@@ -61,7 +67,7 @@ async def send_via_smtp(msg: EmailMessage) -> None:
 
 
 async def send_via_sendmail(msg: EmailMessage) -> None:
-    sendmail = os.environ.get("BARK_SENDMAIL_PATH", "sendmail")
+    sendmail = resolve_env_secret("BARK_SENDMAIL_PATH", "sendmail")
     logger.info("Using sendmail at: %s", sendmail)
     import shutil
 
@@ -92,7 +98,7 @@ async def send_email(to: str, subject: str, body: str) -> None:
         logger.info(
             "Sending email to %s via SMTP (%s)",
             to,
-            os.environ.get("BARK_SMTP_HOST"),
+            resolve_env_secret("BARK_SMTP_HOST"),
         )
         await send_via_smtp(msg)
     else:

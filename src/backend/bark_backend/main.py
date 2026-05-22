@@ -1,7 +1,6 @@
 """Bark backend: FastAPI app with HTTP + WebSocket endpoints."""
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from pathlib import Path
@@ -12,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import container_manager, user_store
 from .api import router
+from .env_util import resolve_env_secret
 from .ws_handler import handle_websocket
 
 logging.basicConfig(level=logging.INFO)
@@ -28,8 +28,8 @@ async def seed_default_user() -> None:
 
     import bcrypt
 
-    email = os.environ.get("BARK_DEFAULT_USER", "admin")
-    password = os.environ.get("BARK_DEFAULT_PASSWORD")
+    email = resolve_env_secret("BARK_DEFAULT_USER", "admin")
+    password = resolve_env_secret("BARK_DEFAULT_PASSWORD")
     existing = await user_store.get_user_by_email(email)
     if existing is None:
         generated = password is None
@@ -73,7 +73,7 @@ app = FastAPI(title="Bark", lifespan=lifespan)
 
 def setup_logfire(app: FastAPI) -> bool:
     """Enable Logfire instrumentation if LOGFIRE_TOKEN is set."""
-    if not os.environ.get("LOGFIRE_TOKEN"):
+    if not resolve_env_secret("LOGFIRE_TOKEN"):
         return False
     import logfire
 

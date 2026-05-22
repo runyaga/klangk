@@ -1,4 +1,3 @@
-import os
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -10,8 +9,9 @@ from jose import JWTError, jwt
 from pydantic import BaseModel
 
 from . import user_store
+from .env_util import resolve_env_secret
 
-SECRET_KEY = os.environ.get(
+SECRET_KEY = resolve_env_secret(
     "BARK_JWT_SECRET", "bark-dev-secret-change-in-production"
 )
 ALGORITHM = "HS256"
