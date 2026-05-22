@@ -56,6 +56,7 @@
         "scripts/dockerbuild.sh"
         "src/dockerimage/Dockerfile"
         "src/dockerimage/entrypoint.sh"
+        "src/dockerimage/bash.bashrc"
         "src/dockerimage/*.md"
         "src/dockerimage/builtin-extensions/*.ts"
         "${config.env.BARK_PLUGINS_DIR}/**/*.ts"
