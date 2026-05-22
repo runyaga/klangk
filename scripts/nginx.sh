@@ -4,7 +4,7 @@ set -euo pipefail
 NGINX_STATE="${DEVENV_STATE:?DEVENV_STATE must be set}/nginx"
 mkdir -p "$NGINX_STATE"
 
-cat > "$NGINX_STATE/nginx.conf" << NGINX
+cat >"$NGINX_STATE/nginx.conf" <<NGINX
 daemon off;
 pid /tmp/nginx.pid;
 error_log stderr;

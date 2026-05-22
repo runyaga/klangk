@@ -6,7 +6,7 @@ Bark is a multi-user web app that gives each user their own isolated Pi coding a
 
 ## Architecture
 
-```
+```text
 Browser (Flutter Web + Chat UI + AG-UI)
     ├── AG-UI events over WebSocket (authenticated)
     ├── Extension UI responses (client-side tool results)
@@ -43,7 +43,7 @@ $BARK_DATA_DIR/workspaces/<user-id>/work/<workspace-id>/
 
 ## Project Structure
 
-```
+```text
 bark/
   devenv.nix                    # Dev environment: Python (uv), Flutter, Docker CLI, conditional build tasks
   devenv.yaml                   # devenv inputs, reload: false
@@ -544,7 +544,7 @@ Pi extensions can call `ctx.ui.input(title, placeholder)` from within a tool's `
 
 ### Flow
 
-```
+```text
 LLM calls tool → Pi extension execute()
   → ctx.ui.input("HOST_TOOL_REQUEST", '{"action":"...", ...}')
   → Pi emits: {"type":"extension_ui_request","id":"...","method":"input","title":"HOST_TOOL_REQUEST","placeholder":"..."}
@@ -573,7 +573,7 @@ The query flow: frontend creates a thread in the Soliplex room, posts the user's
 
 The devenv.nix runs nginx as the primary access point:
 
-```
+```text
 nginx reverse proxy (port 8995)
     ├── /hosted/{ws_id}/{port}/ → container port (direct proxy)
     └── /                       → Bark backend (port 8997)
@@ -581,7 +581,7 @@ nginx reverse proxy (port 8995)
 
 On arctor (production), the external nginx handles the `/bark/` subpath:
 
-```
+```text
 arctor nginx (443)
     ├── /bark/hosted/{ws_id}/{port}/ → container port (direct proxy)
     └── /bark/                       → bark nginx (port 8995)

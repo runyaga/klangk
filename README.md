@@ -93,7 +93,7 @@ Then restart the processes.
 
 ## Architecture
 
-```
+```text
 Browser (Flutter Web)
     ↕ WebSocket (AG-UI protocol)
 nginx reverse proxy (port 8995)

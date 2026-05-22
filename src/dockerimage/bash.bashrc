@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # System-wide bash defaults for Bark containers.
 # Users can override these in ~/.bashrc on the persistent home mount.
 

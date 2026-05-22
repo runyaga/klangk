@@ -1,0 +1,4 @@
+# Disable line length — our docs use long lines intentionally
+MD013: false
+# Allow bare URLs
+MD034: false

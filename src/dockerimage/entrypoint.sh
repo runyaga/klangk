@@ -21,7 +21,8 @@ cp -r /opt/bark/pi-agent/extensions/* "$PI_AGENT_DIR/extensions/" 2>/dev/null
 MODELS_JSON="$PI_AGENT_DIR/models.json"
 mkfifo "$MODELS_JSON"
 chown bark:bark "$MODELS_JSON"
-MODELS_CONTENT=$(cat << EOF
+MODELS_CONTENT=$(
+  cat <<EOF
 {
   "providers": {
     "ollama": {
@@ -41,7 +42,8 @@ EOF
 SETTINGS_JSON="$PI_AGENT_DIR/settings.json"
 mkfifo "$SETTINGS_JSON"
 chown bark:bark "$SETTINGS_JSON"
-SETTINGS_CONTENT=$(cat << EOF
+SETTINGS_CONTENT=$(
+  cat <<EOF
 {
   "defaultProvider": "ollama",
   "defaultModel": "$OLLAMA_MODEL"
@@ -62,13 +64,13 @@ SYSTEM_PROMPT_FILE="$PI_AGENT_DIR/system-prompt.md"
 cp /opt/bark/system-prompt.md "$SYSTEM_PROMPT_FILE"
 
 if [ -d "$PI_AGENT_DIR/extensions" ] && [ "$(ls "$PI_AGENT_DIR/extensions"/*.ts 2>/dev/null)" ]; then
-  echo "" >> "$SYSTEM_PROMPT_FILE"
-  echo "Registered extension tools (use these instead of bash when appropriate):" >> "$SYSTEM_PROMPT_FILE"
+  echo "" >>"$SYSTEM_PROMPT_FILE"
+  echo "Registered extension tools (use these instead of bash when appropriate):" >>"$SYSTEM_PROMPT_FILE"
   for ext in "$PI_AGENT_DIR/extensions"/*.ts; do
     name=$(grep -E '^\s+name: "' "$ext" | head -1 | sed 's/.*name: "//;s/".*//')
     desc=$(grep -E '^\s+description: "' "$ext" | head -1 | sed 's/.*description: "//;s/".*//')
     if [ -n "$name" ] && [ -n "$desc" ]; then
-      echo "- \`$name\`: $desc" >> "$SYSTEM_PROMPT_FILE"
+      echo "- \`$name\`: $desc" >>"$SYSTEM_PROMPT_FILE"
     fi
   done
 fi
@@ -78,16 +80,17 @@ fi
 # After each FIFO is consumed, delete it so the secret content doesn't persist on disk.
 # Pi may emit an ENOENT warning on a second read of settings.json — this is expected.
 # nohup ensures the writer survives the exec below.
-export TEMP_SETTINGS_CONTENT="$SETTINGS_CONTENT"
-export TEMP_MODELS_CONTENT="$MODELS_CONTENT"
+export SETTINGS_CONTENT
+export MODELS_CONTENT
+# shellcheck disable=SC2016
 nohup sh -c '
   set -e
   # Write settings to FIFO (blocks until Pi reads it)
-  echo "$TEMP_SETTINGS_CONTENT" > '"$SETTINGS_JSON"'
+  echo "$SETTINGS_CONTENT" > '"$SETTINGS_JSON"'
   # Remove the FIFO now that Pi has consumed it
   rm -f '"$SETTINGS_JSON"'
   # Write models to FIFO (blocks until Pi reads it)
-  echo "$TEMP_MODELS_CONTENT" > '"$MODELS_JSON"'
+  echo "$MODELS_CONTENT" > '"$MODELS_JSON"'
   # Remove the FIFO now that Pi has consumed it
   rm -f '"$MODELS_JSON"'
 ' >/dev/null 2>&1 &
@@ -107,5 +110,6 @@ fi
 # Drop to bark user and run Pi. Use -s /bin/sh to avoid sourcing .bashrc
 # (which is user-editable on the persistent home mount and could read FIFOs
 # before Pi does, leaking the API key).
-exec env $STRIP_VARS -u BARK_RESUME_SESSION -u TEMP_SETTINGS_CONTENT -u TEMP_MODELS_CONTENT \
+# shellcheck disable=SC2086
+exec env $STRIP_VARS -u BARK_RESUME_SESSION -u SETTINGS_CONTENT -u MODELS_CONTENT \
   su -s /bin/sh bark -c "PI_CODING_AGENT_DIR=$PI_AGENT_DIR $PI_CMD"

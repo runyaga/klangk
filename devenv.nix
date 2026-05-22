@@ -174,6 +174,21 @@
     };
     # Nix
     nixfmt.enable = true;
+    # Secrets
+    trufflehog.enable = true;
+    # GitHub Actions
+    actionlint.enable = true;
+    # Markdown
+    markdownlint.enable = true;
+    # TOML
+    check-toml.enable = true;
+    # Shell
+    check-executables-have-shebangs.enable = true;
+    shellcheck.enable = true;
+    shfmt = {
+      enable = true;
+      settings.indent = 2;
+    };
     # YAML lint
     yamllint.enable = true;
   };

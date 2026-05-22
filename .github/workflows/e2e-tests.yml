@@ -21,15 +21,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           LAST_COMMIT=$(git log -1 --format=%ct)
           NOW=$(date +%s)
           DIFF=$((NOW - LAST_COMMIT))
-          if [ $DIFF -le 3600 ]; then
+          if [ "$DIFF" -le 3600 ]; then
             echo "Commits found in the last hour"
-            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "No commits in the last hour, cancelling"
             gh run cancel ${{ github.run_id }}
@@ -56,11 +56,11 @@ jobs:
       - name: Free disk space
         run: |
           set -x
-          rm -rf $HOME/.cache
+          rm -rf "$HOME/.cache"
           nohup sudo ionice -c3 nice -n19 rm -rf \
             /usr/share/dotnet /usr/local/lib/android \
             /opt/hostedtoolcache /usr/lib/jvm \
-            /usr/share/swift $HOME/.rustup \
+            /usr/share/swift "$HOME/.rustup" \
             /usr/local/share/chromium \
             /usr/lib/google-cloud-sdk \
             /usr/local/powershell /usr/local/.ghcup \
