@@ -158,6 +158,15 @@ class ContainerTerminalState extends State<ContainerTerminal> {
           ),
           focusNode: _focusNode,
           scrollController: _scrollController,
+          // Override default shortcuts to remove Ctrl+A → SelectAll.
+          // Without this, Ctrl+A selects all terminal text instead of
+          // sending ^A (readline beginning-of-line) to the shell.
+          shortcuts: {
+            const SingleActivator(LogicalKeyboardKey.keyC,
+                control: true, shift: true): CopySelectionTextIntent.copy,
+            const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+                const PasteTextIntent(SelectionChangedCause.keyboard),
+          },
           autofocus: false,
           autoResize: true,
           onSecondaryTapDown: (details, offset) {
