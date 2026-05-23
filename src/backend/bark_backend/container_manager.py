@@ -339,7 +339,14 @@ async def cleanup_idle_containers() -> None:
         to_stop = []
         for cid, info in list(_containers.items()):
             timeout = get_workspace_idle_timeout(info["workspace_id"])
-            if now - info["last_activity"] > timeout:
+            idle_secs = now - info["last_activity"]
+            logger.info(
+                "Idle check: %s idle %.0fs / %ds",
+                cid[:12],
+                idle_secs,
+                timeout,
+            )
+            if idle_secs > timeout:
                 to_stop.append((cid, info["workspace_id"]))
 
         for cid, wid in to_stop:

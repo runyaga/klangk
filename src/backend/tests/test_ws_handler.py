@@ -674,6 +674,7 @@ class TestCleanupConnection:
         t = _mock_terminal()
         state = _base_state()
         state["pi_client"] = pi
+        state["container_id"] = "ctr-full"
         state["workspace_id"] = "ws-1"
         state["_idle_cb"] = lambda ws: None
         state["event_task"] = asyncio.create_task(asyncio.sleep(10))
@@ -684,10 +685,16 @@ class TestCleanupConnection:
             state["_idle_cb"]
         )
 
-        await cleanup_connection(ws, state)
+        with patch.object(
+            container_manager,
+            "stop_and_remove_container",
+            new_callable=AsyncMock,
+        ) as mock_stop:
+            await cleanup_connection(ws, state)
 
-        pi.detach.assert_called_once()
+        pi.disconnect.assert_awaited_once()
         t.stop.assert_awaited_once()
+        mock_stop.assert_awaited_once_with("ctr-full")
         assert state["_idle_cb"] is None
         assert state["terminal_session"] is None
         assert state["terminal_task"] is None
@@ -701,18 +708,17 @@ class TestCleanupConnection:
         assert state["pi_client"] is None
         assert state["terminal_session"] is None
 
-    async def test_cleanup_bumps_activity(self):
+    async def test_cleanup_stops_container(self):
         ws = _mock_ws()
         state = _base_state()
         state["container_id"] = "ctr-1"
-        container_manager.track_activity("ctr-1", "ws-1")
-        old_time = container_manager._containers["ctr-1"]["last_activity"]
-        # Small delay so time.time() advances
-        await asyncio.sleep(0.01)
-        await cleanup_connection(ws, state)
-        new_time = container_manager._containers["ctr-1"]["last_activity"]
-        assert new_time > old_time
-        container_manager._containers.pop("ctr-1", None)
+        with patch.object(
+            container_manager,
+            "stop_and_remove_container",
+            new_callable=AsyncMock,
+        ) as mock_stop:
+            await cleanup_connection(ws, state)
+        mock_stop.assert_awaited_once_with("ctr-1")
 
 
 # --- handle_prompt ---
@@ -1340,8 +1346,8 @@ class TestHandleWebsocketDispatch:
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         assert any("Not connected" in str(c) for c in calls)
 
-    async def test_container_not_stopped_on_disconnect(self, user):
-        """Container should be left running on disconnect (cleaned up by idle timeout)."""
+    async def test_container_stopped_on_disconnect(self, user):
+        """Container should be stopped and removed on disconnect."""
         from bark_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
@@ -1383,7 +1389,7 @@ class TestHandleWebsocketDispatch:
         ):
             await handle_websocket(ws)
 
-        mock_stop.assert_not_awaited()
+        mock_stop.assert_awaited_once_with("cid-stop")
 
 
 # --- handle_restart_container additional coverage ---
