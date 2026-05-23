@@ -171,10 +171,11 @@ class FileDropZoneState extends State<FileDropZone> {
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: () => setState(() => _cancelled = true),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.white70),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.black38,
                       ),
+                      child: const Text('Cancel'),
                     ),
                   ],
                 ),
