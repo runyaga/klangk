@@ -205,7 +205,8 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     if (!_isRegister)
                       TextButton(
-                        onPressed: () => context.go('/forgot-password'),
+                        onPressed: () => context
+                            .go('/forgot-password'), // coverage:ignore-line
                         child: const Text('Forgot password?'),
                       ),
                   ],

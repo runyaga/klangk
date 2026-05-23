@@ -42,6 +42,28 @@ def main():
     print("-" * 75)
     print(f"{'TOTAL':<55} {total_lines:>6} {total_hit:>6} {pct:>5.1f}%")
 
+    required = 100.0
+    if pct < required:
+        missing = [
+            (f, d)
+            for f, d in sorted(files.items())
+            if d.get("hit", 0) < d.get("total", 0)
+        ]
+        for f, d in missing:
+            short = f.replace("lib/", "")
+            hit, total = d.get("hit", 0), d.get("total", 0)
+            print(f"  {short}: {total - hit} lines uncovered")
+        print(
+            f"\nFAIL Required test coverage of {required}% "
+            f"not reached. Total coverage: {pct:.2f}%"
+        )
+        sys.exit(1)
+    else:
+        print(
+            f"\nRequired test coverage of {required}% reached. "
+            f"Total coverage: {pct:.2f}%"
+        )
+
 
 if __name__ == "__main__":
     main()

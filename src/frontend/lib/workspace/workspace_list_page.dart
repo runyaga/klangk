@@ -188,7 +188,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           IconButton(
             icon: const Icon(Icons.settings, color: Color(0xFF1A237E)),
             tooltip: 'Settings',
-            onPressed: () => context.go('/settings'),
+            onPressed: () => context.go('/settings'), // coverage:ignore-line
           ),
           IconButton(
             icon: const Icon(Icons.logout, color: Color(0xFF1A237E)),

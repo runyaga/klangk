@@ -158,15 +158,11 @@
 
   scripts.test-frontend.exec = ''
     cd $DEVENV_ROOT/src/frontend
-    flutter test "$@"
+    flutter test --coverage "$@"
     exit_code=$?
-    case "$*" in
-      *--coverage*)
-        if [ -f coverage/lcov.info ]; then
-          python3 $DEVENV_ROOT/scripts/lcov-report.py coverage/lcov.info
-        fi
-        ;;
-    esac
+    if [ -f coverage/lcov.info ]; then
+      python3 $DEVENV_ROOT/scripts/lcov-report.py coverage/lcov.info || exit_code=1
+    fi
     exit $exit_code
   '';
 
