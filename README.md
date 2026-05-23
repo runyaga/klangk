@@ -138,7 +138,7 @@ Each plugin directory can contain:
 
 **Client-side plugins** use Pi's Extension UI Sub-Protocol to delegate execution to the browser. This enables tools that need browser authentication (e.g., Soliplex cookies) or browser-native capabilities (audio, animations).
 
-See [docs/PLAN.md](docs/PLAN.md) for detailed architecture and feature documentation.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture and feature documentation.
 
 ## License
 
