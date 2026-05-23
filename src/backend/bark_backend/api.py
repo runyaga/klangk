@@ -182,6 +182,72 @@ async def resend_verification(
     return {"status": "sent"}
 
 
+class ForgotPasswordRequest(auth.BaseModel):
+    email: str
+
+
+_reset_timestamps: dict[str, float] = {}
+RESET_COOLDOWN_SECONDS = 60
+
+
+@router.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, request: Request):
+    """Send a password reset email if the account exists."""
+    user = await user_store.get_user_by_email(req.email)
+    if user is None:
+        # Don't reveal whether the email exists
+        return {"status": "sent"}
+
+    # Rate limit: one reset email per address per minute
+    now = time.time()
+    last = _reset_timestamps.get(req.email, 0)
+    if now - last < RESET_COOLDOWN_SECONDS:
+        raise HTTPException(
+            status_code=429,
+            detail="Please wait before requesting another email",
+        )
+    _reset_timestamps[req.email] = now
+
+    hostname, proto, base_path = ws_handler.derive_hosting_info(
+        request.headers
+    )
+    reset_token = auth.create_password_reset_token(user["id"])
+    reset_url = (
+        f"{proto}://{hostname}{base_path}/#/reset-password?token={reset_token}"
+    )
+    await email_service.send_password_reset_email(req.email, reset_url)
+    return {"status": "sent"}
+
+
+class ResetPasswordRequest(auth.BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    """Reset password using a token from the reset email."""
+    user_id = auth.decode_password_reset_token(req.token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired reset token"
+        )
+    if len(req.password) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 4 characters",
+        )
+    password_hash = auth.hash_password(req.password)
+    await user_store.update_password(user_id, password_hash)
+    # Auto-login after reset
+    user = await user_store.get_user_by_id(user_id)
+    if user is None:  # pragma: no cover
+        raise HTTPException(status_code=404, detail="User not found")
+    roles = await user_store.get_user_roles(user_id)
+    token = auth.create_token(user_id, user["email"], roles)
+    return {"status": "reset", "access_token": token}
+
+
 @router.post("/auth/login", response_model=auth.TokenResponse)
 async def login(req: auth.LoginRequest):
     return await auth.login(req)

@@ -6,6 +6,8 @@ import 'auth/pending_redirect.dart';
 import 'admin/admin_users_page.dart';
 import 'auth/login_page.dart';
 import 'auth/verify_page.dart';
+import 'auth/forgot_password_page.dart';
+import 'auth/reset_password_page.dart';
 import 'workspace/workspace_list_page.dart';
 import 'workspace/workspace_page.dart';
 
@@ -55,13 +57,19 @@ class _BarkAppState extends State<BarkApp> {
       redirect: (context, state) {
         final isLoggedIn = auth.isLoggedIn;
         final loc = state.matchedLocation;
-        if (!isLoggedIn && loc != '/login' && loc != '/verify') {
+        final publicRoutes = {
+          '/login',
+          '/verify',
+          '/forgot-password',
+          '/reset-password'
+        };
+        if (!isLoggedIn && !publicRoutes.contains(loc)) {
           if (loc != '/' && loc != '/workspaces') {
             pendingRedirect = state.uri.toString();
           }
           return '/login';
         }
-        if (isLoggedIn && (loc == '/login' || loc == '/verify')) {
+        if (isLoggedIn && publicRoutes.contains(loc)) {
           return pendingRedirect ?? '/workspaces';
         }
         if (isLoggedIn && loc == '/') return '/workspaces';
@@ -91,6 +99,17 @@ class _BarkAppState extends State<BarkApp> {
           builder: (context, state) {
             final token = state.uri.queryParameters['token'] ?? '';
             return VerifyPage(token: token);
+          },
+        ),
+        GoRoute(
+          path: '/forgot-password',
+          builder: (context, state) => const ForgotPasswordPage(),
+        ),
+        GoRoute(
+          path: '/reset-password',
+          builder: (context, state) {
+            final token = state.uri.queryParameters['token'] ?? '';
+            return ResetPasswordPage(token: token);
           },
         ),
         GoRoute(

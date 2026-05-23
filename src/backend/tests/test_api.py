@@ -301,6 +301,102 @@ class TestResendVerification:
         api._resend_timestamps.pop("unverified@example.com", None)
 
 
+class TestForgotPassword:
+    async def _create_user(self):
+        password_hash = auth.hash_password("oldpass")
+        return await user_store.create_user(
+            "forgot@example.com", password_hash, verified=True
+        )
+
+    async def test_forgot_sends_email(self, client, db):
+        await self._create_user()
+        with patch.object(
+            api.email_service,
+            "send_password_reset_email",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            resp = await client.post(
+                "/auth/forgot-password",
+                json={"email": "forgot@example.com"},
+            )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "sent"
+        mock_send.assert_awaited_once()
+        api._reset_timestamps.pop("forgot@example.com", None)
+
+    async def test_forgot_unknown_email_still_returns_sent(self, client, db):
+        resp = await client.post(
+            "/auth/forgot-password",
+            json={"email": "nobody@example.com"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "sent"
+
+    async def test_forgot_rate_limited(self, client, db):
+        await self._create_user()
+        with patch.object(
+            api.email_service,
+            "send_password_reset_email",
+            new_callable=AsyncMock,
+        ):
+            await client.post(
+                "/auth/forgot-password",
+                json={"email": "forgot@example.com"},
+            )
+            resp2 = await client.post(
+                "/auth/forgot-password",
+                json={"email": "forgot@example.com"},
+            )
+        assert resp2.status_code == 429
+        api._reset_timestamps.pop("forgot@example.com", None)
+
+
+class TestResetPassword:
+    async def _create_user(self):
+        password_hash = auth.hash_password("oldpass")
+        return await user_store.create_user(
+            "reset@example.com", password_hash, verified=True
+        )
+
+    async def test_reset_success(self, client, db):
+        user = await self._create_user()
+        token = auth.create_password_reset_token(user["id"])
+        resp = await client.post(
+            "/auth/reset-password",
+            json={"token": token, "password": "newpass"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "reset"
+        assert "access_token" in data
+        # Can login with new password
+        resp2 = await client.post(
+            "/auth/login",
+            json={
+                "email": "reset@example.com",
+                "password": "newpass",
+            },
+        )
+        assert resp2.status_code == 200
+
+    async def test_reset_invalid_token(self, client, db):
+        resp = await client.post(
+            "/auth/reset-password",
+            json={"token": "garbage", "password": "newpass"},
+        )
+        assert resp.status_code == 400
+
+    async def test_reset_short_password(self, client, db):
+        user = await self._create_user()
+        token = auth.create_password_reset_token(user["id"])
+        resp = await client.post(
+            "/auth/reset-password",
+            json={"token": token, "password": "ab"},
+        )
+        assert resp.status_code == 400
+        assert "4 characters" in resp.json()["detail"]
+
+
 # --- Workspace routes ---
 
 

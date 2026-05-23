@@ -160,6 +160,21 @@ class TestVerification:
         assert result is False
 
 
+class TestPasswordReset:
+    def test_create_and_decode_reset_token(self):
+        token = auth.create_password_reset_token("user-456")
+        assert auth.decode_password_reset_token(token) == "user-456"
+
+    def test_decode_invalid_token(self):
+        assert auth.decode_password_reset_token("garbage") is None
+
+    def test_reset_and_verify_tokens_not_interchangeable(self):
+        reset = auth.create_password_reset_token("user-456")
+        verify = auth.create_verification_token("user-456")
+        assert auth.decode_verification_token(reset) is None
+        assert auth.decode_password_reset_token(verify) is None
+
+
 class TestTokenValidation:
     async def test_get_user_from_valid_token(self, user):
         token = auth.create_token(user["id"], user["email"])

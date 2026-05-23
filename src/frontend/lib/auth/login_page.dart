@@ -89,119 +89,127 @@ class _LoginPageState extends State<LoginPage> {
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400),
             padding: const EdgeInsets.all(32),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const BarkLogo(height: 80),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Web Coding Agent',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    _isRegister ? 'Create Account' : 'Log In',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 24),
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      border: const OutlineInputBorder(),
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const BarkLogo(height: 80),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Web Coding Agent',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Required';
-                      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-                          .hasMatch(v.trim())) {
-                        return 'Enter a valid email address';
-                      }
-                      return null;
-                    },
-                    onFieldSubmitted: (_) => _submit(),
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    const SizedBox(height: 24),
+                    Text(
+                      _isRegister ? 'Create Account' : 'Log In',
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    obscureText: true,
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
-                      if (_isRegister && v.length < 4)
-                        return 'Min 4 characters';
-                      return null;
-                    },
-                    onFieldSubmitted: (_) => _submit(),
-                  ),
-                  if (_error != null) ...[
+                    const SizedBox(height: 24),
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        border: const OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) return 'Required';
+                        if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                            .hasMatch(v.trim())) {
+                          return 'Enter a valid email address';
+                        }
+                        return null;
+                      },
+                      onFieldSubmitted: (_) => _submit(),
+                    ),
                     const SizedBox(height: 16),
-                    Text(_error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
-                    if (_needsVerification) ...[
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: _resending ? null : _resendVerification,
-                        child: _resending
+                    TextFormField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Required';
+                        if (_isRegister && v.length < 4)
+                          return 'Min 4 characters';
+                        return null;
+                      },
+                      onFieldSubmitted: (_) => _submit(),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      Text(_error!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
+                      if (_needsVerification) ...[
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _resending ? null : _resendVerification,
+                          child: _resending
+                              ? const SizedBox(
+                                  height: 16,
+                                  width: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Resend verification email'),
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: auth.loading ? null : _submit,
+                        style: _isRegister
+                            ? FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF2E7D32),
+                                foregroundColor: Colors.white,
+                              )
+                            : null,
+                        child: auth.loading
                             ? const SizedBox(
-                                height: 16,
-                                width: 16,
+                                height: 20,
+                                width: 20,
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Resend verification email'),
+                            : Text(_isRegister ? 'Create Account' : 'Log In'),
+                      ),
+                    ),
+                    if (pendingRedirect != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Please log in to continue.',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     ],
-                  ],
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: auth.loading ? null : _submit,
-                      style: _isRegister
-                          ? FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF2E7D32),
-                              foregroundColor: Colors.white,
-                            )
-                          : null,
-                      child: auth.loading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(_isRegister ? 'Create Account' : 'Log In'),
-                    ),
-                  ),
-                  if (pendingRedirect != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Please log in to continue.',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _isRegister = !_isRegister;
+                          _error = null;
+                        });
+                      },
+                      child: Text(
+                        _isRegister
+                            ? 'Already have an account? Log in'
+                            : 'Need an account? Create one',
                       ),
                     ),
+                    if (!_isRegister)
+                      TextButton(
+                        onPressed: () => context.go('/forgot-password'),
+                        child: const Text('Forgot password?'),
+                      ),
                   ],
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _isRegister = !_isRegister;
-                        _error = null;
-                      });
-                    },
-                    child: Text(
-                      _isRegister
-                          ? 'Already have an account? Log in'
-                          : 'Need an account? Create one',
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),

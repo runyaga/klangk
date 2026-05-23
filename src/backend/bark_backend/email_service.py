@@ -154,3 +154,46 @@ async def send_verification_email(to: str, verification_url: str) -> None:
         await send_via_smtp(msg)
     else:
         await send_via_sendmail(msg)
+
+
+async def send_password_reset_email(to: str, reset_url: str) -> None:
+    """Send a password reset email with the given callback URL."""
+    logger.info(
+        "Sending password reset email to %s with URL: %s",
+        to,
+        reset_url,
+    )
+    text_body = (
+        "Click the link below to reset your Bark password:\n\n"
+        f"<{reset_url}>\n\n"
+        "This link expires in 1 hour.\n\n"
+        "If you did not request this, you can ignore this email."
+    )
+    html_body = (
+        '<div style="font-family:sans-serif;max-width:480px;'
+        'margin:0 auto">'
+        '<div style="text-align:center;padding:24px 0">'
+        '<span style="display:inline-block;background:#E65100;'
+        "color:#fff;border-radius:50%;width:48px;height:48px;"
+        'line-height:48px;font-size:24px">&#128062;</span>'
+        '<h2 style="margin:8px 0 0">Bark</h2>'
+        "</div>"
+        "<p>Click the link below to reset your password:</p>"
+        f'<p><a href="{reset_url}">Reset my password</a></p>'
+        "<p>This link expires in 1 hour.</p>"
+        "<p><small>If you did not request this, you can "
+        "ignore this email.</small></p>"
+        "</div>"
+    )
+    cfg = smtp_config()
+    msg = EmailMessage()
+    msg["Subject"] = "Reset your Bark password"
+    msg["From"] = cfg["from_addr"] or cfg["user"] or "noreply@localhost"
+    msg["To"] = to
+    msg.set_content(text_body)
+    msg.add_alternative(html_body, subtype="html")
+
+    if use_smtp():
+        await send_via_smtp(msg)
+    else:
+        await send_via_sendmail(msg)

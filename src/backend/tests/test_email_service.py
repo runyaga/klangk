@@ -201,3 +201,38 @@ class TestSendVerificationEmail:
                 "https://bark.example.com/#/verify?token=abc",
             )
         mock_smtp.assert_awaited_once()
+
+
+class TestSendPasswordResetEmail:
+    async def test_sends_reset_email(self, monkeypatch):
+        monkeypatch.delenv("BARK_SMTP_HOST", raising=False)
+        mock_sendmail = AsyncMock()
+        with patch.object(email_service, "send_via_sendmail", mock_sendmail):
+            await email_service.send_password_reset_email(
+                "user@example.com",
+                "https://bark.example.com/#/reset-password?token=xyz",
+            )
+        mock_sendmail.assert_awaited_once()
+        msg = mock_sendmail.call_args[0][0]
+        assert msg["To"] == "user@example.com"
+        assert "Reset" in msg["Subject"]
+        parts = list(msg.iter_parts())
+        assert len(parts) == 2
+        text_part = parts[0].get_content()
+        assert "reset-password?token=xyz" in text_part
+        assert "1 hour" in text_part
+        html_part = parts[1].get_content()
+        assert 'href="https://bark.example.com/#/reset-password' in html_part
+        assert "Reset my password" in html_part
+
+    async def test_sends_via_smtp_when_configured(self, monkeypatch):
+        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("BARK_SMTP_USER", "user")
+        monkeypatch.setenv("BARK_SMTP_PASSWORD", "pass")
+        mock_smtp = AsyncMock()
+        with patch.object(email_service, "send_via_smtp", mock_smtp):
+            await email_service.send_password_reset_email(
+                "user@example.com",
+                "https://bark.example.com/#/reset-password?token=xyz",
+            )
+        mock_smtp.assert_awaited_once()
