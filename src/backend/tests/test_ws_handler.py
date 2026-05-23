@@ -435,6 +435,8 @@ class TestForwardTerminalOutput:
         ws = _mock_ws()
         t = _mock_terminal()
         state = _base_state()
+        state["container_id"] = "ctr-fwd"
+        container_manager.track_activity("ctr-fwd", "ws-fwd")
 
         async def fake_output():
             yield "line1"
@@ -450,6 +452,9 @@ class TestForwardTerminalOutput:
         # Stream ended — container_stopped event sent
         assert calls[2][0][0]["type"] == "event"
         assert calls[2][0][0]["event"]["name"] == "container_stopped"
+        # Activity was bumped on each output chunk
+        assert "ctr-fwd" in container_manager._containers
+        container_manager._containers.pop("ctr-fwd", None)
 
     async def test_cancelled_error_propagates(self):
         ws = _mock_ws()
