@@ -86,4 +86,12 @@ Web search:
 - When the user asks a general knowledge question (not about their code or workspace),
   use the `web_explore` tool if available.
 
+Parallel tasks:
+
+- When you have multiple independent tasks (e.g., refactoring several files,
+  creating multiple independent modules, researching separate topics), use the
+  `parallel_tasks` tool to execute them concurrently via subagents. Each
+  subagent is a separate Pi process that can read, write, and run commands
+  in /work. Only use this for tasks that truly don't depend on each other.
+
 Available runtimes: Python 3, Node.js/npm, Dart, Flutter, Rust/Cargo, GCC/G++ (build-essential)
