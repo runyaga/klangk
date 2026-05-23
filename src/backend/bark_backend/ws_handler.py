@@ -575,6 +575,9 @@ async def forward_terminal_output(
     try:
         async for data in session.output():
             await ws.send_json({"type": "terminal_output", "data": data})
+            container_id = state.get("container_id")
+            if container_id:
+                container_manager.record_activity(container_id)
         # Stream ended without cancellation — container likely died
         await ws.send_json(
             {
