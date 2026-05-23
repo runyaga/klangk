@@ -12,7 +12,7 @@ COPY builtin-extensions/ /opt/bark/pi-agent/extensions/
 # Install npm-based Pi extensions globally via pi install.
 # Records packages in settings.json for Pi to discover at runtime.
 RUN PI_CODING_AGENT_DIR=/opt/bark/pi-agent pi install npm:pi-subagents \
-    && PI_CODING_AGENT_DIR=/opt/bark/pi-agent pi install npm:@wirebabel/pi-web-access \
+    && PI_CODING_AGENT_DIR=/opt/bark/pi-agent pi install npm:@demigodmode/pi-web-agent \
     && PI_CODING_AGENT_DIR=/opt/bark/pi-agent pi install npm:pi-otel-telemetry
 COPY system-prompt.md /opt/bark/system-prompt.md
 COPY entrypoint.sh /opt/bark/entrypoint.sh
