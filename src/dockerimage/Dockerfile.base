@@ -37,9 +37,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # fd-find installs as fdfind on Debian — symlink to fd
 RUN ln -sf /usr/bin/fdfind /usr/bin/fd
 
-# Node/npm already present from base image
-# Install both old and new Pi package names: pi-otel-telemetry still depends on
-# @mariozechner/*, while pi-subagents requires @earendil-works/*.
+# Node/npm already present from base image.
+# Install both old and new Pi package names: pi-otel-telemetry still
+# depends on @mariozechner/*, while newer extensions use @earendil-works/*.
 # Install @earendil-works last so its `pi` binary wins.
 RUN npm install -g @mariozechner/pi-coding-agent @earendil-works/pi-coding-agent
 
