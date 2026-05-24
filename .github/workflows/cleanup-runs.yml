@@ -2,8 +2,7 @@ name: Cleanup Runs
 
 on:
   schedule:
-    # 6am and 6pm EST (11am and 11pm UTC)
-    - cron: "0 11,23 * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
