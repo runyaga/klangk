@@ -82,6 +82,7 @@ def _mock_terminal(alive=True):
 def _base_state(user=None):
     return {
         "user": user or {"id": "uid", "email": "testuser@example.com"},
+        "workspace_id": None,
         "pi_client": None,
         "container_id": None,
         "event_task": None,
@@ -679,22 +680,27 @@ class TestForwardEvents:
 
 
 class TestCleanupConnection:
-    async def test_cleanup_full(self):
+    async def test_cleanup_full_last_connection(self):
         ws = _mock_ws()
         pi = _mock_pi_client()
         t = _mock_terminal()
         state = _base_state()
         state["pi_client"] = pi
         state["container_id"] = "ctr-full"
-        state["workspace_id"] = "ws-1"
+        state["workspace_id"] = "ws-cleanup-1"
         state["_idle_cb"] = lambda ws: None
-        state["event_task"] = asyncio.create_task(asyncio.sleep(10))
         state["terminal_session"] = t
         state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
 
-        container_manager._idle_callbacks.setdefault("ws-1", []).append(
-            state["_idle_cb"]
-        )
+        # Simulate: one connection, shared Pi state
+        container_manager.add_connection("ws-cleanup-1")
+        ws_handler._workspace_state["ws-cleanup-1"] = {
+            "pi_client": pi,
+            "event_task": asyncio.create_task(asyncio.sleep(10)),
+        }
+        container_manager._idle_callbacks.setdefault(
+            "ws-cleanup-1", []
+        ).append(state["_idle_cb"])
 
         with patch.object(
             container_manager,
@@ -708,21 +714,69 @@ class TestCleanupConnection:
         mock_stop.assert_awaited_once_with("ctr-full")
         assert state["_idle_cb"] is None
         assert state["terminal_session"] is None
-        assert state["terminal_task"] is None
+        assert "ws-cleanup-1" not in ws_handler._workspace_state
 
-        container_manager._idle_callbacks.pop("ws-1", None)
+        container_manager._idle_callbacks.pop("ws-cleanup-1", None)
+        container_manager._workspace_connections.pop("ws-cleanup-1", None)
+
+    async def test_cleanup_not_last_connection(self):
+        """When other connections remain, Pi and container survive."""
+        ws = _mock_ws()
+        pi = _mock_pi_client()
+        t = _mock_terminal()
+        state = _base_state()
+        state["pi_client"] = pi
+        state["container_id"] = "ctr-shared"
+        state["workspace_id"] = "ws-cleanup-2"
+        state["_idle_cb"] = lambda ws: None
+        state["terminal_session"] = t
+        state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
+
+        # Two connections
+        container_manager.add_connection("ws-cleanup-2")
+        container_manager.add_connection("ws-cleanup-2")
+        ws_handler._workspace_state["ws-cleanup-2"] = {
+            "pi_client": pi,
+            "event_task": asyncio.create_task(asyncio.sleep(10)),
+        }
+        container_manager._idle_callbacks.setdefault(
+            "ws-cleanup-2", []
+        ).append(state["_idle_cb"])
+
+        with patch.object(
+            container_manager,
+            "stop_and_remove_container",
+            new_callable=AsyncMock,
+        ) as mock_stop:
+            await cleanup_connection(ws, state)
+
+        # Pi should NOT be disconnected — other connection still using it
+        pi.disconnect.assert_not_awaited()
+        mock_stop.assert_not_awaited()
+        # Terminal for THIS connection should be stopped
+        t.stop.assert_awaited_once()
+        # Shared state still present
+        assert "ws-cleanup-2" in ws_handler._workspace_state
+
+        # Cleanup
+        container_manager._workspace_connections.pop("ws-cleanup-2", None)
+        ws_state = ws_handler._workspace_state.pop("ws-cleanup-2", {})
+        if ws_state.get("event_task"):
+            ws_state["event_task"].cancel()
+        container_manager._idle_callbacks.pop("ws-cleanup-2", None)
 
     async def test_cleanup_minimal(self):
         ws = _mock_ws()
         state = _base_state()
         await cleanup_connection(ws, state)
-        assert state["pi_client"] is None
         assert state["terminal_session"] is None
 
-    async def test_cleanup_stops_container(self):
+    async def test_cleanup_stops_container_last_conn(self):
         ws = _mock_ws()
         state = _base_state()
         state["container_id"] = "ctr-1"
+        state["workspace_id"] = "ws-cleanup-3"
+        container_manager.add_connection("ws-cleanup-3")
         with patch.object(
             container_manager,
             "stop_and_remove_container",
@@ -730,6 +784,7 @@ class TestCleanupConnection:
         ) as mock_stop:
             await cleanup_connection(ws, state)
         mock_stop.assert_awaited_once_with("ctr-1")
+        container_manager._workspace_connections.pop("ws-cleanup-3", None)
 
 
 # --- handle_prompt ---
@@ -1184,15 +1239,80 @@ class TestStartWorkspaceContainer:
         assert state["pi_client"] is pi
         assert state["workspace"] == workspace
         assert state["resume_session"] is None
-        assert state["event_task"] is not None
+        assert workspace["id"] in ws_handler._workspace_state
         assert state["_idle_cb"] is not None
 
-        state["event_task"].cancel()
-        try:
-            await state["event_task"]
-        except asyncio.CancelledError:
-            pass
+        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
+        if ws_state.get("event_task"):
+            ws_state["event_task"].cancel()
+            try:
+                await ws_state["event_task"]
+            except asyncio.CancelledError:
+                pass
         container_manager._idle_callbacks.pop(workspace["id"], None)
+        container_manager._workspace_connections.pop(workspace["id"], None)
+
+    async def test_second_connection_shares_pi(self, user):
+        ws1 = _mock_ws(headers={"host": "localhost:8997"})
+        ws2 = _mock_ws(headers={"host": "localhost:8997"})
+        state1 = _base_state(user=user)
+        state2 = _base_state(user=user)
+        workspace = await workspace_manager.create_workspace(
+            user["id"], "shared-ws"
+        )
+        pi = _mock_pi_client()
+
+        async def fake_events():
+            return
+            yield
+
+        pi.events = fake_events
+
+        with (
+            patch.object(
+                container_manager,
+                "start_container",
+                new_callable=AsyncMock,
+                return_value=("cid-shared", "created"),
+            ),
+            patch.object(ws_handler, "PiRpcClient", return_value=pi),
+            patch("glob.glob", return_value=[]),
+        ):
+            await start_workspace_container(
+                ws1, state1, workspace["id"], workspace
+            )
+
+        # First connection owns Pi
+        assert state1["pi_client"] is pi
+        assert workspace["id"] in ws_handler._workspace_state
+
+        with (
+            patch.object(
+                container_manager,
+                "start_container",
+                new_callable=AsyncMock,
+                return_value=("cid-shared", "connected"),
+            ),
+            patch("glob.glob", return_value=[]),
+        ):
+            await start_workspace_container(
+                ws2, state2, workspace["id"], workspace
+            )
+
+        # Second connection shares the same Pi client
+        assert state2["pi_client"] is pi
+        assert container_manager.connection_count(workspace["id"]) == 2
+
+        # Cleanup
+        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
+        if ws_state.get("event_task"):
+            ws_state["event_task"].cancel()
+            try:
+                await ws_state["event_task"]
+            except asyncio.CancelledError:
+                pass
+        container_manager._idle_callbacks.pop(workspace["id"], None)
+        container_manager._workspace_connections.pop(workspace["id"], None)
 
     async def test_resume_session(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
@@ -1233,12 +1353,15 @@ class TestStartWorkspaceContainer:
         assert "/home/bark/.pi/sessions" in state["resume_session"]
         assert state["container_status"] == "connected"
 
-        state["event_task"].cancel()
-        try:
-            await state["event_task"]
-        except asyncio.CancelledError:
-            pass
+        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
+        if ws_state.get("event_task"):
+            ws_state["event_task"].cancel()
+            try:
+                await ws_state["event_task"]
+            except asyncio.CancelledError:
+                pass
         container_manager._idle_callbacks.pop(workspace["id"], None)
+        container_manager._workspace_connections.pop(workspace["id"], None)
 
     async def test_idle_callback_ws_error(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
@@ -1274,12 +1397,15 @@ class TestStartWorkspaceContainer:
         await idle_cb(workspace["id"])  # should not raise
         assert ws.send_json.call_count == 1
 
-        state["event_task"].cancel()
-        try:
-            await state["event_task"]
-        except asyncio.CancelledError:
-            pass
+        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
+        if ws_state.get("event_task"):
+            ws_state["event_task"].cancel()
+            try:
+                await ws_state["event_task"]
+            except asyncio.CancelledError:
+                pass
         container_manager._idle_callbacks.pop(workspace["id"], None)
+        container_manager._workspace_connections.pop(workspace["id"], None)
 
 
 # --- handle_websocket dispatch branches ---
@@ -1380,8 +1506,10 @@ class TestHandleWebsocketDispatch:
         )
 
         async def fake_start(ws_arg, state, wid, ws_obj):
+            state["workspace_id"] = wid
             state["container_id"] = "cid-stop"
             state["pi_client"] = _mock_pi_client()
+            container_manager.add_connection(wid)
 
         with (
             patch.object(

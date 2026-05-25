@@ -15,8 +15,11 @@ from .terminal_manager import TerminalSession
 
 logger = logging.getLogger(__name__)
 
-# Active connections: ws -> {user, workspace_id, pi_client, container_id}
+# Active connections: ws -> {user, workspace_id, container_id, ...}
 _connections: dict[WebSocket, dict] = {}
+# Shared per-workspace state: workspace_id -> {pi_client, event_task}
+# Owned by the first connection, cleaned up by the last.
+_workspace_state: dict[str, dict] = {}
 
 
 async def handle_websocket(ws: WebSocket) -> None:
@@ -193,14 +196,23 @@ async def start_workspace_container(
 
     # Only the first connection to a workspace starts Pi and event forwarding.
     # Subsequent connections (additional shells, exec, sync) skip Pi setup.
+    # Pi state is stored in _workspace_state so the last connection can clean it up.
     if conn_num == 1:
         pi_client = PiRpcClient(container_id)
         await pi_client.connect()
-        state["pi_client"] = pi_client
 
-        state["event_task"] = asyncio.create_task(
-            forward_events(ws, pi_client, workspace_id, state)
-        )
+        ws_state = {
+            "pi_client": pi_client,
+            "event_task": asyncio.create_task(
+                forward_events(ws, pi_client, workspace_id, state)
+            ),
+        }
+        _workspace_state[workspace_id] = ws_state
+        state["pi_client"] = pi_client
+    else:
+        # Share the Pi client from the first connection
+        ws_state = _workspace_state.get(workspace_id, {})
+        state["pi_client"] = ws_state.get("pi_client")
 
     # Register idle timeout notification (per-connection)
     async def on_idle(wid: str) -> None:
@@ -799,15 +811,19 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
     if workspace_id:
         remaining = container_manager.remove_connection(workspace_id)
 
-    if remaining == 0:
-        if state.get("event_task"):
-            state["event_task"].cancel()
+    if remaining == 0 and workspace_id:
+        # Last connection — clean up shared Pi state
+        ws_state = _workspace_state.pop(workspace_id, {})
+
+        event_task = ws_state.get("event_task")
+        if event_task:
+            event_task.cancel()
             try:
-                await state["event_task"]
+                await event_task
             except asyncio.CancelledError:
                 pass
 
-        pi_client: PiRpcClient | None = state.get("pi_client")
+        pi_client: PiRpcClient | None = ws_state.get("pi_client")
         if pi_client:
             await pi_client.disconnect()
 
