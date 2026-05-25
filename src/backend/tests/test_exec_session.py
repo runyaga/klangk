@@ -28,6 +28,7 @@ def _mock_proc(stdout_data=b"", returncode=None):
 
     stdout.read = _read
     proc.stdout = stdout
+    proc.wait = AsyncMock()
     return proc
 
 

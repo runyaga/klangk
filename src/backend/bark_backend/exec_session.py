@@ -56,6 +56,17 @@ class ExecSession:
                 self._output_queue.put_nowait(data)
         except (OSError, asyncio.CancelledError):
             pass
+        # Wait for the process to exit so returncode is set before
+        # the caller reads it.
+        if self._proc and self._proc.returncode is None:
+            try:
+                await asyncio.wait_for(self._proc.wait(), timeout=5)
+            except (
+                asyncio.TimeoutError,
+                ProcessLookupError,
+                OSError,
+            ):  # pragma: no cover
+                pass
         self._output_queue.put_nowait(None)
 
     @property
