@@ -89,7 +89,9 @@ def status(
 
 
 @app.command("workspaces")
-def list_workspaces() -> None:
+def list_workspaces(
+    plain: bool = typer.Option(False, "--plain", help="Plain text output"),
+) -> None:
     """List all workspaces."""
     _require_auth()
     client = _client()
@@ -97,8 +99,18 @@ def list_workspaces() -> None:
     if not workspaces:
         typer.echo("No workspaces found.")
         return
+    if plain:
+        for ws in workspaces:
+            typer.echo(f"  {ws.name}  ({ws.id[:12]})  {ws.created_at[:10]}")
+        return
+    console = Console()
+    table = Table(box=None, pad_edge=False)
+    table.add_column("Name", style="bold")
+    table.add_column("ID")
+    table.add_column("Created")
     for ws in workspaces:
-        typer.echo(f"  {ws.name}  ({ws.id[:12]})  {ws.created_at[:10]}")
+        table.add_row(ws.name, ws.id[:12], ws.created_at[:10])
+    console.print(table)
 
 
 @app.command()

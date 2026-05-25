@@ -100,7 +100,7 @@ class TestMainCLI:
 
         client.list_workspaces.assert_called_once()
 
-    def test_list_workspaces_shows_items(self, logged_in_cfg, monkeypatch):
+    def test_list_workspaces_plain(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 
         ws = Workspace(
@@ -113,8 +113,35 @@ class TestMainCLI:
         monkeypatch.setattr(main, "_client", lambda: client)
 
         with patch("typer.echo") as mock_echo:
-            main.list_workspaces()
+            main.list_workspaces(plain=True)
         assert any("my-workspace" in str(c) for c in mock_echo.call_args_list)
+
+    def test_list_workspaces_rich(self, logged_in_cfg, monkeypatch):
+        from io import StringIO
+
+        from rich.console import Console
+
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-workspace",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.list_workspaces.return_value = [ws]
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        buf = StringIO()
+        with patch.object(
+            main,
+            "Console",
+            return_value=Console(file=buf, force_terminal=True),
+        ):
+            main.list_workspaces(plain=False)
+        output = buf.getvalue()
+        assert "my-workspace" in output
+        assert "2025-01-01" in output
 
     def test_create_workspace(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
