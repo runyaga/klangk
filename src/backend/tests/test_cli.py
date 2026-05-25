@@ -107,6 +107,27 @@ class TestAuth:
         assert cfg.auth.token == "jwt123"
         assert cfg.auth.email == "u@test.com"
 
+    def test_login_with_user_flag(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "jwt456"}
+        with patch("httpx.post", return_value=mock_resp):
+            # Only one Prompt.ask call (password) since email is provided
+            with patch(
+                "bark_backend.cli.auth.Prompt.ask",
+                return_value="secret",
+            ):
+                from bark_backend.cli import auth
+
+                auth.login("http://localhost:8997", email="cli@test.com")
+        cfg = CLIConfig.load()
+        assert cfg.auth.token == "jwt456"
+        assert cfg.auth.email == "cli@test.com"
+
     def test_login_reuses_valid_token(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(

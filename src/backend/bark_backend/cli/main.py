@@ -55,6 +55,7 @@ def _require_auth() -> None:
 
 @app.command("login")
 def login_cmd(
+    email: str | None = typer.Argument(None, help="Email address"),
     server: str | None = typer.Option(
         None,
         "--server",
@@ -64,7 +65,7 @@ def login_cmd(
     """Authenticate with the Bark server."""
     if server is None:  # pragma: no cover
         server = _cfg().server.url
-    login(server)
+    login(server, email=email)
 
 
 @app.command()

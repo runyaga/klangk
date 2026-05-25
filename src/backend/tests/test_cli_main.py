@@ -60,7 +60,7 @@ class TestMainCLI:
                 "bark_backend.cli.auth.Prompt.ask",
                 side_effect=["u@test.com", "pw"],
             ):
-                login_cmd("http://localhost:8997")
+                login_cmd(email=None, server="http://localhost:8997")
         cfg = CLIConfig.load()
         assert cfg.auth.token == "new-token"
         assert cfg.auth.email == "u@test.com"
