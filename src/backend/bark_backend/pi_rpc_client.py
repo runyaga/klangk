@@ -8,6 +8,10 @@ from collections.abc import AsyncGenerator
 logger = logging.getLogger(__name__)
 
 
+class PiDeadError(Exception):
+    """Raised when a command is sent to a Pi process that has exited."""
+
+
 class PiRpcClient:
     """Communicates with a Pi container via `docker attach` subprocess."""
 
@@ -113,10 +117,13 @@ class PiRpcClient:
     async def send_command(self, command: dict) -> None:
         """Send a JSON command to Pi's stdin."""
         if not self.is_alive:
-            raise RuntimeError("Pi process is dead")
+            raise PiDeadError("Pi process is dead")
         line = json.dumps(command) + "\n"
-        self._proc.stdin.write(line.encode("utf-8"))
-        await self._proc.stdin.drain()
+        try:
+            self._proc.stdin.write(line.encode("utf-8"))
+            await self._proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            raise PiDeadError("Pi process died during write") from e
 
     async def prompt(
         self, text: str, images: list[dict] | None = None

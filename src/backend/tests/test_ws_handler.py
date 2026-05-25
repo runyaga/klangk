@@ -14,6 +14,7 @@ from bark_backend import (
     user_store,
     workspace_manager,
 )
+from bark_backend.pi_rpc_client import PiDeadError
 from bark_backend.ws_handler import (
     derive_hosting_info,
     start_workspace_container,
@@ -206,6 +207,19 @@ class TestHandleSteer:
         await handle_steer(state, {"text": "go left"})
         assert state["pi_client"] is None
 
+    async def test_steer_pi_dead(self):
+        pi = _mock_pi_client()
+        pi.steer = AsyncMock(side_effect=PiDeadError("dead"))
+        state = _base_state()
+        state["pi_client"] = pi
+        state["container_id"] = "cid"
+        container_manager._containers["cid"] = {
+            "last_activity": 0,
+            "workspace_id": "ws",
+        }
+        await handle_steer(state, {"text": "go left"})  # should not raise
+        container_manager._containers.pop("cid", None)
+
 
 # --- handle_follow_up ---
 
@@ -231,6 +245,19 @@ class TestHandleFollowUp:
         await handle_follow_up(state, {"text": "and then?"})
         assert state["pi_client"] is None
 
+    async def test_follow_up_pi_dead(self):
+        pi = _mock_pi_client()
+        pi.follow_up = AsyncMock(side_effect=PiDeadError("dead"))
+        state = _base_state()
+        state["pi_client"] = pi
+        state["container_id"] = "cid"
+        container_manager._containers["cid"] = {
+            "last_activity": 0,
+            "workspace_id": "ws",
+        }
+        await handle_follow_up(state, {"text": "x"})  # should not raise
+        container_manager._containers.pop("cid", None)
+
 
 # --- handle_abort ---
 
@@ -247,6 +274,13 @@ class TestHandleAbort:
         state = _base_state()
         await handle_abort(state)
         assert state["pi_client"] is None
+
+    async def test_abort_pi_dead(self):
+        pi = _mock_pi_client()
+        pi.abort = AsyncMock(side_effect=PiDeadError("dead"))
+        state = _base_state()
+        state["pi_client"] = pi
+        await handle_abort(state)  # should not raise
 
 
 # --- handle_extension_ui_response ---
@@ -304,6 +338,15 @@ class TestHandleExtensionUiResponse:
         state = _base_state()
         await handle_extension_ui_response(state, {"id": "ext-1"})
         assert state["pi_client"] is None
+
+    async def test_pi_dead(self):
+        pi = _mock_pi_client()
+        pi.send_command = AsyncMock(side_effect=PiDeadError("dead"))
+        state = _base_state()
+        state["pi_client"] = pi
+        await handle_extension_ui_response(
+            state, {"id": "ext-1", "value": "x"}
+        )  # should not raise
 
 
 # --- handle_terminal_input ---

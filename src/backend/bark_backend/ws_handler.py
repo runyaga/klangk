@@ -9,7 +9,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from . import auth, container_manager, user_store, workspace_manager
 from .env_util import resolve_env_secret
 from .agui_translator import translate_event
-from .pi_rpc_client import PiRpcClient
+from .pi_rpc_client import PiDeadError, PiRpcClient
 from .exec_session import ExecSession
 from .terminal_manager import TerminalSession
 
@@ -342,7 +342,7 @@ async def handle_prompt(ws: WebSocket, state: dict, msg: dict) -> None:
     message_saved = False
     try:
         if pi_client is None or not pi_client.is_alive:
-            raise RuntimeError("Pi client is dead or missing")
+            raise PiDeadError("Pi client is dead or missing")
         container_manager.record_activity(state["container_id"])
         ws_state = _workspace_state.get(workspace_id, {})
         is_queued = ws_state.get("agent_running", False)
@@ -378,7 +378,7 @@ async def handle_prompt(ws: WebSocket, state: dict, msg: dict) -> None:
         else:
             await pi_client.prompt(text)
             logger.info("Prompt sent to Pi for workspace %s", workspace_id)
-    except (RuntimeError, OSError, ConnectionError) as e:
+    except (PiDeadError, OSError, ConnectionError) as e:
         logger.info(
             "Prompt failed (%s), auto-restarting container for workspace %s",
             e,
@@ -449,7 +449,10 @@ async def handle_steer(state: dict, msg: dict) -> None:
     if pi_client is None:
         return
     container_manager.record_activity(state["container_id"])
-    await pi_client.steer(msg.get("text", ""))
+    try:
+        await pi_client.steer(msg.get("text", ""))
+    except PiDeadError:
+        logger.warning("Steer failed: Pi process is dead")
 
 
 async def handle_follow_up(state: dict, msg: dict) -> None:
@@ -457,7 +460,10 @@ async def handle_follow_up(state: dict, msg: dict) -> None:
     if pi_client is None:
         return
     container_manager.record_activity(state["container_id"])
-    await pi_client.follow_up(msg.get("text", ""))
+    try:
+        await pi_client.follow_up(msg.get("text", ""))
+    except PiDeadError:
+        logger.warning("Follow-up failed: Pi process is dead")
 
 
 async def handle_extension_ui_response(state: dict, msg: dict) -> None:
@@ -473,14 +479,20 @@ async def handle_extension_ui_response(state: dict, msg: dict) -> None:
         response["cancelled"] = True
     if "confirmed" in msg:
         response["confirmed"] = msg["confirmed"]
-    await pi_client.send_command(response)
+    try:
+        await pi_client.send_command(response)
+    except PiDeadError:
+        logger.warning("Extension UI response failed: Pi process is dead")
 
 
 async def handle_abort(state: dict) -> None:
     pi_client: PiRpcClient | None = state.get("pi_client")
     if pi_client is None:
         return
-    await pi_client.abort()
+    try:
+        await pi_client.abort()
+    except PiDeadError:
+        pass  # Already dead, abort is moot
 
 
 async def handle_restart_container(ws: WebSocket, state: dict) -> None:

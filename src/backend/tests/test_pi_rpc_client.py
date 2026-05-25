@@ -6,7 +6,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bark_backend.pi_rpc_client import PiRpcClient
+from bark_backend.pi_rpc_client import PiDeadError, PiRpcClient
 
 
 def _mock_proc(stdout_data=b"", returncode=None, stderr_data=b""):
@@ -105,12 +105,21 @@ class TestSendCommand:
     async def test_send_command_dead_proc(self):
         client = PiRpcClient("cid")
         client._proc = _mock_proc(returncode=1)
-        with pytest.raises(RuntimeError, match="dead"):
+        with pytest.raises(PiDeadError, match="dead"):
             await client.send_command({"type": "test"})
 
     async def test_send_command_no_proc(self):
         client = PiRpcClient("cid")
-        with pytest.raises(RuntimeError, match="dead"):
+        with pytest.raises(PiDeadError, match="dead"):
+            await client.send_command({"type": "test"})
+
+    async def test_send_command_broken_pipe(self):
+        client = PiRpcClient("cid")
+        proc = _mock_proc(returncode=None)
+        proc.stdin.drain = AsyncMock(side_effect=BrokenPipeError)
+        client._proc = proc
+        client._running = True
+        with pytest.raises(PiDeadError, match="died during write"):
             await client.send_command({"type": "test"})
 
 
