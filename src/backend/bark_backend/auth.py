@@ -39,7 +39,7 @@ def _is_locked_out(
         )
         return (
             True,
-            f"Too many failed attempts. Try again in {remaining} seconds.",
+            f"Too many failed attempts. Try again in {remaining // 60} minutes.",
         )
     return False, None
 
@@ -179,7 +179,7 @@ async def login(req: LoginRequest) -> TokenResponse:
                 )
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Too many failed attempts. Locked out for {LOGIN_LOCKOUT_DURATION} seconds.",
+                    detail=f"Too many failed attempts. Locked out for {LOGIN_LOCKOUT_DURATION // 60} minutes.",
                 )
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.get("verified"):

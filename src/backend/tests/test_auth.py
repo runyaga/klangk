@@ -217,7 +217,7 @@ class TestLoginRateLimit:
         assert exc_info.value.status_code == 429
 
     async def test_login_lockout_message_shows_remaining_time(self, user):
-        """Lockout message includes remaining seconds."""
+        """Lockout message includes remaining minutes."""
         locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
         await user_store.record_failed_login("testuser@example.com")
         await user_store.set_login_lockout(
@@ -230,7 +230,7 @@ class TestLoginRateLimit:
                 )
             )
         assert exc_info.value.status_code == 429
-        assert "seconds" in exc_info.value.detail
+        assert "minutes" in exc_info.value.detail
 
     async def test_expired_lockout_allows_login(self, user):
         """An expired lockout doesn't block the user from logging in."""
@@ -279,7 +279,7 @@ class TestLoginRateLimit:
         locked = {"attempt_count": 5, "locked_until": future.isoformat()}
         is_locked, msg = auth._is_locked_out(locked)
         assert is_locked is True
-        assert "seconds" in msg
+        assert "minutes" in msg
         expired = {"attempt_count": 5, "locked_until": past.isoformat()}
         is_locked2, msg2 = auth._is_locked_out(expired)
         assert is_locked2 is False
