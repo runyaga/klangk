@@ -320,10 +320,8 @@ async def _ws_exec(
 
         async def stdin_forward() -> None:
             while True:
-                data = await loop.run_in_executor(
-                    None, sys.stdin.buffer.read, 65536
-                )
-                if not data:
+                data = await loop.run_in_executor(None, os.read, 0, 65536)
+                if not data:  # pragma: no cover
                     await ws.send(json.dumps({"cmd": "exec_close_stdin"}))
                     break
                 await ws.send(  # pragma: no cover
@@ -344,8 +342,7 @@ async def _ws_exec(
                 data = json.loads(msg)
                 if data.get("type") == "exec_output":
                     raw = base64.b64decode(data["data"])
-                    sys.stdout.buffer.write(raw)
-                    sys.stdout.buffer.flush()
+                    os.write(1, raw)
                 elif data.get("type") == "exec_exit":
                     exit_code = data.get("code", 0)
                     break

@@ -344,30 +344,24 @@ class TestWsExec:
             ]
         )
 
-        import sys
-        from io import BytesIO
+        captured = bytearray()
 
-        orig_stdin = sys.stdin
-        orig_stdout_buf = sys.stdout.buffer
-        sys.stdin = MagicMock()
-        sys.stdin.buffer = BytesIO(b"")
-        sys.stdin.buffer.fileno = lambda: 0
+        def fake_os_read(fd, n):
+            return b""  # EOF immediately
 
-        captured = BytesIO()
-        sys.stdout = MagicMock()
-        sys.stdout.buffer = captured
+        def fake_os_write(fd, data):
+            captured.extend(data)
+            return len(data)
 
-        try:
-            with patch("websockets.connect", return_value=ws_mock):
-                code = await _ws_exec(
-                    "ws://localhost/ws", "token", "ws1", ["ls"]
-                )
-        finally:
-            sys.stdin = orig_stdin
-            sys.stdout.buffer = orig_stdout_buf
+        with patch("websockets.connect", return_value=ws_mock):
+            with patch("bark_backend.cli.client.os.read", fake_os_read):
+                with patch("bark_backend.cli.client.os.write", fake_os_write):
+                    code = await _ws_exec(
+                        "ws://localhost/ws", "token", "ws1", ["ls"]
+                    )
 
         assert code == 0
-        assert b"file-list" in captured.getvalue()
+        assert b"file-list" in bytes(captured)
 
     @pytest.mark.asyncio
     async def test_ws_exec_connection_failure(self):
