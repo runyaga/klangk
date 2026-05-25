@@ -133,17 +133,20 @@ async def start_container(
                 existing_container_id,
             )
 
-    # Ensure workspace has the right number of ports allocated
-    host_ports = await get_workspace_ports(workspace_id)
-    if len(host_ports) < num_ports:
-        new_ports = await allocate_ports(
-            workspace_id, num_ports - len(host_ports)
-        )
-        host_ports.extend(new_ports)
-    elif len(host_ports) > num_ports:
-        excess = host_ports[num_ports:]
-        await user_store.remove_port_allocations(workspace_id, excess)
-        host_ports = host_ports[:num_ports]
+    # Ensure workspace has the right number of ports allocated.
+    # Lock the entire read+allocate sequence to prevent concurrent
+    # start_container calls from double-allocating.
+    async with _port_lock:
+        host_ports = await user_store.get_workspace_ports(workspace_id)
+        if len(host_ports) < num_ports:
+            new_ports = await user_store.find_and_allocate_ports(
+                workspace_id, num_ports - len(host_ports), PORT_RANGE_START
+            )
+            host_ports.extend(new_ports)
+        elif len(host_ports) > num_ports:
+            excess = host_ports[num_ports:]
+            await user_store.remove_port_allocations(workspace_id, excess)
+            host_ports = host_ports[:num_ports]
 
     # Pass LLM config to the container via the nginx proxy.
     # The proxy injects the API key, so containers never see it.
