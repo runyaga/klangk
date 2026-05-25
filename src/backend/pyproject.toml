@@ -16,6 +16,8 @@ dependencies = [
     "logfire[fastapi]>=3.0.0",
     "pyyaml>=6.0",
     "httpx>=0.28.0",
+    "typer[all]>=0.12.0",
+    "tomli-w>=1.0.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=6.0.0",
@@ -25,10 +27,13 @@ dependencies = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--cov=bark_backend --cov-report=term-missing --no-cov-on-fail --cov-fail-under=100"
+addopts = "--capture=no --cov=bark_backend --cov-report=term-missing --no-cov-on-fail --cov-fail-under=100"
 
 [tool.ruff]
 line-length = 79
+
+[project.scripts]
+bark = "bark_backend.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["bark_backend"]
