@@ -2,21 +2,11 @@
 
 import asyncio
 import json
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from bark_backend.cli.config import CLIConfig
-
-
-@pytest.fixture(autouse=True)
-def reset_stdin_stdout():
-    orig_stdin = sys.stdin
-    orig_stdout = sys.stdout
-    yield
-    sys.stdin = orig_stdin
-    sys.stdout = orig_stdout
 
 
 class TestWsShell:
@@ -117,17 +107,14 @@ class TestRunShell:
             def flush(self):
                 pass
 
-        orig_stdout = sys.stdout
-        sys.stdout = CaptureWriter()
-        task = asyncio.create_task(_run_shell(ws, 80, 24))
+        fake_stdout = CaptureWriter()
+        task = asyncio.create_task(_run_shell(ws, 80, 24, stdout=fake_stdout))
         await asyncio.sleep(0.3)
         task.cancel()
         try:
             await task
         except asyncio.CancelledError:
             pass
-        finally:
-            sys.stdout = orig_stdout
 
         assert "raw-bytes" in "".join(captured)
 
@@ -185,50 +172,38 @@ class TestRunShell:
             ]
         )
 
-        sys.stdin = MagicMock()
-        sys.stdin.buffer = MagicMock()
-        sys.stdin.buffer.read = MagicMock(side_effect=BrokenPipeError)
-        ws.recv = AsyncMock(
-            side_effect=[
-                json.dumps(
-                    {
-                        "type": "event",
-                        "event": {
-                            "type": "CUSTOM",
-                            "name": "container_stopped",
-                            "value": {},
-                        },
-                    }
-                )
-            ]
-        )
-
-        task = asyncio.create_task(_run_shell(ws, 80, 24))
-        await asyncio.sleep(0.1)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        fake_stdin = MagicMock()
+        fake_stdin.fileno = MagicMock(return_value=0)
+        fake_stdin.read = MagicMock(side_effect=BrokenPipeError)
+        with patch(
+            "bark_backend.cli.client.select.select",
+            return_value=([0], [], []),
+        ):
+            task = asyncio.create_task(
+                _run_shell(ws, 80, 24, stdin=fake_stdin)
+            )
+            await asyncio.sleep(0.1)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     @pytest.mark.asyncio
-    async def test_resize_loop_sends_on_size_change(self):
+    async def test_resize_loop_sends_on_size_change(self, monkeypatch):
         """resize_loop detects size change and sends terminal_resize via _send_resize."""
         from bark_backend.cli import client as cli_client
-        from io import BytesIO, StringIO
+        from io import BytesIO
 
-        # Replace stdin with a non-blocking mock so stdin_loop exits fast.
-        fake_stdin = StringIO("")
-        sys.stdin = fake_stdin
-        sys.stdin.buffer = BytesIO(b"")
+        fake_buf = BytesIO(b"")
+        fake_buf.fileno = lambda: 0
 
         ws = AsyncMock()
         ws.send = AsyncMock()
 
-        # recv blocks until stop_event is set; we keep it alive long enough
-        # for resize_loop's 1s sleep to fire.
+        # stdout_loop recv blocks long enough for resize_loop to fire.
         async def slow_recv():
-            await asyncio.sleep(5.0)  # enough time for resize_loop's 1s check
+            await asyncio.sleep(5.0)
             return json.dumps(
                 {
                     "type": "event",
@@ -242,25 +217,28 @@ class TestRunShell:
 
         ws.recv = slow_recv
 
-        orig_fn = cli_client._get_terminal_size
         call_idx = [0]
 
         def cycling_size():
-            # First call = initial size (80,24). Second call = different size.
             call_idx[0] += 1
             return (120, 40) if call_idx[0] > 1 else (80, 24)
 
-        cli_client._get_terminal_size = cycling_size
+        monkeypatch.setattr(cli_client, "_get_terminal_size", cycling_size)
 
-        task = asyncio.create_task(cli_client._run_shell(ws, 80, 24))
-        await asyncio.sleep(2.5)  # resize_loop sleeps 1s, then sends resize
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        finally:
-            cli_client._get_terminal_size = orig_fn
+        # select returns empty so stdin_loop keeps looping without reading EOF
+        with patch(
+            "bark_backend.cli.client.select.select",
+            return_value=([], [], []),
+        ):
+            task = asyncio.create_task(
+                cli_client._run_shell(ws, 80, 24, stdin=fake_buf)
+            )
+            await asyncio.sleep(2.5)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         resize_msgs = [
             c[0][0]

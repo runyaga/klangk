@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from io import BytesIO, StringIO
+from io import BytesIO
 
 from bark_backend.cli.config import CLIConfig
 from bark_backend.cli.client import (
@@ -393,29 +393,31 @@ class TestRunShell:
         ws = AsyncMock()
         ws.send = AsyncMock()
         ws.recv = AsyncMock(
-            side_effect=[
-                json.dumps(
-                    {
-                        "type": "event",
-                        "event": {
-                            "type": "CUSTOM",
-                            "name": "container_stopped",
-                            "value": {},
-                        },
-                    }
-                )
-            ]
+            return_value=json.dumps(
+                {
+                    "type": "event",
+                    "event": {
+                        "type": "CUSTOM",
+                        "name": "container_stopped",
+                        "value": {},
+                    },
+                }
+            )
         )
 
-        sys.stdin = StringIO("x")
-        sys.stdin.buffer = BytesIO(b"x")
-        task = asyncio.create_task(_run_shell(ws, 80, 24))
-        await asyncio.sleep(0.2)
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        fake_buf = BytesIO(b"x")
+        fake_buf.fileno = lambda: 0
+        with patch(
+            "bark_backend.cli.client.select.select",
+            return_value=([0], [], []),
+        ):
+            task = asyncio.create_task(_run_shell(ws, 80, 24, stdin=fake_buf))
+            await asyncio.sleep(0.5)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         sent = [c[0][0] for c in ws.send.call_args_list]
         assert any("terminal_input" in s and '"x"' in s for s in sent)
@@ -450,12 +452,18 @@ class TestRunShell:
             def flush(self):
                 pass
 
-        sys.stdout = CaptureWriter()
-        sys.stdin = StringIO("")
-        sys.stdin.buffer = BytesIO(b"")
-        task = asyncio.create_task(_run_shell(ws, 80, 24))
-        await asyncio.sleep(0.3)
-        task.cancel()
+        fake_buf = BytesIO(b"")
+        fake_buf.fileno = lambda: 0
+        fake_stdout = CaptureWriter()
+        with patch(
+            "bark_backend.cli.client.select.select",
+            return_value=([0], [], []),
+        ):
+            task = asyncio.create_task(
+                _run_shell(ws, 80, 24, stdin=fake_buf, stdout=fake_stdout)
+            )
+            await asyncio.sleep(0.3)
+            task.cancel()
         try:
             await task
         except asyncio.CancelledError:

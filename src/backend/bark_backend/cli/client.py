@@ -4,9 +4,11 @@ from __future__ import annotations
 
 
 import asyncio
+import io
 import json
 import logging
 import os
+import select
 import sys
 import termios
 import tty
@@ -190,8 +192,22 @@ async def _ws_shell(
         await ws.send(json.dumps({"cmd": "terminal_stop"}))  # pragma: no cover
 
 
-async def _run_shell(ws, cols: int, rows: int) -> None:
-    """Run stdin/stdout forwarding loop with SIGWINCH support."""
+async def _run_shell(
+    ws,
+    cols: int,
+    rows: int,
+    stdin: io.RawIOBase | None = None,
+    stdout: io.TextIOBase | None = None,
+) -> None:
+    """Run stdin/stdout forwarding loop with SIGWINCH support.
+
+    stdin/stdout default to sys.stdin.buffer / sys.stdout when None.
+    Pass explicit streams in tests to avoid mutating globals.
+    """
+    if stdin is None:
+        stdin = sys.stdin.buffer
+    if stdout is None:
+        stdout = sys.stdout
     loop = asyncio.get_event_loop()
     stop_event = asyncio.Event()
     _current_cols = [cols]
@@ -209,23 +225,29 @@ async def _run_shell(ws, cols: int, rows: int) -> None:
         )
 
     async def stdin_loop() -> None:
-        try:
-            while not stop_event.is_set():
-                data = await loop.run_in_executor(
-                    None, sys.stdin.buffer.read, 1
+        fd = stdin.fileno()
+        while not stop_event.is_set():
+            # select() with a 0.2s timeout keeps us responsive to stop_event
+            # without burning CPU. When stop_event fires we exit within 0.2s.
+            ready, _, _ = await loop.run_in_executor(
+                None, lambda: select.select([fd], [], [], 0.2)
+            )
+            if not ready:
+                continue
+            try:
+                data = stdin.read(1)
+            except (OSError, io.UnsupportedOperation):  # pragma: no cover
+                return
+            if not data:  # EOF on stdin
+                return
+            await ws.send(
+                json.dumps(
+                    {
+                        "cmd": "terminal_input",
+                        "data": data.decode("utf-8", errors="replace"),
+                    }
                 )
-                if not data:
-                    break
-                await ws.send(
-                    json.dumps(
-                        {
-                            "cmd": "terminal_input",
-                            "data": data.decode("utf-8", errors="replace"),
-                        }
-                    )
-                )
-        except (BrokenPipeError, OSError):  # stdin closed mid-stream
-            pass
+            )
 
     async def stdout_loop() -> None:
         while not stop_event.is_set():
@@ -234,8 +256,8 @@ async def _run_shell(ws, cols: int, rows: int) -> None:
                 msg = msg.decode("utf-8", errors="replace")
             data = json.loads(msg)
             if data.get("type") == "terminal_output":
-                sys.stdout.write(data["data"])
-                sys.stdout.flush()
+                stdout.write(data["data"])
+                stdout.flush()
             elif data.get("type") == "event":
                 event = data.get("event", {})
                 if (
