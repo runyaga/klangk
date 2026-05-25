@@ -512,28 +512,3 @@ class ContainerRegistry:
 
 # Module-level singleton
 registry = ContainerRegistry()
-
-# Temporary aliases — will be removed as callsites are updated
-# to use registry.X directly.
-track_activity = registry.track_activity
-record_activity = registry.record_activity
-get_state = registry.get_state
-add_connection = registry.add_connection
-remove_connection = registry.remove_connection
-connection_count = registry.connection_count
-on_idle_stop = registry.on_idle_stop
-remove_idle_callback = registry.remove_idle_callback
-set_workspace_idle_timeout = registry.set_workspace_idle_timeout
-set_on_workspace_killed = registry.set_on_workspace_killed
-remove_state = registry.remove_state
-allocate_ports = registry.allocate_ports
-get_workspace_idle_timeout = registry.get_workspace_idle_timeout
-get_workspace_ports = registry.get_workspace_ports
-start_container = registry.start_container
-attach_container = registry.attach_container
-stop_and_remove_container = registry.stop_and_remove_container
-stop_user_containers = registry.stop_user_containers
-start_cleanup_loop = registry.start_cleanup_loop
-adopt_orphaned_containers = registry.adopt_orphaned_containers
-shutdown = registry.shutdown
-get_cleanup_wake = registry.get_cleanup_wake

@@ -469,7 +469,7 @@ class TestForwardTerminalOutput:
         t = _mock_terminal()
         state = _base_state()
         state["container_id"] = "ctr-fwd"
-        container_manager.track_activity("ctr-fwd", "ws-fwd")
+        container_manager.registry.track_activity("ctr-fwd", "ws-fwd")
 
         async def fake_output():
             yield "line1"
@@ -762,7 +762,7 @@ class TestCleanupConnection:
 
         # Simulate: one connection, shared Pi state
         container_manager.registry.track_activity("ctr-full", "ws-cleanup-1")
-        container_manager.add_connection("ws-cleanup-1")
+        container_manager.registry.add_connection("ws-cleanup-1")
         ws_handler._workspace_state["ws-cleanup-1"] = {
             "pi_client": pi,
             "event_task": asyncio.create_task(asyncio.sleep(10)),
@@ -802,8 +802,8 @@ class TestCleanupConnection:
 
         # Two connections
         container_manager.registry.track_activity("ctr-shared", "ws-cleanup-2")
-        container_manager.add_connection("ws-cleanup-2")
-        container_manager.add_connection("ws-cleanup-2")
+        container_manager.registry.add_connection("ws-cleanup-2")
+        container_manager.registry.add_connection("ws-cleanup-2")
         ws_handler._workspace_state["ws-cleanup-2"] = {
             "pi_client": pi,
             "event_task": asyncio.create_task(asyncio.sleep(10)),
@@ -844,7 +844,7 @@ class TestCleanupConnection:
         state = _base_state()
         state["container_id"] = "ctr-1"
         state["workspace_id"] = "ws-cleanup-3"
-        container_manager.add_connection("ws-cleanup-3")
+        container_manager.registry.add_connection("ws-cleanup-3")
         with patch.object(
             container_manager.registry,
             "stop_and_remove_container",
@@ -1380,7 +1380,9 @@ class TestStartWorkspaceContainer:
 
         # Second connection shares the same Pi client
         assert state2["pi_client"] is pi
-        assert container_manager.connection_count(workspace["id"]) == 2
+        assert (
+            container_manager.registry.connection_count(workspace["id"]) == 2
+        )
 
         # Cleanup
         ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
@@ -1591,7 +1593,7 @@ class TestHandleWebsocketDispatch:
             state["workspace_id"] = wid
             state["container_id"] = "cid-stop"
             state["pi_client"] = _mock_pi_client()
-            container_manager.add_connection(wid)
+            container_manager.registry.add_connection(wid)
 
         with (
             patch.object(

@@ -48,40 +48,40 @@ class TestActivityTracking:
         container_manager.registry.states.clear()
 
     def testtrack_activity(self):
-        container_manager.track_activity("cid-1", "ws-1")
+        container_manager.registry.track_activity("cid-1", "ws-1")
         assert "ws-1" in container_manager.registry.states
         state = container_manager.registry.states["ws-1"]
         assert state.container_id == "cid-1"
         assert state.last_activity <= time.time()
 
     def test_record_activity_updates_time(self):
-        container_manager.track_activity("cid-1", "ws-1")
+        container_manager.registry.track_activity("cid-1", "ws-1")
         old_time = container_manager.registry.states["ws-1"].last_activity
         time.sleep(0.01)
-        container_manager.record_activity("cid-1")
+        container_manager.registry.record_activity("cid-1")
         new_time = container_manager.registry.states["ws-1"].last_activity
         assert new_time > old_time
 
     def test_record_activity_unknown_container(self):
         # Should not raise
-        container_manager.record_activity("nonexistent")
+        container_manager.registry.record_activity("nonexistent")
         assert "nonexistent" not in container_manager.registry.states
 
     def testtrack_activity_overwrites(self):
-        container_manager.track_activity("cid-1", "ws-1")
-        container_manager.track_activity("cid-1", "ws-2")
+        container_manager.registry.track_activity("cid-1", "ws-1")
+        container_manager.registry.track_activity("cid-1", "ws-2")
         assert (
             container_manager.registry.states["ws-2"].container_id == "cid-1"
         )
 
     def test_get_state_returns_state(self):
-        container_manager.track_activity("cid-1", "ws-1")
-        state = container_manager.get_state("ws-1")
+        container_manager.registry.track_activity("cid-1", "ws-1")
+        state = container_manager.registry.get_state("ws-1")
         assert state is not None
         assert state.container_id == "cid-1"
 
     def test_get_state_returns_none_for_unknown(self):
-        assert container_manager.get_state("nonexistent") is None
+        assert container_manager.registry.get_state("nonexistent") is None
 
 
 def _noop_callback(ws):
@@ -97,7 +97,7 @@ class TestIdleCallbacks:
 
     def test_on_idle_stop_registers(self):
         container_manager.registry.track_activity("cid-1", "ws-1")
-        container_manager.on_idle_stop("ws-1", _noop_callback)
+        container_manager.registry.on_idle_stop("ws-1", _noop_callback)
         assert (
             _noop_callback
             in container_manager.registry.states["ws-1"].idle_callbacks
@@ -108,16 +108,16 @@ class TestIdleCallbacks:
             pass
 
         container_manager.registry.track_activity("cid-1", "ws-1")
-        container_manager.on_idle_stop("ws-1", _noop_callback)
-        container_manager.on_idle_stop("ws-1", cb2)
+        container_manager.registry.on_idle_stop("ws-1", _noop_callback)
+        container_manager.registry.on_idle_stop("ws-1", cb2)
         assert (
             len(container_manager.registry.states["ws-1"].idle_callbacks) == 2
         )
 
     def test_remove_idle_callback(self):
         container_manager.registry.track_activity("cid-1", "ws-1")
-        container_manager.on_idle_stop("ws-1", _noop_callback)
-        container_manager.remove_idle_callback("ws-1", _noop_callback)
+        container_manager.registry.on_idle_stop("ws-1", _noop_callback)
+        container_manager.registry.remove_idle_callback("ws-1", _noop_callback)
         assert (
             _noop_callback
             not in container_manager.registry.states["ws-1"].idle_callbacks
@@ -125,14 +125,16 @@ class TestIdleCallbacks:
 
     def test_remove_idle_callback_not_registered(self):
         container_manager.registry.track_activity("cid-1", "ws-1")
-        container_manager.remove_idle_callback("ws-1", _noop_callback)
+        container_manager.registry.remove_idle_callback("ws-1", _noop_callback)
         assert (
             _noop_callback
             not in container_manager.registry.states["ws-1"].idle_callbacks
         )
 
     def test_remove_idle_callback_unknown_workspace(self):
-        container_manager.remove_idle_callback("nonexistent", _noop_callback)
+        container_manager.registry.remove_idle_callback(
+            "nonexistent", _noop_callback
+        )
         assert "nonexistent" not in container_manager.registry.states
 
     def test_callbacks_per_workspace(self):
@@ -141,8 +143,8 @@ class TestIdleCallbacks:
 
         container_manager.registry.track_activity("cid-1", "ws-1")
         container_manager.registry.track_activity("cid-2", "ws-2")
-        container_manager.on_idle_stop("ws-1", _noop_callback)
-        container_manager.on_idle_stop("ws-2", cb2)
+        container_manager.registry.on_idle_stop("ws-1", _noop_callback)
+        container_manager.registry.on_idle_stop("ws-2", cb2)
         assert (
             _noop_callback
             in container_manager.registry.states["ws-1"].idle_callbacks
@@ -179,13 +181,15 @@ class TestPortAllocation:
         allocated = await user_store.find_and_allocate_ports(
             workspace["id"], 2, container_manager.PORT_RANGE_START
         )
-        retrieved = await container_manager.get_workspace_ports(
+        retrieved = await container_manager.registry.get_workspace_ports(
             workspace["id"]
         )
         assert retrieved == sorted(allocated)
 
     async def test_get_workspace_ports_empty(self, workspace):
-        ports = await container_manager.get_workspace_ports(workspace["id"])
+        ports = await container_manager.registry.get_workspace_ports(
+            workspace["id"]
+        )
         assert ports == []
 
 
@@ -240,7 +244,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            cid, status = await container_manager.start_container(
+            cid, status = await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -262,7 +266,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -293,7 +297,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -320,7 +324,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -341,7 +345,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            cid, status = await container_manager.start_container(
+            cid, status = await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -363,7 +367,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            cid, status = await container_manager.start_container(
+            cid, status = await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -386,7 +390,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            cid, status = await container_manager.start_container(
+            cid, status = await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -405,7 +409,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -430,7 +434,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -459,7 +463,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -483,14 +487,16 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
                 num_ports=3,
             )
         # Ports should have been allocated
-        ports = await container_manager.get_workspace_ports(workspace["id"])
+        ports = await container_manager.registry.get_workspace_ports(
+            workspace["id"]
+        )
         assert len(ports) == 3
 
     async def test_excess_ports_trimmed(self, workspace):
@@ -507,13 +513,15 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
                 num_ports=2,
             )
-        ports = await container_manager.get_workspace_ports(workspace["id"])
+        ports = await container_manager.registry.get_workspace_ports(
+            workspace["id"]
+        )
         assert len(ports) == 2
 
     async def test_container_config_structure(self, workspace):
@@ -526,7 +534,7 @@ class TestStartContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.start_container(
+            await container_manager.registry.start_container(
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
@@ -550,7 +558,7 @@ class TestAttachContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            stream = await container_manager.attach_container("cid")
+            stream = await container_manager.registry.attach_container("cid")
         mock_c.attach.assert_called_once_with(
             stdin=True, stdout=True, stderr=True, stream=True
         )
@@ -573,7 +581,7 @@ class TestStopContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_and_remove_container("cid")
+            await container_manager.registry.stop_and_remove_container("cid")
         mock_c.delete.assert_awaited()
         assert "ws" not in container_manager.registry.states
 
@@ -587,7 +595,7 @@ class TestStopContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_and_remove_container("cid")
+            await container_manager.registry.stop_and_remove_container("cid")
         # Should still remove from tracking
         assert "ws" not in container_manager.registry.states
 
@@ -608,7 +616,7 @@ class TestRemoveContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_and_remove_container("cid")
+            await container_manager.registry.stop_and_remove_container("cid")
         mock_c.delete.assert_awaited()
         mock_c.delete.assert_awaited_once_with(force=True)
         assert "ws" not in container_manager.registry.states
@@ -623,7 +631,7 @@ class TestRemoveContainer:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_and_remove_container("cid")
+            await container_manager.registry.stop_and_remove_container("cid")
         assert "ws" not in container_manager.registry.states
 
 
@@ -646,7 +654,7 @@ class TestStopUserContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_user_containers(user["id"])
+            await container_manager.registry.stop_user_containers(user["id"])
         mock_c.delete.assert_awaited()
         assert workspace["id"] not in container_manager.registry.states
 
@@ -665,7 +673,7 @@ class TestStopUserContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_user_containers(user["id"])
+            await container_manager.registry.stop_user_containers(user["id"])
 
         killed_cb.assert_awaited_once_with(workspace["id"])
         container_manager.registry.on_workspace_killed = old_cb
@@ -675,7 +683,7 @@ class TestStopUserContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.stop_user_containers(user["id"])
+            await container_manager.registry.stop_user_containers(user["id"])
         mock_docker.containers.get.assert_not_awaited()
 
 
@@ -701,7 +709,7 @@ class TestShutdown:
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
             container_manager.registry.docker = mock_docker
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         mock_c.delete.assert_awaited()
         assert "ws" not in container_manager.registry.states
         mock_docker.close.assert_awaited_once()
@@ -718,7 +726,7 @@ class TestShutdown:
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
             container_manager.registry.docker = mock_docker
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         orphan.delete.assert_awaited_once()
 
     async def test_shutdown_cancels_cleanup_task(self):
@@ -731,7 +739,7 @@ class TestShutdown:
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
             container_manager.registry.docker = mock_docker
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         mock_task.cancel.assert_called_once()
         assert container_manager.registry.cleanup_task is None
 
@@ -745,7 +753,7 @@ class TestShutdown:
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
             container_manager.registry.docker = mock_docker
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         # Should not raise
         mock_docker.close.assert_awaited_once()
 
@@ -756,7 +764,7 @@ class TestShutdown:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         assert container_manager.registry.cleanup_task is None
 
     async def test_shutdown_orphan_delete_error(self):
@@ -772,7 +780,7 @@ class TestShutdown:
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
             container_manager.registry.docker = mock_docker
-            await container_manager.shutdown()
+            await container_manager.registry.shutdown()
         # Should have attempted to delete and not raised
         orphan.delete.assert_awaited_once()
         mock_docker.close.assert_awaited_once()
@@ -918,7 +926,7 @@ class TestCleanupIdleContainers:
         async def on_idle(ws_id):
             callback_called.append(ws_id)
 
-        container_manager.on_idle_stop("ws-1", on_idle)
+        container_manager.registry.on_idle_stop("ws-1", on_idle)
 
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
@@ -949,7 +957,7 @@ class TestCleanupIdleContainers:
         async def bad_callback(ws_id):
             raise RuntimeError("callback broke")
 
-        container_manager.on_idle_stop("ws-1", bad_callback)
+        container_manager.registry.on_idle_stop("ws-1", bad_callback)
 
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
@@ -1062,14 +1070,14 @@ class TestStartCleanupLoop:
             container_manager.registry.cleanup_task = None
 
     async def test_start_creates_task(self):
-        container_manager.start_cleanup_loop()
+        container_manager.registry.start_cleanup_loop()
         assert container_manager.registry.cleanup_task is not None
         container_manager.registry.cleanup_task.cancel()
 
     async def test_start_idempotent(self):
-        container_manager.start_cleanup_loop()
+        container_manager.registry.start_cleanup_loop()
         task1 = container_manager.registry.cleanup_task
-        container_manager.start_cleanup_loop()
+        container_manager.registry.start_cleanup_loop()
         assert container_manager.registry.cleanup_task is task1
         container_manager.registry.cleanup_task.cancel()
 
@@ -1084,31 +1092,31 @@ class TestConnectionRefcount:
     def test_add_connection(self):
         ws_id = "refcount-test-1"
         container_manager.registry.track_activity("cid-1", ws_id)
-        assert container_manager.add_connection(ws_id) == 1
-        assert container_manager.add_connection(ws_id) == 2
-        assert container_manager.connection_count(ws_id) == 2
+        assert container_manager.registry.add_connection(ws_id) == 1
+        assert container_manager.registry.add_connection(ws_id) == 2
+        assert container_manager.registry.connection_count(ws_id) == 2
 
     def test_remove_connection_to_zero(self):
         ws_id = "refcount-test-2"
         container_manager.registry.track_activity("cid-2", ws_id)
-        container_manager.add_connection(ws_id)
-        assert container_manager.remove_connection(ws_id) == 0
-        assert container_manager.connection_count(ws_id) == 0
+        container_manager.registry.add_connection(ws_id)
+        assert container_manager.registry.remove_connection(ws_id) == 0
+        assert container_manager.registry.connection_count(ws_id) == 0
 
     def test_remove_connection_decrement(self):
         ws_id = "refcount-test-3"
         container_manager.registry.track_activity("cid-3", ws_id)
-        container_manager.add_connection(ws_id)
-        container_manager.add_connection(ws_id)
-        assert container_manager.remove_connection(ws_id) == 1
-        assert container_manager.connection_count(ws_id) == 1
+        container_manager.registry.add_connection(ws_id)
+        container_manager.registry.add_connection(ws_id)
+        assert container_manager.registry.remove_connection(ws_id) == 1
+        assert container_manager.registry.connection_count(ws_id) == 1
 
     def test_remove_connection_already_zero(self):
         ws_id = "refcount-test-4"
-        assert container_manager.remove_connection(ws_id) == 0
+        assert container_manager.registry.remove_connection(ws_id) == 0
 
     def test_connection_count_unknown(self):
-        assert container_manager.connection_count("nonexistent") == 0
+        assert container_manager.registry.connection_count("nonexistent") == 0
 
 
 class TestAdoptOrphanedContainers:
@@ -1131,7 +1139,7 @@ class TestAdoptOrphanedContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.adopt_orphaned_containers()
+            await container_manager.registry.adopt_orphaned_containers()
         assert "ws-orphan" in container_manager.registry.states
         assert (
             container_manager.registry.states["ws-orphan"].container_id
@@ -1147,7 +1155,7 @@ class TestAdoptOrphanedContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.adopt_orphaned_containers()
+            await container_manager.registry.adopt_orphaned_containers()
         # Should not have called show() since it's already tracked
         mock_container.show.assert_not_called()
 
@@ -1161,5 +1169,5 @@ class TestAdoptOrphanedContainers:
         with patch.object(
             container_manager.registry, "get_docker", return_value=mock_docker
         ):
-            await container_manager.adopt_orphaned_containers()
+            await container_manager.registry.adopt_orphaned_containers()
         # Should not raise

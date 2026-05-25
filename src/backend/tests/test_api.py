@@ -913,7 +913,10 @@ class TestSetIdleTimeout:
             container_manager.IDLE_TIMEOUT_SECONDS = 42
             assert container_manager.IDLE_TIMEOUT_SECONDS == 42
             # Per-workspace lookup falls back to global
-            assert container_manager.get_workspace_idle_timeout("any") == 42
+            assert (
+                container_manager.registry.get_workspace_idle_timeout("any")
+                == 42
+            )
         finally:
             container_manager.IDLE_TIMEOUT_SECONDS = original_timeout
 
@@ -929,12 +932,19 @@ class TestSetIdleTimeout:
         original_timeout = container_manager.IDLE_TIMEOUT_SECONDS
         try:
             container_manager.registry.track_activity("cid-test", "ws-test")
-            container_manager.set_workspace_idle_timeout("ws-test", 5)
-            assert container_manager.get_workspace_idle_timeout("ws-test") == 5
+            container_manager.registry.set_workspace_idle_timeout("ws-test", 5)
+            assert (
+                container_manager.registry.get_workspace_idle_timeout(
+                    "ws-test"
+                )
+                == 5
+            )
             assert container_manager.IDLE_TIMEOUT_SECONDS == original_timeout
             # Unknown workspace returns global default
             assert (
-                container_manager.get_workspace_idle_timeout("ws-other")
+                container_manager.registry.get_workspace_idle_timeout(
+                    "ws-other"
+                )
                 == original_timeout
             )
         finally:
@@ -944,7 +954,7 @@ class TestSetIdleTimeout:
         """Cleanup loop interval adapts when per-workspace timeouts exist."""
         try:
             container_manager.registry.track_activity("cid-fast", "ws-fast")
-            container_manager.set_workspace_idle_timeout("ws-fast", 6)
+            container_manager.registry.set_workspace_idle_timeout("ws-fast", 6)
             # With a 6s per-workspace timeout, the minimum is 6, so
             # the loop should sleep max(2, 6//2) = 3 seconds.
             state = container_manager.registry.states["ws-fast"]

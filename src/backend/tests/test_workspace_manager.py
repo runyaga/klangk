@@ -22,7 +22,7 @@ class TestCreateWorkspace:
 
     async def test_allocates_ports(self, user):
         ws = await workspace_manager.create_workspace(user["id"], "ported")
-        ports = await container_manager.get_workspace_ports(ws["id"])
+        ports = await container_manager.registry.get_workspace_ports(ws["id"])
         assert len(ports) == ws["num_ports"]
         assert all(p >= container_manager.PORT_RANGE_START for p in ports)
 
@@ -89,11 +89,15 @@ class TestDeleteWorkspace:
 
     async def test_delete_cascades_ports(self, user):
         ws = await workspace_manager.create_workspace(user["id"], "ported")
-        ports_before = await container_manager.get_workspace_ports(ws["id"])
+        ports_before = await container_manager.registry.get_workspace_ports(
+            ws["id"]
+        )
         assert len(ports_before) > 0
 
         await workspace_manager.delete_workspace(ws["id"], user["id"])
-        ports_after = await container_manager.get_workspace_ports(ws["id"])
+        ports_after = await container_manager.registry.get_workspace_ports(
+            ws["id"]
+        )
         assert ports_after == []
 
     async def test_delete_missing_dirs_ok(self, user):
