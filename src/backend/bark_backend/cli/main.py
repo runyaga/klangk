@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .auth import login, logout as do_logout
-from .client import BarkClient, WorkspaceNotFoundError, _ws_shell
+from .client import BarkClient, WorkspaceNotFoundError, _ws_exec, _ws_shell
 from .config import CLIConfig
 
 app = typer.Typer(
@@ -225,6 +225,47 @@ def shell(
     token = cfg.auth.token
     _err.print(f"Connecting to [bold]{ws.name}[/bold]...")
     asyncio.run(_ws_shell(ws_url, token, ws.id))
+
+
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+    }
+)
+def exec(
+    ctx: typer.Context,
+    workspace: str = typer.Argument(..., help="Workspace name"),
+) -> None:
+    """Run a command in a workspace container.
+
+    Also usable as an rsync transport: rsync -avz -e "bark exec" src/ ws:/dest/
+    """
+    cfg = _cfg()
+    _require_auth()
+
+    command = ctx.args
+    if not command:
+        _err.print("[red]No command specified[/red]")
+        raise typer.Exit(code=1)
+
+    client = _client()
+    try:
+        ws = client.resolve_workspace(workspace)
+    except WorkspaceNotFoundError:
+        _err.print(f"[red]No workspace named[/red] '{workspace}'")
+        raise typer.Exit(code=1) from None
+
+    server_url = cfg.server.url.rstrip("/")
+    if server_url.startswith("http://"):
+        ws_url = server_url.replace("http://", "ws://") + "/ws"
+    elif server_url.startswith("https://"):  # pragma: no cover
+        ws_url = server_url.replace("https://", "wss://") + "/ws"
+    else:  # pragma: no cover
+        ws_url = f"ws://{server_url}/ws"
+
+    exit_code = asyncio.run(_ws_exec(ws_url, cfg.auth.token, ws.id, command))
+    raise typer.Exit(code=exit_code)
 
 
 if __name__ == "__main__":  # pragma: no cover

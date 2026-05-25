@@ -34,6 +34,12 @@ from bark_backend.ws_handler import (
     cleanup_connection,
     send_error,
     handle_websocket,
+    handle_exec_start,
+    handle_exec_input,
+    handle_exec_close_stdin,
+    handle_exec_stop,
+    forward_exec_output,
+    stop_exec,
 )
 
 
@@ -1643,3 +1649,221 @@ class TestHandleWebsocket:
 
         ws.accept.assert_awaited_once()
         assert ws not in ws_handler._connections
+
+
+class TestExecHandlers:
+    async def test_exec_start_no_container(self):
+        ws = _mock_ws()
+        state = {"container_id": None, "exec_session": None, "exec_task": None}
+        await handle_exec_start(ws, state, {"command": ["ls"]})
+        assert state["exec_session"] is None
+
+    async def test_exec_start_no_command(self):
+        ws = _mock_ws()
+        state = {
+            "container_id": "cid",
+            "exec_session": None,
+            "exec_task": None,
+        }
+        await handle_exec_start(ws, state, {"command": []})
+        ws.send_json.assert_awaited()
+        assert "command" in ws.send_json.call_args[0][0].get("message", "")
+
+    async def test_exec_start_success(self):
+        ws = _mock_ws()
+        state = {
+            "container_id": "cid",
+            "exec_session": None,
+            "exec_task": None,
+        }
+        mock_session = AsyncMock()
+        mock_session.start = AsyncMock()
+
+        async def empty_output():
+            return
+            yield  # pragma: no cover
+
+        mock_session.output = empty_output
+        mock_session.returncode = 0
+        with patch(
+            "bark_backend.ws_handler.ExecSession",
+            return_value=mock_session,
+        ):
+            with patch.object(container_manager, "record_activity"):
+                await handle_exec_start(ws, state, {"command": ["ls"]})
+        assert state["exec_session"] is mock_session
+        assert state["exec_task"] is not None
+        state["exec_task"].cancel()
+        try:
+            await state["exec_task"]
+        except asyncio.CancelledError:
+            pass
+
+    async def test_exec_input_sends_data(self):
+        import base64
+
+        session = AsyncMock()
+        session.is_alive = True
+        state = {
+            "container_id": "cid",
+            "exec_session": session,
+        }
+        data = base64.b64encode(b"hello").decode()
+        with patch.object(container_manager, "record_activity"):
+            await handle_exec_input(state, {"data": data})
+        session.write.assert_awaited_with(b"hello")
+
+    async def test_exec_input_no_session(self):
+        state = {"container_id": "cid", "exec_session": None}
+        await handle_exec_input(state, {"data": ""})  # should not raise
+
+    async def test_exec_close_stdin(self):
+        session = AsyncMock()
+        state = {"exec_session": session}
+        await handle_exec_close_stdin(state)
+        session.close_stdin.assert_awaited_once()
+
+    async def test_exec_close_stdin_no_session(self):
+        state = {"exec_session": None}
+        await handle_exec_close_stdin(state)  # should not raise
+
+    async def test_exec_stop(self):
+        session = AsyncMock()
+        task = asyncio.create_task(asyncio.sleep(10))
+        state = {"exec_session": session, "exec_task": task}
+        await handle_exec_stop(state)
+        assert state["exec_session"] is None
+        assert state["exec_task"] is None
+
+    async def test_stop_exec_no_session(self):
+        state = {"exec_session": None, "exec_task": None}
+        await stop_exec(state)  # should not raise
+
+    async def test_forward_exec_output(self):
+        import base64
+
+        ws = _mock_ws()
+        session = AsyncMock()
+        session.returncode = 0
+
+        async def fake_output():
+            yield b"chunk1"
+            yield b"chunk2"
+
+        session.output = fake_output
+        state = {"container_id": "cid"}
+        with patch.object(container_manager, "record_activity"):
+            await forward_exec_output(ws, session, state)
+        calls = ws.send_json.call_args_list
+        output_calls = [
+            c for c in calls if c[0][0].get("type") == "exec_output"
+        ]
+        exit_calls = [c for c in calls if c[0][0].get("type") == "exec_exit"]
+        assert len(output_calls) == 2
+        assert base64.b64decode(output_calls[0][0][0]["data"]) == b"chunk1"
+        assert len(exit_calls) == 1
+        assert exit_calls[0][0][0]["code"] == 0
+
+    async def test_forward_exec_output_ws_error(self):
+        ws = _mock_ws()
+        session = AsyncMock()
+
+        async def fake_output():
+            yield b"data"
+
+        session.output = fake_output
+        ws.send_json = AsyncMock(side_effect=RuntimeError("ws dead"))
+        state = {"container_id": "cid"}
+        with patch.object(container_manager, "record_activity"):
+            await forward_exec_output(ws, session, state)
+        # Should not raise
+
+    async def test_cleanup_connection_stops_exec(self):
+        session = AsyncMock()
+        task = asyncio.create_task(asyncio.sleep(10))
+        state = {
+            "user": {"email": "test"},
+            "workspace_id": None,
+            "container_id": None,
+            "pi_client": None,
+            "event_task": None,
+            "terminal_session": None,
+            "terminal_task": None,
+            "exec_session": session,
+            "exec_task": task,
+            "_idle_cb": None,
+        }
+        ws = _mock_ws()
+        await cleanup_connection(ws, state)
+        session.stop.assert_awaited_once()
+        assert state["exec_session"] is None
+
+
+class TestExecDispatch:
+    async def test_dispatch_exec_start(self, user):
+        from bark_backend import auth as auth_mod
+
+        token = auth_mod.create_token(user["id"], user["email"])
+        ws = _mock_ws(query_params={"token": token})
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "exec_start", "command": ["ls"]}),
+                WebSocketDisconnect(),
+            ]
+        )
+        with patch.object(
+            ws_handler, "handle_exec_start", new_callable=AsyncMock
+        ) as mock:
+            await handle_websocket(ws)
+        mock.assert_awaited_once()
+
+    async def test_dispatch_exec_input(self, user):
+        from bark_backend import auth as auth_mod
+
+        token = auth_mod.create_token(user["id"], user["email"])
+        ws = _mock_ws(query_params={"token": token})
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "exec_input", "data": "AA=="}),
+                WebSocketDisconnect(),
+            ]
+        )
+        with patch.object(
+            ws_handler, "handle_exec_input", new_callable=AsyncMock
+        ) as mock:
+            await handle_websocket(ws)
+        mock.assert_awaited_once()
+
+    async def test_dispatch_exec_stop(self, user):
+        from bark_backend import auth as auth_mod
+
+        token = auth_mod.create_token(user["id"], user["email"])
+        ws = _mock_ws(query_params={"token": token})
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "exec_stop"}),
+                WebSocketDisconnect(),
+            ]
+        )
+        with patch.object(
+            ws_handler, "handle_exec_stop", new_callable=AsyncMock
+        ) as mock:
+            await handle_websocket(ws)
+        mock.assert_awaited_once()
+
+    async def test_dispatch_exec_close_stdin(self, user):
+        from bark_backend import auth as auth_mod
+
+        token = auth_mod.create_token(user["id"], user["email"])
+        ws = _mock_ws(query_params={"token": token})
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "exec_close_stdin"}),
+                WebSocketDisconnect(),
+            ]
+        )
+        with patch.object(
+            ws_handler, "handle_exec_close_stdin", new_callable=AsyncMock
+        ) as mock:
+            await handle_websocket(ws)
+        mock.assert_awaited_once()

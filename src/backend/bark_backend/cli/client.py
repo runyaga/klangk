@@ -282,3 +282,84 @@ async def _run_shell(
                 await _send_resize()
 
     await asyncio.gather(stdin_loop(), stdout_loop(), resize_loop())
+
+
+async def _ws_exec(
+    ws_url: str,
+    token: str,
+    workspace_id: str,
+    command: list[str],
+) -> int:
+    """Run a command in the container over WebSocket, piping stdin/stdout.
+
+    Returns the remote process exit code.
+    """
+    import base64
+
+    async with websockets.connect(
+        f"{ws_url}?token={token}", max_size=2**20
+    ) as ws:
+        # 1. Connect to workspace
+        await ws.send(
+            json.dumps(
+                {"cmd": "workspace_connect", "workspaceId": workspace_id}
+            )
+        )
+        resp = json.loads(await ws.recv())
+        if resp.get("type") != "workspace_ready":
+            raise ConnectionError(f"Connection failed: {resp}")
+
+        await ws.send(json.dumps({"cmd": "ui_ready"}))
+
+        # 2. Start exec session
+        await ws.send(json.dumps({"cmd": "exec_start", "command": command}))
+
+        # 3. Pipe stdin/stdout
+        loop = asyncio.get_event_loop()
+        exit_code = 1
+
+        async def stdin_forward() -> None:
+            while True:
+                data = await loop.run_in_executor(
+                    None, sys.stdin.buffer.read, 65536
+                )
+                if not data:
+                    await ws.send(json.dumps({"cmd": "exec_close_stdin"}))
+                    break
+                await ws.send(  # pragma: no cover
+                    json.dumps(
+                        {
+                            "cmd": "exec_input",
+                            "data": base64.b64encode(data).decode("ascii"),
+                        }
+                    )
+                )
+
+        async def stdout_forward() -> None:
+            nonlocal exit_code
+            while True:
+                msg = await ws.recv()
+                if isinstance(msg, bytes):  # pragma: no cover
+                    msg = msg.decode("utf-8", errors="replace")
+                data = json.loads(msg)
+                if data.get("type") == "exec_output":
+                    raw = base64.b64decode(data["data"])
+                    sys.stdout.buffer.write(raw)
+                    sys.stdout.buffer.flush()
+                elif data.get("type") == "exec_exit":
+                    exit_code = data.get("code", 0)
+                    break
+
+        # Run both, but stdout_forward drives the lifecycle —
+        # when it receives exec_exit, we're done.
+        stdout_task = asyncio.create_task(stdout_forward())
+        stdin_task = asyncio.create_task(stdin_forward())
+        await stdout_task
+        stdin_task.cancel()
+        try:
+            await stdin_task
+        except asyncio.CancelledError:  # pragma: no cover
+            pass
+
+        await ws.send(json.dumps({"cmd": "exec_stop"}))
+        return exit_code

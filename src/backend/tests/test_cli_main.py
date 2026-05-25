@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+import typer
 
 from bark_backend.cli.config import CLIConfig
 from bark_backend.cli.client import Workspace
@@ -457,3 +458,49 @@ class TestMainCLI:
                     main.shell("target-ws")
 
         client.resolve_workspace.assert_called_once_with("target-ws")
+
+    def test_exec_runs_command(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+        from bark_backend.cli.client import Workspace
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+
+        async def fake_exec(*args):
+            return 0
+
+        ctx = MagicMock()
+        ctx.args = ["ls", "-la"]
+        with patch.object(main, "_client", return_value=client):
+            with patch.object(main, "_ws_exec", fake_exec):
+                with pytest.raises(typer.Exit) as exc_info:
+                    main.exec(ctx, workspace="my-ws")
+                assert exc_info.value.exit_code == 0
+
+    def test_exec_no_command(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        ctx = MagicMock()
+        ctx.args = []
+        with pytest.raises(typer.Exit) as exc_info:
+            main.exec(ctx, workspace="my-ws")
+        assert exc_info.value.exit_code == 1
+
+    def test_exec_workspace_not_found(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+        from bark_backend.cli.client import WorkspaceNotFoundError
+
+        client = MagicMock()
+        client.resolve_workspace.side_effect = WorkspaceNotFoundError("nope")
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        ctx = MagicMock()
+        ctx.args = ["ls"]
+        with pytest.raises(typer.Exit) as exc_info:
+            main.exec(ctx, workspace="nope")
+        assert exc_info.value.exit_code == 1

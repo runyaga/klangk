@@ -10,6 +10,7 @@ from . import auth, container_manager, user_store, workspace_manager
 from .env_util import resolve_env_secret
 from .agui_translator import translate_event
 from .pi_rpc_client import PiRpcClient
+from .exec_session import ExecSession
 from .terminal_manager import TerminalSession
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,8 @@ async def handle_websocket(ws: WebSocket) -> None:
         "agent_running": False,
         "terminal_session": None,
         "terminal_task": None,
+        "exec_session": None,
+        "exec_task": None,
     }
     _connections[ws] = conn_state
 
@@ -90,6 +93,14 @@ async def handle_websocket(ws: WebSocket) -> None:
                 await handle_terminal_stop(conn_state)
             elif cmd == "restart_container":
                 await handle_restart_container(ws, conn_state)
+            elif cmd == "exec_start":
+                await handle_exec_start(ws, conn_state, msg)
+            elif cmd == "exec_input":
+                await handle_exec_input(conn_state, msg)
+            elif cmd == "exec_close_stdin":
+                await handle_exec_close_stdin(conn_state)
+            elif cmd == "exec_stop":
+                await handle_exec_stop(conn_state)
             else:
                 await send_error(ws, f"Unknown command: {cmd}")
 
@@ -553,6 +564,91 @@ async def handle_terminal_stop(state: dict) -> None:
     await stop_terminal(state)
 
 
+async def handle_exec_start(ws: WebSocket, state: dict, msg: dict) -> None:
+    container_id = state.get("container_id")
+    if not container_id:
+        return
+    await stop_exec(state)
+    command = msg.get("command", [])
+    if not command:
+        await send_error(ws, "exec_start requires a command list")
+        return
+    session = ExecSession(container_id)
+    await session.start(command)
+    state["exec_session"] = session
+    state["exec_task"] = asyncio.create_task(
+        forward_exec_output(ws, session, state)
+    )
+    container_manager.record_activity(container_id)
+
+
+async def handle_exec_input(state: dict, msg: dict) -> None:
+    session: ExecSession | None = state.get("exec_session")
+    if session is None or not session.is_alive:
+        return
+    container_manager.record_activity(state["container_id"])
+    import base64
+
+    raw = base64.b64decode(msg.get("data", ""))
+    await session.write(raw)
+
+
+async def handle_exec_close_stdin(state: dict) -> None:
+    session: ExecSession | None = state.get("exec_session")
+    if session is None:
+        return
+    await session.close_stdin()
+
+
+async def handle_exec_stop(state: dict) -> None:
+    await stop_exec(state)
+
+
+async def stop_exec(state: dict) -> None:
+    task = state.get("exec_task")
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        state["exec_task"] = None
+    session: ExecSession | None = state.get("exec_session")
+    if session:
+        await session.stop()
+        state["exec_session"] = None
+
+
+async def forward_exec_output(
+    ws: WebSocket, session: ExecSession, state: dict
+) -> None:
+    """Forward exec stdout to the client via WebSocket as base64."""
+    import base64
+
+    try:
+        async for data in session.output():
+            await ws.send_json(
+                {
+                    "type": "exec_output",
+                    "data": base64.b64encode(data).decode("ascii"),
+                }
+            )
+            container_id = state.get("container_id")
+            if container_id:
+                container_manager.record_activity(container_id)
+        # Process exited — send exit code
+        await ws.send_json(
+            {
+                "type": "exec_exit",
+                "code": session.returncode or 0,
+            }
+        )
+    except asyncio.CancelledError:  # pragma: no cover
+        raise
+    except (OSError, WebSocketDisconnect, RuntimeError, ConnectionError) as e:
+        logger.error("Exec output forwarding error: %s", e)
+
+
 async def stop_terminal(state: dict) -> None:
     task = state.get("terminal_task")
     if task:
@@ -702,6 +798,7 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
         await pi_client.disconnect()
 
     await stop_terminal(state)
+    await stop_exec(state)
 
     # Stop the container on disconnect. The container will be recreated
     # on the next connection (page refresh, navigate back, etc.).

@@ -314,3 +314,80 @@ class TestClientLines:
             with patch.object(client, "delete", return_value=del_resp):
                 with pytest.raises(SystemExit):
                     client.delete_workspace("ws1")
+
+
+class TestWsExec:
+    @pytest.mark.asyncio
+    async def test_ws_exec_success(self):
+        import base64
+
+        from bark_backend.cli.client import _ws_exec
+
+        ws_mock = MagicMock()
+
+        async def fake_enter(self):
+            return ws_mock
+
+        async def fake_exit(self, *args):
+            return None
+
+        ws_mock.__aenter__ = fake_enter
+        ws_mock.__aexit__ = fake_exit
+        ws_mock.send = AsyncMock()
+
+        output_chunk = base64.b64encode(b"file-list").decode()
+        ws_mock.recv = AsyncMock(
+            side_effect=[
+                json.dumps({"type": "workspace_ready", "workspaceId": "ws1"}),
+                json.dumps({"type": "exec_output", "data": output_chunk}),
+                json.dumps({"type": "exec_exit", "code": 0}),
+            ]
+        )
+
+        import sys
+        from io import BytesIO
+
+        orig_stdin = sys.stdin
+        orig_stdout_buf = sys.stdout.buffer
+        sys.stdin = MagicMock()
+        sys.stdin.buffer = BytesIO(b"")
+        sys.stdin.buffer.fileno = lambda: 0
+
+        captured = BytesIO()
+        sys.stdout = MagicMock()
+        sys.stdout.buffer = captured
+
+        try:
+            with patch("websockets.connect", return_value=ws_mock):
+                code = await _ws_exec(
+                    "ws://localhost/ws", "token", "ws1", ["ls"]
+                )
+        finally:
+            sys.stdin = orig_stdin
+            sys.stdout.buffer = orig_stdout_buf
+
+        assert code == 0
+        assert b"file-list" in captured.getvalue()
+
+    @pytest.mark.asyncio
+    async def test_ws_exec_connection_failure(self):
+        from bark_backend.cli.client import _ws_exec
+
+        ws_mock = MagicMock()
+
+        async def fake_enter(self):
+            return ws_mock
+
+        async def fake_exit(self, *args):
+            return None
+
+        ws_mock.__aenter__ = fake_enter
+        ws_mock.__aexit__ = fake_exit
+        ws_mock.recv = AsyncMock(
+            return_value=json.dumps({"type": "error", "message": "bad"})
+        )
+        ws_mock.send = AsyncMock()
+
+        with patch("websockets.connect", return_value=ws_mock):
+            with pytest.raises(ConnectionError):
+                await _ws_exec("ws://localhost/ws", "token", "ws1", ["ls"])
