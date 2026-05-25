@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Active connections: ws -> {user, workspace_id, container_id, ...}
 _connections: dict[WebSocket, dict] = {}
-# Shared per-workspace state: workspace_id -> {pi_client, event_task}
+# Shared per-workspace state: workspace_id -> {pi_client, event_task, subscribers}
 # Owned by the first connection, cleaned up by the last.
+# subscribers is a set of WebSockets that receive Pi AG-UI events.
 _workspace_state: dict[str, dict] = {}
 
 
@@ -203,16 +204,22 @@ async def start_workspace_container(
 
         ws_state = {
             "pi_client": pi_client,
+            "container_id": container_id,
+            "agent_running": False,
+            "subscribers": {ws},
             "event_task": asyncio.create_task(
-                forward_events(ws, pi_client, workspace_id, state)
+                forward_events(pi_client, workspace_id)
             ),
         }
         _workspace_state[workspace_id] = ws_state
         state["pi_client"] = pi_client
     else:
-        # Share the Pi client from the first connection
+        # Share the Pi client and subscribe to events
         ws_state = _workspace_state.get(workspace_id, {})
         state["pi_client"] = ws_state.get("pi_client")
+        subscribers = ws_state.get("subscribers")
+        if subscribers is not None:
+            subscribers.add(ws)
 
     # Register idle timeout notification (per-connection)
     async def on_idle(wid: str) -> None:
@@ -335,7 +342,8 @@ async def handle_prompt(ws: WebSocket, state: dict, msg: dict) -> None:
         if pi_client is None or not pi_client.is_alive:
             raise RuntimeError("Pi client is dead or missing")
         container_manager.record_activity(state["container_id"])
-        is_queued = state.get("agent_running", False)
+        ws_state = _workspace_state.get(workspace_id, {})
+        is_queued = ws_state.get("agent_running", False)
         if workspace_id:
             await user_store.save_message(
                 workspace_id, "user", text, is_queued=is_queued
@@ -720,10 +728,26 @@ async def forward_terminal_output(
             pass
 
 
-async def forward_events(
-    ws: WebSocket, pi_client: PiRpcClient, workspace_id: str, state: dict
-) -> None:
-    """Forward Pi RPC events as AG-UI events over WebSocket, saving to history."""
+async def _broadcast(workspace_id: str, message: dict) -> None:
+    """Send a message to all subscribers for a workspace, removing dead ones."""
+    ws_state = _workspace_state.get(workspace_id)
+    if not ws_state:  # pragma: no cover
+        return
+    subscribers = ws_state.get("subscribers")
+    if not subscribers:  # pragma: no cover
+        return
+    dead = []
+    for sub_ws in list(subscribers):
+        try:
+            await sub_ws.send_json(message)
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
+            dead.append(sub_ws)
+    for sub_ws in dead:
+        subscribers.discard(sub_ws)
+
+
+async def forward_events(pi_client: PiRpcClient, workspace_id: str) -> None:
+    """Forward Pi RPC events as AG-UI events to all workspace subscribers."""
     assistant_text = ""
     current_tool_name = ""
     current_tool_args = ""
@@ -742,18 +766,26 @@ async def forward_events(
                 )
             agui_events = translate_event(pi_event, workspace_id)
             for agui_event in agui_events:
-                await ws.send_json({"type": "event", "event": agui_event})
+                await _broadcast(
+                    workspace_id,
+                    {"type": "event", "event": agui_event},
+                )
+
+                etype = agui_event.get("type", "")
 
                 # Track agent running state
-                etype = agui_event.get("type", "")
                 if etype == "RUN_STARTED":
-                    state["agent_running"] = True
+                    ws_state = _workspace_state.get(workspace_id, {})
+                    ws_state["agent_running"] = True
                 elif etype in ("RUN_FINISHED", "RUN_ERROR"):
-                    state["agent_running"] = False
+                    ws_state = _workspace_state.get(workspace_id, {})
+                    ws_state["agent_running"] = False
 
                 # Keep container alive while events are flowing
-                if state.get("container_id"):
-                    container_manager.record_activity(state["container_id"])
+                ws_state = _workspace_state.get(workspace_id, {})
+                cid = ws_state.get("container_id")
+                if cid:
+                    container_manager.record_activity(cid)
 
                 # Accumulate and save to history
                 if etype == "TEXT_MESSAGE_CONTENT":
@@ -784,7 +816,9 @@ async def forward_events(
                         "error",
                         agui_event.get("message", "Unknown error"),
                     )
-    except (OSError, WebSocketDisconnect, RuntimeError, ConnectionError) as e:
+    except asyncio.CancelledError:  # pragma: no cover
+        raise
+    except (OSError, RuntimeError, ConnectionError) as e:  # pragma: no cover
         logger.error("Event forwarding error for %s: %s", workspace_id, e)
     finally:
         logger.info(
@@ -804,6 +838,12 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
 
     await stop_terminal(state)
     await stop_exec(state)
+
+    # Remove this WebSocket from event subscribers
+    if workspace_id and workspace_id in _workspace_state:
+        subscribers = _workspace_state[workspace_id].get("subscribers")
+        if subscribers is not None:  # pragma: no cover
+            subscribers.discard(ws)
 
     # Decrement connection refcount. Only the last connection to disconnect
     # kills Pi and (optionally) destroys the container.

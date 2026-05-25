@@ -512,13 +512,28 @@ class TestForwardTerminalOutput:
 # --- forward_events ---
 
 
+def _setup_workspace_state(workspace_id, ws, pi, container_id="cid-1"):
+    """Helper to set up _workspace_state for forward_events tests."""
+    ws_handler._workspace_state[workspace_id] = {
+        "pi_client": pi,
+        "container_id": container_id,
+        "agent_running": False,
+        "subscribers": {ws},
+    }
+
+
+def _teardown_workspace_state(workspace_id):
+    ws_handler._workspace_state.pop(workspace_id, None)
+    container_manager._containers.pop(workspace_id, None)
+
+
 class TestForwardEvents:
     async def test_forwards_pi_events(self, db):
         ws = _mock_ws()
         pi = _mock_pi_client()
         user = await user_store.create_user("u", "h")
         workspace = await user_store.create_workspace(user["id"], "ws")
-        state = _base_state(user=user)
+        _setup_workspace_state(workspace["id"], ws, pi)
 
         events = [
             {"type": "agent_start"},
@@ -540,18 +555,19 @@ class TestForwardEvents:
                 yield e
 
         pi.events = fake_events
-
-        await forward_events(ws, pi, workspace["id"], state)
+        await forward_events(pi, workspace["id"])
 
         assert ws.send_json.call_count >= 5
-        assert state["agent_running"] is False
+        ws_state = ws_handler._workspace_state.get(workspace["id"], {})
+        assert ws_state.get("agent_running") is False
+        _teardown_workspace_state(workspace["id"])
 
     async def test_saves_assistant_text(self, db):
         ws = _mock_ws()
         pi = _mock_pi_client()
         user = await user_store.create_user("u", "h")
         workspace = await user_store.create_workspace(user["id"], "ws")
-        state = _base_state(user=user)
+        _setup_workspace_state(workspace["id"], ws, pi)
 
         events = [
             {"type": "message_start", "message": {"id": "m1"}},
@@ -571,17 +587,18 @@ class TestForwardEvents:
                 yield e
 
         pi.events = fake_events
-        await forward_events(ws, pi, workspace["id"], state)
+        await forward_events(pi, workspace["id"])
 
         msgs = await user_store.get_messages(workspace["id"])
         assert any(m["content"] == "hello world" for m in msgs)
+        _teardown_workspace_state(workspace["id"])
 
     async def test_saves_tool_call(self, db):
         ws = _mock_ws()
         pi = _mock_pi_client()
         user = await user_store.create_user("u", "h")
         workspace = await user_store.create_workspace(user["id"], "ws")
-        state = _base_state(user=user)
+        _setup_workspace_state(workspace["id"], ws, pi)
 
         events = [
             {
@@ -603,19 +620,20 @@ class TestForwardEvents:
                 yield e
 
         pi.events = fake_events
-        await forward_events(ws, pi, workspace["id"], state)
+        await forward_events(pi, workspace["id"])
 
         msgs = await user_store.get_messages(workspace["id"])
         tool_msgs = [m for m in msgs if m["entry_type"] == "tool_call"]
         assert len(tool_msgs) == 1
         assert tool_msgs[0]["content"] == "bash"
+        _teardown_workspace_state(workspace["id"])
 
     async def test_saves_error(self, db):
         ws = _mock_ws()
         pi = _mock_pi_client()
         user = await user_store.create_user("u", "h")
         workspace = await user_store.create_workspace(user["id"], "ws")
-        state = _base_state(user=user)
+        _setup_workspace_state(workspace["id"], ws, pi)
 
         events = [{"type": "error", "message": "something broke", "code": 500}]
 
@@ -624,56 +642,81 @@ class TestForwardEvents:
                 yield e
 
         pi.events = fake_events
-        await forward_events(ws, pi, workspace["id"], state)
+        await forward_events(pi, workspace["id"])
 
         msgs = await user_store.get_messages(workspace["id"])
         assert any(m["entry_type"] == "error" for m in msgs)
+        _teardown_workspace_state(workspace["id"])
 
     async def test_tracks_agent_running(self):
         ws = _mock_ws()
         pi = _mock_pi_client()
-        state = _base_state()
+        _setup_workspace_state("ws-track", ws, pi)
 
         async def fake_events():
             yield {"type": "agent_start"}
             yield {"type": "agent_end", "messages": []}
 
         pi.events = fake_events
-        await forward_events(ws, pi, "ws-1", state)
+        await forward_events(pi, "ws-track")
 
-        assert state["agent_running"] is False
+        ws_state = ws_handler._workspace_state.get("ws-track", {})
+        assert ws_state.get("agent_running") is False
+        _teardown_workspace_state("ws-track")
 
     async def test_records_activity_on_events(self):
         ws = _mock_ws()
         pi = _mock_pi_client()
-        state = _base_state()
-        state["container_id"] = "cid-1"
-        container_manager._containers["cid-1"] = {
+        _setup_workspace_state("ws-activity", ws, pi, container_id="cid-act")
+        container_manager._containers["cid-act"] = {
             "last_activity": 0,
-            "workspace_id": "ws-1",
+            "workspace_id": "ws-activity",
         }
 
         async def fake_events():
             yield {"type": "agent_start"}
 
         pi.events = fake_events
-        await forward_events(ws, pi, "ws-1", state)
+        await forward_events(pi, "ws-activity")
 
-        assert container_manager._containers["cid-1"]["last_activity"] > 0
+        assert container_manager._containers["cid-act"]["last_activity"] > 0
+        _teardown_workspace_state("ws-activity")
+        container_manager._containers.pop("cid-act", None)
 
-    async def test_ws_error_logged(self):
+    async def test_ws_error_removes_dead_subscriber(self):
         ws = _mock_ws()
         ws.send_json = AsyncMock(side_effect=RuntimeError("ws closed"))
         pi = _mock_pi_client()
-        state = _base_state()
+        _setup_workspace_state("ws-dead", ws, pi)
 
         async def fake_events():
             yield {"type": "agent_start"}
 
         pi.events = fake_events
-        await forward_events(ws, pi, "ws-1", state)
+        await forward_events(pi, "ws-dead")
 
-        ws.send_json.assert_awaited_once()
+        # Dead subscriber should be removed
+        ws_state = ws_handler._workspace_state.get("ws-dead", {})
+        assert ws not in ws_state.get("subscribers", set())
+        _teardown_workspace_state("ws-dead")
+
+    async def test_broadcasts_to_multiple_subscribers(self):
+        ws1 = _mock_ws()
+        ws2 = _mock_ws()
+        pi = _mock_pi_client()
+        _setup_workspace_state("ws-multi", ws1, pi)
+        ws_handler._workspace_state["ws-multi"]["subscribers"].add(ws2)
+
+        async def fake_events():
+            yield {"type": "agent_start"}
+
+        pi.events = fake_events
+        await forward_events(pi, "ws-multi")
+
+        # Both subscribers should have received the event
+        assert ws1.send_json.call_count >= 1
+        assert ws2.send_json.call_count >= 1
+        _teardown_workspace_state("ws-multi")
 
 
 # --- cleanup_connection ---
@@ -834,7 +877,9 @@ class TestHandlePrompt:
         state["pi_client"] = pi
         state["workspace_id"] = workspace["id"]
         state["container_id"] = "cid"
-        state["agent_running"] = True
+        ws_handler._workspace_state[workspace["id"]] = {
+            "agent_running": True,
+        }
         container_manager._containers["cid"] = {
             "last_activity": 0,
             "workspace_id": workspace["id"],
@@ -852,6 +897,7 @@ class TestHandlePrompt:
         ]
         assert len(queued_events) == 1
         container_manager._containers.pop("cid", None)
+        ws_handler._workspace_state.pop(workspace["id"], None)
 
     async def test_prompt_auto_restart(self, db):
         ws = _mock_ws()
