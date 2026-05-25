@@ -46,13 +46,13 @@ Add to `pyproject.toml`:
 | --------------------------- | ---------------------------------------------------------------------------- |
 | `bark login [--server URL]` | Prompt for email/password, store JWT in `~/.config/bark/cli.toml`            |
 | `bark logout`               | Clear stored token                                                           |
-| `bark workspaces`           | List workspaces (GET /workspaces)                                            |
-| `bark create NAME`          | Create a workspace                                                           |
-| `bark delete NAME`          | Delete a workspace                                                           |
-| `bark shell [WORKSPACE]`    | **Main command.** Connect to workspace, drop into bash inside the container. |
-| `bark status`               | Show connection info (server, user, active workspaces)                       |
+| `bark status`               | Show connection info (server, user, login status)                            |
+| `bark ws list`              | List workspaces (GET /workspaces)                                            |
+| `bark ws create NAME`       | Create a workspace                                                           |
+| `bark ws delete NAME`       | Delete a workspace                                                           |
+| `bark ws shell [WORKSPACE]` | **Main command.** Connect to workspace, drop into bash inside the container. |
 
-## `bark shell` — The Core Flow
+## `bark ws shell` — The Core Flow
 
 1. Resolve workspace by name via REST API (GET /workspaces, match by name)
 2. Open WebSocket to `ws://<server>/ws?token=<jwt>`
@@ -148,7 +148,7 @@ email = "admin"
 
 ## Key Files to Reference
 
-- `src/backend/bark_backend/terminal_manager.py` — PTY session over `docker exec`, the backend half of what `bark shell` connects to
+- `src/backend/bark_backend/terminal_manager.py` — PTY session over `docker exec`, the backend half of what `bark ws shell` connects to
 - `src/backend/bark_backend/ws_handler.py` — WebSocket message handling, `terminal_start`/`terminal_input`/`terminal_output`/`terminal_resize`/`terminal_stop` protocol
 - `src/frontend/lib/agui/agui_client.dart` — WebSocket command shapes (reference for client.py)
 - `src/frontend/lib/terminal/container_terminal.dart` — Flutter terminal implementation (reference for how the web UI does it)
@@ -158,10 +158,10 @@ email = "admin"
 1. `devenv shell -- test-backend` — all existing + new tests pass
 2. Start Bark normally (`devenv up`), then in another terminal:
    - `bark login --server http://localhost:8997` with admin/admin
-   - `bark workspaces` — lists workspaces
-   - `bark create cli-test` — creates a workspace
-   - `bark shell cli-test` — drops into bash inside container
+   - `bark ws list` — lists workspaces
+   - `bark ws create cli-test` — creates a workspace
+   - `bark ws shell cli-test` — drops into bash inside container
    - Verify: `ls /work` shows workspace files, `git status` works, `pi` is available
    - Ctrl+D exits cleanly, terminal is restored
-   - `bark delete cli-test` — cleans up
-3. Resize terminal window during `bark shell` — verify the shell adapts
+   - `bark ws delete cli-test` — cleans up
+3. Resize terminal window during `bark ws shell` — verify the shell adapts
