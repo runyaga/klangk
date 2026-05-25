@@ -56,9 +56,11 @@ class TestMainCLI:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "new-token"}
         with patch("httpx.post", return_value=mock_resp):
-            with patch("builtins.input", return_value="u@test.com"):
-                with patch("getpass.getpass", return_value="pw"):
-                    login_cmd("http://localhost:8997")
+            with patch(
+                "bark_backend.cli.auth.Prompt.ask",
+                side_effect=["u@test.com", "pw"],
+            ):
+                login_cmd("http://localhost:8997")
         cfg = CLIConfig.load()
         assert cfg.auth.token == "new-token"
         assert cfg.auth.email == "u@test.com"

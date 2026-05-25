@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 
-import getpass
 import logging
-import readline  # noqa: F401 — enables line editing for input()
 
 import httpx
+from rich.prompt import Prompt
 
 from .config import CLIConfig
 
 
 def login(server_url: str) -> None:
     """Prompt for credentials, store JWT in config."""
-    email = input("Email: ").strip()
-    password = getpass.getpass("Password: ")
+    email = Prompt.ask("[bold]Email[/bold]")
+    password = Prompt.ask("[bold]Password[/bold]", password=True)
 
     resp = httpx.post(
         f"{server_url}/auth/login",

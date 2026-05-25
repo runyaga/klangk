@@ -95,11 +95,13 @@ class TestAuth:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "jwt123"}
         with patch("httpx.post", return_value=mock_resp):
-            with patch("builtins.input", return_value="u@test.com"):
-                with patch("getpass.getpass", return_value="pass123"):
-                    from bark_backend.cli import auth
+            with patch(
+                "bark_backend.cli.auth.Prompt.ask",
+                side_effect=["u@test.com", "pass123"],
+            ):
+                from bark_backend.cli import auth
 
-                    auth.login("http://localhost:8997")
+                auth.login("http://localhost:8997")
         cfg = CLIConfig.load()
         assert cfg.auth.token == "jwt123"
         assert cfg.auth.email == "u@test.com"
@@ -113,12 +115,14 @@ class TestAuth:
         mock_resp.status_code = 401
         mock_resp.json.return_value = {"detail": "Bad credentials"}
         with patch("httpx.post", return_value=mock_resp):
-            with patch("builtins.input", return_value="u@test.com"):
-                with patch("getpass.getpass", return_value="wrong"):
-                    from bark_backend.cli import auth
+            with patch(
+                "bark_backend.cli.auth.Prompt.ask",
+                side_effect=["u@test.com", "wrong"],
+            ):
+                from bark_backend.cli import auth
 
-                    with pytest.raises(SystemExit):
-                        auth.login("http://localhost:8997")
+                with pytest.raises(SystemExit):
+                    auth.login("http://localhost:8997")
 
     def test_logout_clears_token(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
@@ -520,11 +524,13 @@ class TestMisc:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "jwt"}
         with patch("httpx.post", return_value=mock_resp):
-            with patch("builtins.input", return_value="admin@example.com"):
-                with patch("getpass.getpass", return_value="pw"):
-                    from bark_backend.cli import auth
+            with patch(
+                "bark_backend.cli.auth.Prompt.ask",
+                side_effect=["admin@example.com", "pw"],
+            ):
+                from bark_backend.cli import auth
 
-                    auth.login("http://localhost:8997")
+                auth.login("http://localhost:8997")
         cfg = CLIConfig.load()
         assert cfg.auth.email == "admin@example.com"
         assert cfg.auth.token == "jwt"
