@@ -289,6 +289,15 @@ async def stop_user_containers(user_id: str) -> None:
     for ws in workspaces:
         if ws["container_id"]:
             await stop_and_remove_container(ws["container_id"])
+            if _on_workspace_killed:
+                try:
+                    await _on_workspace_killed(ws["id"])
+                except Exception as e:  # pragma: no cover
+                    logger.error(
+                        "Workspace killed callback error for %s: %s",
+                        ws["id"],
+                        e,
+                    )
 
 
 def track_activity(container_id: str, workspace_id: str) -> None:

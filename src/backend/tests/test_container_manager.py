@@ -625,6 +625,29 @@ class TestStopUserContainers:
         mock_c.delete.assert_awaited()
         assert "cid" not in container_manager._containers
 
+    async def test_stop_user_calls_workspace_killed(self, user, workspace):
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.get = AsyncMock(return_value=mock_c)
+
+        await user_store.update_workspace_container(workspace["id"], "cid")
+        container_manager._containers["cid"] = {
+            "last_activity": time.time(),
+            "workspace_id": workspace["id"],
+        }
+
+        killed_cb = AsyncMock()
+        old_cb = container_manager._on_workspace_killed
+        container_manager._on_workspace_killed = killed_cb
+
+        with patch.object(
+            container_manager, "get_docker", return_value=mock_docker
+        ):
+            await container_manager.stop_user_containers(user["id"])
+
+        killed_cb.assert_awaited_once_with(workspace["id"])
+        container_manager._on_workspace_killed = old_cb
+
     async def test_stop_user_no_containers(self, user):
         mock_docker = _mock_docker()
         with patch.object(
