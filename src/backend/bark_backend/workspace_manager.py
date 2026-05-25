@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import shutil
 from pathlib import Path
@@ -19,8 +20,6 @@ async def archive_user_data(user_id: str, email: str) -> Path | None:
     Returns the archive path, or None if the user had no data directory.
     The archive is saved to $BARK_DATA_DIR/workspaces/{user_id}-{email}.tar.xz
     """
-    import asyncio
-
     user_dir = WORKSPACES_ROOT / user_id
     if not user_dir.exists():
         return None
@@ -56,7 +55,7 @@ async def archive_user_data(user_id: str, email: str) -> Path | None:
             return None
         logger.info("Archived user %s data to %s", email, archive_path)
         # Remove the original directory after successful archive
-        shutil.rmtree(user_dir)
+        await asyncio.to_thread(shutil.rmtree, user_dir)
         return archive_path
     except (asyncio.TimeoutError, OSError) as e:
         logger.error("Failed to archive user %s data: %s", email, e)
@@ -85,8 +84,8 @@ async def create_workspace(user_id: str, name: str) -> dict:
     except Exception:
         # Clean up the DB record and directories on port allocation failure
         await user_store.delete_workspace(workspace["id"], user_id)
-        shutil.rmtree(path, ignore_errors=True)
-        shutil.rmtree(home, ignore_errors=True)
+        await asyncio.to_thread(shutil.rmtree, path, True)
+        await asyncio.to_thread(shutil.rmtree, home, True)
         raise
     return workspace
 
@@ -109,7 +108,7 @@ async def delete_workspace(workspace_id: str, user_id: str) -> bool:
         for dir_fn in (workspace_path, home_path):
             p = dir_fn(user_id, workspace_id)
             if p.exists():
-                shutil.rmtree(p, ignore_errors=True)
+                await asyncio.to_thread(shutil.rmtree, p, True)
     return deleted
 
 
