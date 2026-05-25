@@ -1,0 +1,52 @@
+"""CLI configuration storage (~/.config/bark/cli.toml)."""
+
+from __future__ import annotations
+
+
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+
+_CONFIG_PATH = Path.home() / ".config" / "bark" / "cli.toml"
+
+
+@dataclass
+class ServerConfig:
+    url: str = "http://localhost:8997"
+
+
+@dataclass
+class AuthConfig:
+    token: str | None = None
+    email: str | None = None
+
+
+@dataclass
+class CLIConfig:
+    server: ServerConfig = field(default_factory=ServerConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
+
+    @classmethod
+    def load(cls) -> CLIConfig:
+        if not _CONFIG_PATH.exists():
+            return cls()
+        text = _CONFIG_PATH.read_text()
+        data = tomllib.loads(text)
+        return cls(
+            server=ServerConfig(
+                url=data.get("server", {}).get("url", "http://localhost:8997")
+            ),
+            auth=AuthConfig(
+                token=data.get("auth", {}).get("token"),
+                email=data.get("auth", {}).get("email"),
+            ),
+        )
+
+    def save(self) -> None:
+        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        content = f'[server]\nurl = "{self.server.url}"\n\n[auth]\n'
+        if self.auth.token:
+            content += f'token = "{self.auth.token}"\n'
+        if self.auth.email:
+            content += f'email = "{self.auth.email}"\n'
+        _CONFIG_PATH.write_text(content)

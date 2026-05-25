@@ -1,0 +1,517 @@
+"""Tests for the bark CLI."""
+
+import asyncio
+import json
+import os
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from io import BytesIO, StringIO
+
+from bark_backend.cli.config import CLIConfig
+from bark_backend.cli.client import AuthError, BarkClient, Workspace
+
+
+# --- Config tests ---
+
+
+class TestCLIConfig:
+    def test_load_empty(self, monkeypatch):
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH",
+            Path("/nonexistent/config.toml"),
+        )
+        cfg = CLIConfig.load()
+        assert cfg.server.url == "http://localhost:8997"
+        assert cfg.auth.token is None
+        assert cfg.auth.email is None
+
+    def test_load_existing(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        config_path.write_text(
+            '[server]\nurl = "http://custom:9999"\n\n'
+            '[auth]\ntoken = "abc123"\nemail = "test@example.com"\n'
+        )
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig.load()
+        assert cfg.server.url == "http://custom:9999"
+        assert cfg.auth.token == "abc123"
+        assert cfg.auth.email == "test@example.com"
+
+    def test_save_roundtrip(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.server.url = "http://saved:5678"
+        cfg.auth.token = "token456"
+        cfg.auth.email = "save@test.com"
+        cfg.save()
+        loaded = CLIConfig.load()
+        assert loaded.server.url == "http://saved:5678"
+        assert loaded.auth.token == "token456"
+        assert loaded.auth.email == "save@test.com"
+
+    def test_save_creates_parent_dirs(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "sub" / "dir" / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.save()
+        assert config_path.exists()
+
+    def test_load_token_only(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        config_path.write_text('[auth]\ntoken = "tok"\n')
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig.load()
+        assert cfg.auth.token == "tok"
+        assert cfg.auth.email is None
+
+
+# --- Auth tests ---
+
+
+class TestAuth:
+    def test_login_success(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "jwt123"}
+        with patch("httpx.post", return_value=mock_resp):
+            with patch("builtins.input", return_value="u@test.com"):
+                with patch("getpass.getpass", return_value="pass123"):
+                    from bark_backend.cli import auth
+
+                    auth.login("http://localhost:8997")
+        cfg = CLIConfig.load()
+        assert cfg.auth.token == "jwt123"
+        assert cfg.auth.email == "u@test.com"
+
+    def test_login_failure(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_resp.json.return_value = {"detail": "Bad credentials"}
+        with patch("httpx.post", return_value=mock_resp):
+            with patch("builtins.input", return_value="u@test.com"):
+                with patch("getpass.getpass", return_value="wrong"):
+                    from bark_backend.cli import auth
+
+                    with pytest.raises(SystemExit):
+                        auth.login("http://localhost:8997")
+
+    def test_logout_clears_token(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        config_path.write_text('[auth]\ntoken = "tok"\nemail = "x@y.com"\n')
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        with patch("httpx.post", return_value=mock_resp):
+            from bark_backend.cli import auth
+
+            auth.logout()
+        cfg = CLIConfig.load()
+        assert cfg.auth.token is None
+        assert cfg.auth.email is None
+
+    def test_logout_swallows_server_error(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.save()
+        with patch("httpx.post", side_effect=Exception("no server")):
+            from bark_backend.cli import auth
+
+            auth.logout()  # Should not raise
+
+
+# --- BarkClient tests ---
+
+
+class TestBarkClient:
+    def test_auth_error_on_401(self, monkeypatch):
+        cfg = CLIConfig()
+        cfg.auth.token = None
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        with patch.object(client, "get", return_value=mock_resp):
+            with pytest.raises(AuthError, match="Not logged in"):
+                client.list_workspaces()
+
+    def test_list_workspaces_parses_response(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "valid-token"
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [
+            {
+                "id": "ws1",
+                "name": "alpha",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+            {
+                "id": "ws2",
+                "name": "beta",
+                "created_at": "2025-06-15T12:00:00Z",
+            },
+        ]
+        with patch.object(client, "get", return_value=mock_resp):
+            workspaces = client.list_workspaces()
+        assert len(workspaces) == 2
+        assert workspaces[0].name == "alpha"
+        assert workspaces[1].id == "ws2"
+
+    def test_create_workspace_returns_workspace(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "id": "new-ws-id",
+            "name": "new-ws",
+            "created_at": "2025-01-01T00:00:00Z",
+        }
+        with patch.object(client, "post", return_value=mock_resp):
+            ws = client.create_workspace("new-ws")
+        assert ws.name == "new-ws"
+        assert ws.id == "new-ws-id"
+
+    def test_delete_workspace_not_found(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = []
+        with patch.object(client, "get", return_value=mock_resp):
+            with pytest.raises(SystemExit):
+                client.delete_workspace("nonexistent")
+
+    def test_delete_workspace_success(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        list_resp = MagicMock()
+        list_resp.status_code = 200
+        list_resp.json.return_value = [
+            {
+                "id": "ws-to-delete",
+                "name": "gone",
+                "created_at": "2025-01-01T00:00:00Z",
+            }
+        ]
+        del_resp = MagicMock()
+        del_resp.status_code = 204
+        with patch.object(client, "get", return_value=list_resp):
+            with patch.object(
+                client, "delete", return_value=del_resp
+            ) as mock_del:
+                client.delete_workspace("gone")
+                mock_del.assert_called_once_with("/workspaces/ws-to-delete")
+
+    def test_resolve_workspace_by_name(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [
+            {
+                "id": "ws1",
+                "name": "alpha",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+            {
+                "id": "ws2",
+                "name": "beta",
+                "created_at": "2025-01-01T00:00:00Z",
+            },
+        ]
+        with patch.object(client, "get", return_value=mock_resp):
+            ws = client.resolve_workspace("beta")
+        assert ws.id == "ws2"
+
+    def test_resolve_workspace_not_found_exits(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [
+            {
+                "id": "ws1",
+                "name": "alpha",
+                "created_at": "2025-01-01T00:00:00Z",
+            }
+        ]
+        with patch.object(client, "get", return_value=mock_resp):
+            with pytest.raises(SystemExit):
+                client.resolve_workspace("nonexistent")
+
+    def test_delete_workspace_401_raises_auth_error(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        list_resp = MagicMock()
+        list_resp.status_code = 200
+        list_resp.json.return_value = [
+            {"id": "ws1", "name": "ws1", "created_at": "2025-01-01T00:00:00Z"}
+        ]
+        del_resp = MagicMock()
+        del_resp.status_code = 401
+        with patch.object(client, "get", return_value=list_resp):
+            with patch.object(client, "delete", return_value=del_resp):
+                with pytest.raises(AuthError):
+                    client.delete_workspace("ws1")
+
+    def test_delete_workspace_non_200_exits(self):
+        cfg = CLIConfig()
+        cfg.auth.token = "token"
+        client = BarkClient(cfg)
+        list_resp = MagicMock()
+        list_resp.status_code = 200
+        list_resp.json.return_value = [
+            {"id": "ws1", "name": "ws1", "created_at": "2025-01-01T00:00:00Z"}
+        ]
+        del_resp = MagicMock()
+        del_resp.status_code = 500
+        del_resp.text = "Server error"
+        del_resp.is_success = False
+        with patch.object(client, "get", return_value=list_resp):
+            with patch.object(client, "delete", return_value=del_resp):
+                with pytest.raises(SystemExit):
+                    client.delete_workspace("ws1")
+
+    def test_no_token_uses_empty_string(self):
+        cfg = CLIConfig()
+        cfg.auth.token = None
+        client = BarkClient(cfg)
+        headers = client._headers()
+        assert headers["Authorization"] == "Bearer "
+
+
+# --- Shell protocol ---
+
+
+class TestShellProtocol:
+    def test_ws_url_http_conversion(self):
+        url = "http://localhost:8997"
+        ws_url = url.replace("http://", "ws://").rstrip("/") + "/ws"
+        assert ws_url == "ws://localhost:8997/ws"
+
+    def test_ws_url_https_conversion(self):
+        url = "https://bark.example.com"
+        ws_url = url.replace("https://", "wss://").rstrip("/") + "/ws"
+        assert ws_url == "wss://bark.example.com/ws"
+
+
+# --- Terminal size ---
+
+
+class TestTerminalSize:
+    def test_get_terminal_size_positive_ints(self):
+        from bark_backend.cli.client import _get_terminal_size
+
+        cols, rows = _get_terminal_size()
+        assert isinstance(cols, int) and cols > 0
+        assert isinstance(rows, int) and rows > 0
+
+    def test_get_terminal_size_returns_default_when_not_tty(self, monkeypatch):
+        """When stdin is not a TTY, _get_terminal_size returns (80, 24) without calling os."""
+        from bark_backend.cli import client as cli_client
+
+        called = []
+
+        def _track(*args):
+            called.append(args)
+            raise OSError("should not be called")
+
+        # sys.stdin is not a TTY in tests — no need to call os.get_terminal_size
+        monkeypatch.setattr(os, "get_terminal_size", _track)
+        cols, rows = cli_client._get_terminal_size()
+        assert cols == 80
+        assert rows == 24
+        assert len(called) == 0  # os.get_terminal_size was never invoked
+
+    def test_get_terminal_size_calls_os_when_tty(self, monkeypatch):
+        from bark_backend.cli import client as cli_client
+
+        called_with = []
+
+        def _track(*args):
+            class FakeSize:
+                columns = 102
+                lines = 40
+
+            called_with.append(args)
+            return FakeSize()
+
+        monkeypatch.setattr(os, "get_terminal_size", _track)
+        # sys.stdin is not a TTY in tests — make it look like one
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+        cols, rows = cli_client._get_terminal_size()
+        assert cols == 102
+        assert rows == 40
+        assert len(called_with) == 1
+
+
+# --- _run_shell / _ws_shell ---
+
+
+class TestRunShell:
+    @pytest.mark.asyncio
+    async def test_stdin_loop_sends_terminal_input(self):
+        from bark_backend.cli.client import _run_shell
+
+        ws = AsyncMock()
+        ws.send = AsyncMock()
+        ws.recv = AsyncMock(
+            side_effect=[
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": {
+                            "type": "CUSTOM",
+                            "name": "container_stopped",
+                            "value": {},
+                        },
+                    }
+                )
+            ]
+        )
+
+        sys.stdin = StringIO("x")
+        sys.stdin.buffer = BytesIO(b"x")
+        task = asyncio.create_task(_run_shell(ws, 80, 24))
+        await asyncio.sleep(0.2)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        sent = [c[0][0] for c in ws.send.call_args_list]
+        assert any("terminal_input" in s and '"x"' in s for s in sent)
+
+    @pytest.mark.asyncio
+    async def test_stdout_loop_writes_data(self):
+        from bark_backend.cli.client import _run_shell
+
+        ws = AsyncMock()
+        ws.recv = AsyncMock(
+            side_effect=[
+                json.dumps({"type": "terminal_output", "data": "hello"}),
+                json.dumps(
+                    {
+                        "type": "event",
+                        "event": {
+                            "type": "CUSTOM",
+                            "name": "container_stopped",
+                            "value": {},
+                        },
+                    }
+                ),
+            ]
+        )
+
+        captured = []
+
+        class CaptureWriter:
+            def write(self, data):
+                captured.append(data)
+
+            def flush(self):
+                pass
+
+        sys.stdout = CaptureWriter()
+        sys.stdin = StringIO("")
+        sys.stdin.buffer = BytesIO(b"")
+        task = asyncio.create_task(_run_shell(ws, 80, 24))
+        await asyncio.sleep(0.3)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        assert "hello" in "".join(captured)
+
+    @pytest.mark.asyncio
+    async def test_ws_shell_connection_failure(self):
+        from bark_backend.cli.client import _ws_shell
+
+        ws_mock = MagicMock()
+
+        async def fake_enter(self):
+            return ws_mock
+
+        async def fake_exit(self, *args):
+            return None
+
+        ws_mock.__aenter__ = fake_enter
+        ws_mock.__aexit__ = fake_exit
+        ws_mock.recv = AsyncMock(
+            return_value=json.dumps({"type": "error", "message": "bad"})
+        )
+        ws_mock.send = AsyncMock()
+
+        with patch("websockets.connect", return_value=ws_mock):
+            with pytest.raises(ConnectionError) as exc_info:
+                await _ws_shell("ws://localhost/ws", "token", "ws1")
+            assert "Connection failed" in str(exc_info.value)
+
+
+# --- Misc ---
+
+
+class TestMisc:
+    def test_auth_error_message(self):
+        err = AuthError("Not logged in — run `bark login`")
+        assert "Not logged in" in str(err)
+        assert "bark login" in str(err)
+
+    def test_workspace_dataclass_fields(self):
+        ws = Workspace(id="x", name="y", created_at="z")
+        assert ws.id == "x"
+        assert ws.name == "y"
+        assert ws.created_at == "z"
+
+    def test_login_success_stores_email(self, tmp_path, monkeypatch):
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "jwt"}
+        with patch("httpx.post", return_value=mock_resp):
+            with patch("builtins.input", return_value="admin@example.com"):
+                with patch("getpass.getpass", return_value="pw"):
+                    from bark_backend.cli import auth
+
+                    auth.login("http://localhost:8997")
+        cfg = CLIConfig.load()
+        assert cfg.auth.email == "admin@example.com"
+        assert cfg.auth.token == "jwt"

@@ -1,0 +1,275 @@
+"""Tests for bark CLI commands (main.py)."""
+
+import os
+from unittest.mock import MagicMock, patch
+
+import httpx
+import pytest
+
+from bark_backend.cli.config import CLIConfig
+from bark_backend.cli.client import Workspace
+
+
+@pytest.fixture
+def logged_in_cfg(tmp_path, monkeypatch):
+    """Config with a valid token and email pre-loaded."""
+    config_path = tmp_path / "cli.toml"
+    monkeypatch.setattr("bark_backend.cli.config._CONFIG_PATH", config_path)
+    cfg = CLIConfig()
+    cfg.server.url = "http://localhost:8997"
+    cfg.auth.token = "test-token"
+    cfg.auth.email = "test@example.com"
+    cfg.save()
+    yield config_path
+    # No teardown needed — each test gets a fresh tmp_path
+
+
+@pytest.fixture(autouse=True)
+def reset_main_state():
+    """Reset module-level CLI state before and after each test."""
+    import bark_backend.cli.main as _main
+
+    orig = _main._cfg_cache
+    _main._cfg_cache = None
+    yield
+    _main._cfg_cache = orig
+
+
+@pytest.fixture
+def reset_env():
+    """Save and restore os.environ."""
+    orig_env = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(orig_env)
+
+
+class TestMainCLI:
+    def test_login_cmd_stores_token(self, tmp_path, monkeypatch):
+        from bark_backend.cli.main import login_cmd
+
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "new-token"}
+        with patch("httpx.post", return_value=mock_resp):
+            with patch("builtins.input", return_value="u@test.com"):
+                with patch("getpass.getpass", return_value="pw"):
+                    login_cmd("http://localhost:8997")
+        cfg = CLIConfig.load()
+        assert cfg.auth.token == "new-token"
+        assert cfg.auth.email == "u@test.com"
+
+    def test_require_auth_raises_when_not_logged_in(
+        self, tmp_path, monkeypatch
+    ):
+        import typer
+        from bark_backend.cli import main
+
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.auth.token = None
+        cfg.save()
+
+        with pytest.raises(typer.Exit):
+            main._require_auth()
+
+    def test_require_auth_passes_when_logged_in(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        main._require_auth()  # Should not raise
+
+    def test_list_workspaces_empty(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        monkeypatch.setattr(main, "_cfg", lambda: CLIConfig.load())
+        client = MagicMock()
+        client.list_workspaces.return_value = []
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        with patch("typer.echo"):
+            main.list_workspaces()
+
+        client.list_workspaces.assert_called_once()
+
+    def test_list_workspaces_shows_items(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-workspace",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.list_workspaces.return_value = [ws]
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        with patch("typer.echo") as mock_echo:
+            main.list_workspaces()
+        assert any("my-workspace" in str(c) for c in mock_echo.call_args_list)
+
+    def test_create_workspace(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="new-id", name="new-ws", created_at="2025-01-01T00:00:00Z"
+        )
+        client = MagicMock()
+        client.create_workspace.return_value = ws
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        with patch("typer.echo") as mock_echo:
+            main.create("new-ws")
+        assert any("new-ws" in str(c) for c in mock_echo.call_args_list)
+
+    def test_delete_workspace(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        with patch("typer.echo"):
+            main.delete("my-ws")
+        client.delete_workspace.assert_called_once_with("my-ws")
+
+    def test_shell_requires_auth(self, tmp_path, monkeypatch):
+        import typer
+        from bark_backend.cli import main
+
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.auth.token = None
+        cfg.save()
+
+        with pytest.raises(typer.Exit):
+            main.shell(None)
+
+    def test_status_not_logged_in(self, tmp_path, monkeypatch):
+        from bark_backend.cli import main
+
+        config_path = tmp_path / "cli.toml"
+        monkeypatch.setattr(
+            "bark_backend.cli.config._CONFIG_PATH", config_path
+        )
+        cfg = CLIConfig()
+        cfg.server.url = "http://custom:1234"
+        cfg.auth.token = None
+        cfg.save()
+
+        with patch("typer.echo") as mock_echo:
+            main.status()
+        assert any("custom" in str(c) for c in mock_echo.call_args_list)
+        assert any("Not logged in" in str(c) for c in mock_echo.call_args_list)
+
+    def test_status_logged_in(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        with patch("typer.echo") as mock_echo:
+            main.status()
+        assert any(
+            "test@example.com" in str(c) for c in mock_echo.call_args_list
+        )
+
+    def test_logout_command(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        with patch("httpx.post", return_value=MagicMock(status_code=200)):
+            main.logout()
+        cfg = CLIConfig.load()
+        assert cfg.auth.token is None
+
+    def test_logout_network_error_does_not_propagate(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        with patch("httpx.post", side_effect=httpx.ConnectError("no route")):
+            main.logout()  # must not raise
+
+    def test_shell_with_single_workspace_auto_selects(
+        self, logged_in_cfg, monkeypatch, reset_env
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="solo-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.list_workspaces.return_value = [ws]
+        client.resolve_workspace.return_value = ws
+
+        async def fake_shell(*args):
+            pass
+
+        with patch.object(main, "_client", return_value=client):
+            with patch.object(main, "_ws_shell", fake_shell):
+                os.environ["TERM"] = "xterm-256color"
+                with patch("termios.tcgetattr", return_value=None):
+                    main.shell(None)  # no args, single workspace auto-selected
+
+        client.resolve_workspace.assert_not_called()  # was auto-selected
+
+    def test_shell_no_workspaces_exits(self, logged_in_cfg, monkeypatch):
+        import typer
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.list_workspaces.return_value = []
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        with pytest.raises(typer.Exit):
+            main.shell(None)
+
+    def test_shell_multiple_workspaces_prompts(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws1 = Workspace(
+            id="id1" + "0" * 52, name="ws-a", created_at="2025-01-01T00:00:00Z"
+        )
+        ws2 = Workspace(
+            id="id2" + "0" * 52, name="ws-b", created_at="2025-01-01T00:00:00Z"
+        )
+        client = MagicMock()
+        client.list_workspaces.return_value = [ws1, ws2]
+
+        async def fake_shell(*args):
+            pass
+
+        with patch.object(main, "_client", return_value=client):
+            with patch.object(main, "_ws_shell", fake_shell):
+                with patch("builtins.input", return_value="1"):  # select first
+                    with patch("termios.tcgetattr", return_value=None):
+                        main.shell(None)
+
+    def test_shell_by_name(self, logged_in_cfg, monkeypatch, reset_env):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="target" + "0" * 52,
+            name="target-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+
+        async def fake_shell(*args):
+            pass
+
+        with patch.object(main, "_client", return_value=client):
+            with patch.object(main, "_ws_shell", fake_shell):
+                os.environ["TERM"] = "xterm-256color"
+                with patch("termios.tcgetattr", return_value=None):
+                    main.shell("target-ws")
+
+        client.resolve_workspace.assert_called_once_with("target-ws")

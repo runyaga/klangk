@@ -1,0 +1,172 @@
+"""Bark CLI — typer app."""
+
+from __future__ import annotations
+
+
+import asyncio
+import sys
+
+import typer
+
+from .auth import login, logout as do_logout
+from .client import BarkClient, _ws_shell
+from .config import CLIConfig
+
+app = typer.Typer(
+    name="bark",
+    help="Bark — containerized development shell.",
+    rich_markup_mode="rich",
+)
+
+_cfg_cache: CLIConfig | None = None
+
+
+def _cfg() -> CLIConfig:
+    global _cfg_cache  # no-cover
+    if _cfg_cache is None:  # no-cover
+        _cfg_cache = CLIConfig.load()  # no-cover
+    return _cfg_cache
+
+
+def _client() -> BarkClient:
+    return BarkClient(_cfg())
+
+
+def _require_auth() -> None:
+    cfg = _cfg()
+    if not cfg.auth.token:
+        print(
+            "Not logged in — run [cyan]bark login[/cyan] first.",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def login_cmd(
+    server: str | None = typer.Option(
+        None,
+        "--server",
+        help="Bark server URL (e.g. http://localhost:8997)",
+    ),
+) -> None:
+    """Authenticate with the Bark server."""
+    if server is None:
+        server = _cfg().server.url
+    login(server)
+
+
+@app.command()
+def logout() -> None:
+    """Clear stored credentials."""
+    do_logout()
+
+
+@app.command()
+def status() -> None:
+    """Show connection info (server, user)."""
+    cfg = _cfg()
+    if cfg.auth.token:
+        typer.echo(f"Server:   {cfg.server.url}")
+        typer.echo(f"Logged in as: {cfg.auth.email or 'unknown'}")
+    else:
+        typer.echo(f"Server:   {cfg.server.url}")
+        typer.echo(
+            "Not logged in — run [cyan]bark login[/cyan] to authenticate."
+        )
+
+
+@app.command("workspaces")
+def list_workspaces() -> None:
+    """List all workspaces."""
+    _require_auth()
+    client = _client()
+    workspaces = client.list_workspaces()
+    if not workspaces:
+        typer.echo("No workspaces found.")
+        return
+    for ws in workspaces:
+        typer.echo(f"  {ws.name}  ({ws.id[:12]})  {ws.created_at[:10]}")
+
+
+@app.command()
+def create(
+    name: str = typer.Argument(..., help="Workspace name"),
+) -> None:
+    """Create a new workspace."""
+    _require_auth()
+    ws = _client().create_workspace(name)
+    typer.echo(f"Created workspace [green]{name}[/green] ({ws.id[:12]})")
+
+
+@app.command()
+def delete(
+    name: str = typer.Argument(..., help="Workspace name"),
+) -> None:
+    """Delete a workspace."""
+    _require_auth()
+    _client().delete_workspace(name)
+    typer.echo(f"Deleted workspace [red]{name}[/red]")
+
+
+@app.command()
+def shell(
+    workspace: str | None = typer.Argument(
+        None, help="Workspace name (or select interactively)"
+    ),
+) -> None:
+    """Connect to a workspace and drop into a bash shell."""
+    cfg = _cfg()
+    if not cfg.auth.token:
+        print(
+            "Not logged in — run [cyan]bark login[/cyan] first.",
+            file=sys.stderr,
+        )
+        raise typer.Exit(code=1)
+
+    client = _client()
+
+    # Resolve workspace
+    if workspace:
+        ws = client.resolve_workspace(workspace)
+    else:
+        workspaces = client.list_workspaces()
+        if not workspaces:
+            typer.echo(
+                "No workspaces found — create one with [cyan]bark create[/cyan]."
+            )
+            raise typer.Exit(code=1)
+        if len(workspaces) == 1:
+            ws = workspaces[0]
+        else:
+            typer.echo("Select a workspace:")
+            for i, w in enumerate(workspaces, 1):
+                typer.echo(f"  {i}. {w.name}")
+            choice = input("> ").strip()
+            if not choice:
+                raise typer.Exit()
+            idx = int(choice) - 1
+            if idx < 0 or idx >= len(workspaces):
+                raise typer.Exit()
+            ws = workspaces[idx]
+
+    # Build WebSocket URL
+    server_url = cfg.server.url.rstrip("/")
+    if server_url.startswith("http://"):
+        ws_url = server_url.replace("http://", "ws://") + "/ws"
+    elif server_url.startswith("https://"):
+        ws_url = server_url.replace("https://", "wss://") + "/ws"
+    else:
+        ws_url = f"ws://{server_url}/ws"
+
+    token = cfg.auth.token
+    print(f"Connecting to {ws.name}...", file=sys.stderr)
+
+    # Install signal handlers before going async
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_ws_shell(ws_url, token, ws.id))
+
+
+if __name__ == "__main__":
+    app()
