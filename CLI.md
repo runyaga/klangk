@@ -51,6 +51,8 @@ Add to `pyproject.toml`:
 | `bark ws create NAME`                                      | Create a workspace                                                               |
 | `bark ws delete NAME`                                      | Delete a workspace                                                               |
 | `bark ws shell [WORKSPACE]`                                | **Main command.** Connect to workspace, drop into bash inside the container.     |
+| `bark ws exec WORKSPACE COMMAND...`                        | Run a command in a container. Also usable as an rsync transport.                 |
+| `bark ws sync SRC DEST`                                    | Sync files to/from a container via rsync (wraps `bark ws exec`).                 |
 
 ## `bark ws shell` — The Core Flow
 
@@ -129,23 +131,18 @@ email = "admin@example.com"
 - CLI impact: add `--image` flag to `bark ws create`, no other commands change
 - Note: Phase 1 CLI commands are pure REST/WebSocket clients with no Docker or image references, so no refactoring needed
 
-### Phase 5 (future): File copy command
+### Phase 5 (done): Exec, sync, and E2E tests
 
-- `bark cp LOCAL WORKSPACE:PATH` and `bark cp WORKSPACE:PATH LOCAL` for copying files to/from containers
-- Upload uses the existing REST file upload API (`POST /workspaces/{id}/files/upload`)
-- Download uses the existing download API (`GET /workspaces/{id}/files/download`); for directories the backend returns a zip — the CLI automatically unzips it to the local destination
+- `bark ws exec WORKSPACE COMMAND...` — raw command execution in containers via WebSocket (`ExecSession` with piped stdin/stdout, no PTY)
+- `bark ws sync SRC DEST` — rsync wrapper using `bark ws exec` as the transport
+- Uses `os.read(0)`/`os.write(1)` for unbuffered I/O (Python's buffered I/O breaks rsync pipe protocol)
+- `select()` with timeout in stdin_forward for prompt exit
+- Base64 encoding for binary-safe WebSocket transport
+- Container image includes rsync
+- CLI E2E tests (`src/cli-e2e/`) — 16 tests against real server + Docker containers
+- GitHub Actions workflow for CI
 
-### Phase 6 (future): File sync via rsync transport
-
-- `bark transport` command that acts as an rsync transport (like `ssh` in `rsync -e ssh`)
-- Usage: `rsync -avz -e "bark transport" ~/foo my-workspace:/bar`
-- Transport connects to Bark backend via WebSocket, spawns `docker exec rsync --server ...` in the target container, pipes stdin/stdout over the WebSocket
-- Backend needs a new raw exec WebSocket message type (like `terminal_start` but without PTY — raw byte stream)
-- Container image needs `rsync` installed
-- Works locally and remotely through the same WebSocket path — no SSH required
-- rsync handles all diffing, compression, and incremental transfer
-
-### Phase 7 (future): Local Docker exec optimization
+### Phase 6 (future): Local Docker exec optimization
 
 - Detect when backend is local
 - Use `docker exec` directly instead of WebSocket PTY for native performance
@@ -157,20 +154,21 @@ email = "admin@example.com"
 | ---------------------------------------------- | ---------------------------------------------- |
 | `src/backend/bark_backend/cli/main.py`         | Typer app, top-level + `ws` subcommand group   |
 | `src/backend/bark_backend/cli/auth.py`         | Login/logout with token reuse and rich prompts |
-| `src/backend/bark_backend/cli/client.py`       | HTTP + WebSocket client, shell PTY forwarding  |
+| `src/backend/bark_backend/cli/client.py`       | HTTP + WebSocket client, shell/exec forwarding |
 | `src/backend/bark_backend/cli/config.py`       | Config storage (~/.config/bark/cli.toml)       |
+| `src/backend/bark_backend/exec_session.py`     | Backend raw exec session (no PTY)              |
 | `src/backend/bark_backend/terminal_manager.py` | Backend PTY session (docker exec)              |
-| `src/backend/bark_backend/ws_handler.py`       | WebSocket terminal protocol                    |
+| `src/backend/bark_backend/ws_handler.py`       | WebSocket terminal + exec protocol             |
+| `src/cli-e2e/test_cli_e2e.py`                  | CLI E2E tests against real server              |
 
 ## Verification
 
-1. `devenv shell -- test-backend` — all tests pass with 100% coverage
-2. Start Bark normally (`devenv up`), then in another terminal:
+1. `devenv shell -- test-backend` — unit tests pass with 100% coverage
+2. `devenv shell -- test-cli-e2e` — E2E tests pass against real server + Docker
+3. Manual smoke test:
    - `bark login admin@example.com` — authenticate
-   - `bark ws list` — lists workspaces
    - `bark ws create cli-test` — creates a workspace
    - `bark ws shell cli-test` — drops into bash inside container
-   - Verify: `ls /work` shows workspace files, `git status` works, `pi` is available
-   - Ctrl+D exits cleanly, terminal is restored
+   - `bark ws exec cli-test ls /work` — runs a command
+   - `bark ws sync ~/project cli-test:/work/project` — syncs files
    - `bark ws delete cli-test` — cleans up
-3. Resize terminal window during `bark ws shell` — verify the shell adapts

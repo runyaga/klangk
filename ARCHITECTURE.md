@@ -102,10 +102,11 @@ bark/
     pyproject.toml              # Python deps: fastapi, aiodocker, aiosqlite, bcrypt, python-jose
     bark_backend/
       cli/                      # CLI tool (bark command) — typer app, thin HTTP+WebSocket client
-        main.py                 # Typer app: login, logout, status, ws {list,create,delete,shell}
+        main.py                 # Typer app: login, logout, status, ws {list,create,delete,shell,exec,sync}
         auth.py                 # Login/logout with token reuse, rich prompts, --password-file
-        client.py               # BarkClient (HTTP), WebSocket shell session with PTY forwarding
+        client.py               # BarkClient (HTTP), WebSocket shell/exec session forwarding
         config.py               # Config storage (~/.config/bark/cli.toml)
+      exec_session.py           # Raw docker exec subprocess (no PTY) for piped commands (rsync transport)
       main.py                   # FastAPI app, lifespan, default user seeding, static file serving
       api.py                    # API route handlers (health, auth, workspaces, files, messages, admin) via APIRouter
       auth.py                   # Register/login/logout, JWT with roles, bcrypt, require_role(), email validation, verification tokens
@@ -115,10 +116,13 @@ bark/
       container_manager.py      # Docker lifecycle, port allocation, idle timeout, session resume env, shutdown cleanup
       pi_rpc_client.py          # docker attach subprocess for Pi stdin/stdout JSON-RPC (chunked reads for large events)
       agui_translator.py        # Pi RPC events → AG-UI events mapping, file-change detection
-      ws_handler.py             # WebSocket auth, workspace routing, AG-UI streaming, session resume, auto-restart
+      ws_handler.py             # WebSocket auth, workspace routing, AG-UI streaming, exec sessions, session resume, auto-restart
       file_service.py           # Host-side file read/write/delete/rename with path traversal protection
       terminal_manager.py      # Docker exec PTY subprocess for interactive shell access
     tests/                      # pytest unit tests (100% coverage, parallel via xdist)
+
+  src/cli-e2e/
+    test_cli_e2e.py             # CLI E2E tests (real server + Docker, run with test-cli-e2e)
 
   src/frontend/
     pubspec.yaml                # Flutter deps: flutter_markdown_plus, flutter_highlight, go_router, etc.

@@ -64,6 +64,8 @@ bark login admin@example.com        # authenticate (prompts for password)
 bark ws list                         # list workspaces
 bark ws create my-project            # create a workspace
 bark ws shell my-project             # drop into bash inside the container
+bark ws exec my-project ls /work     # run a command in the container
+bark ws sync ~/src my-project:/work  # sync files to/from the container
 bark ws delete my-project            # delete a workspace
 ```
 
