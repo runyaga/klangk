@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \
     jq \
     gosu \
+    rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (not in default Debian repos)
