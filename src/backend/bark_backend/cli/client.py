@@ -167,17 +167,26 @@ async def _ws_shell(
             json.dumps({"cmd": "terminal_start", "cols": cols, "rows": rows})
         )
 
-        # 3. Drain the initial clear sequence
-        while True:
-            msg = json.loads(await ws.recv())
-            if msg.get("type") == "terminal_output":
-                break
-            msg_type = msg.get("type") or msg.get(
-                "cmd", "unknown"
-            )  # pragma: no cover
-            logging.debug(
-                "[discarded startup message: %s]", msg_type
-            )  # pragma: no cover
+        # 3. Drain messages until the first terminal_output (the clear sequence).
+        # Timeout prevents hanging if the container fails to start a shell.
+        try:
+            deadline = asyncio.get_event_loop().time() + 30
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:  # pragma: no cover
+                    raise asyncio.TimeoutError
+                raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+                msg = json.loads(raw)
+                if msg.get("type") == "terminal_output":
+                    break
+                if msg.get("type") == "error":  # pragma: no cover
+                    raise ConnectionError(
+                        f"Server error: {msg.get('message', 'unknown')}"
+                    )
+        except asyncio.TimeoutError:  # pragma: no cover
+            raise ConnectionError(
+                "Terminal did not start within 30 seconds"
+            ) from None
 
         # 4. Put terminal in raw mode, run shell, restore
         # raw_mode path: tcgetattr + tty.setraw + _raw_mode_exit + terminal_stop  # pragma: no cover
