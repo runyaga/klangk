@@ -974,3 +974,37 @@ class TestStartCleanupLoop:
         container_manager.start_cleanup_loop()
         assert container_manager._cleanup_task is task1
         container_manager._cleanup_task.cancel()
+
+
+class TestConnectionRefcount:
+    def test_add_connection(self):
+        ws_id = "refcount-test-1"
+        container_manager._workspace_connections.pop(ws_id, None)
+        assert container_manager.add_connection(ws_id) == 1
+        assert container_manager.add_connection(ws_id) == 2
+        assert container_manager.connection_count(ws_id) == 2
+        container_manager._workspace_connections.pop(ws_id, None)
+
+    def test_remove_connection_to_zero(self):
+        ws_id = "refcount-test-2"
+        container_manager._workspace_connections.pop(ws_id, None)
+        container_manager.add_connection(ws_id)
+        assert container_manager.remove_connection(ws_id) == 0
+        assert container_manager.connection_count(ws_id) == 0
+
+    def test_remove_connection_decrement(self):
+        ws_id = "refcount-test-3"
+        container_manager._workspace_connections.pop(ws_id, None)
+        container_manager.add_connection(ws_id)
+        container_manager.add_connection(ws_id)
+        assert container_manager.remove_connection(ws_id) == 1
+        assert container_manager.connection_count(ws_id) == 1
+        container_manager._workspace_connections.pop(ws_id, None)
+
+    def test_remove_connection_already_zero(self):
+        ws_id = "refcount-test-4"
+        container_manager._workspace_connections.pop(ws_id, None)
+        assert container_manager.remove_connection(ws_id) == 0
+
+    def test_connection_count_unknown(self):
+        assert container_manager.connection_count("nonexistent") == 0

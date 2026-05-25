@@ -55,6 +55,9 @@ _cleanup_task: asyncio.Task | None = None
 # its own BARK_DATA_DIR/bark.db. If multiple processes ever shared a DB,
 # this would need a database-level lock instead.
 _port_lock: asyncio.Lock = asyncio.Lock()
+# Connection refcount per workspace: workspace_id -> count
+# Tracks how many WebSocket connections are using each workspace's container.
+_workspace_connections: dict[str, int] = {}
 # Signals the cleanup loop to wake up early when a short timeout is set.
 # Created lazily to avoid binding to the wrong event loop at import time.
 _cleanup_wake: asyncio.Event | None = None
@@ -289,6 +292,29 @@ def track_activity(container_id: str, workspace_id: str) -> None:
         "last_activity": time.time(),
         "workspace_id": workspace_id,
     }
+
+
+def add_connection(workspace_id: str) -> int:
+    """Increment and return the connection count for a workspace."""
+    _workspace_connections[workspace_id] = (
+        _workspace_connections.get(workspace_id, 0) + 1
+    )
+    return _workspace_connections[workspace_id]
+
+
+def remove_connection(workspace_id: str) -> int:
+    """Decrement and return the connection count for a workspace."""
+    count = _workspace_connections.get(workspace_id, 0)
+    if count <= 1:
+        _workspace_connections.pop(workspace_id, None)
+        return 0
+    _workspace_connections[workspace_id] = count - 1
+    return count - 1
+
+
+def connection_count(workspace_id: str) -> int:
+    """Return the current connection count for a workspace."""
+    return _workspace_connections.get(workspace_id, 0)
 
 
 def record_activity(container_id: str) -> None:

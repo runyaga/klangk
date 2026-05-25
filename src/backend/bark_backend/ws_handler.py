@@ -186,15 +186,23 @@ async def start_workspace_container(
         hosting_base_path=hosting_base_path,
     )
     state["container_status"] = container_status
-
-    pi_client = PiRpcClient(container_id)
-    await pi_client.connect()
-
     state["workspace_id"] = workspace_id
     state["container_id"] = container_id
-    state["pi_client"] = pi_client
 
-    # Register idle timeout notification
+    conn_num = container_manager.add_connection(workspace_id)
+
+    # Only the first connection to a workspace starts Pi and event forwarding.
+    # Subsequent connections (additional shells, exec, sync) skip Pi setup.
+    if conn_num == 1:
+        pi_client = PiRpcClient(container_id)
+        await pi_client.connect()
+        state["pi_client"] = pi_client
+
+        state["event_task"] = asyncio.create_task(
+            forward_events(ws, pi_client, workspace_id, state)
+        )
+
+    # Register idle timeout notification (per-connection)
     async def on_idle(wid: str) -> None:
         try:
             await ws.send_json(
@@ -212,10 +220,6 @@ async def start_workspace_container(
 
     state["_idle_cb"] = on_idle
     container_manager.on_idle_stop(workspace_id, on_idle)
-
-    state["event_task"] = asyncio.create_task(
-        forward_events(ws, pi_client, workspace_id, state)
-    )
 
     # Cache workspace info for auto-restart
     state["workspace"] = workspace
@@ -786,26 +790,30 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
         container_manager.remove_idle_callback(workspace_id, idle_cb)
         state["_idle_cb"] = None
 
-    if state.get("event_task"):
-        state["event_task"].cancel()
-        try:
-            await state["event_task"]
-        except asyncio.CancelledError:
-            pass
-
-    pi_client: PiRpcClient | None = state.get("pi_client")
-    if pi_client:
-        await pi_client.disconnect()
-
     await stop_terminal(state)
     await stop_exec(state)
 
-    # Only stop the container if this connection created it.
-    # If we connected to an already-running container ("connected" status),
-    # leave it alive for other sessions and let the idle timeout handle it.
-    container_id = state.get("container_id")
-    if container_id and state.get("container_status") != "connected":
-        await container_manager.stop_and_remove_container(container_id)
+    # Decrement connection refcount. Only the last connection to disconnect
+    # kills Pi and (optionally) destroys the container.
+    remaining = 0
+    if workspace_id:
+        remaining = container_manager.remove_connection(workspace_id)
+
+    if remaining == 0:
+        if state.get("event_task"):
+            state["event_task"].cancel()
+            try:
+                await state["event_task"]
+            except asyncio.CancelledError:
+                pass
+
+        pi_client: PiRpcClient | None = state.get("pi_client")
+        if pi_client:
+            await pi_client.disconnect()
+
+        container_id = state.get("container_id")
+        if container_id:
+            await container_manager.stop_and_remove_container(container_id)
 
 
 async def send_error(ws: WebSocket, message: str) -> None:
