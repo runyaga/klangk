@@ -145,7 +145,7 @@ class ContainerRegistry:
         state = self.states.get(workspace_id)
         if state:
             state.idle_timeout = seconds
-        self.get_cleanup_wake().set()
+            self.get_cleanup_wake().set()
 
     def set_on_workspace_killed(self, callback) -> None:
         self.on_workspace_killed = callback
