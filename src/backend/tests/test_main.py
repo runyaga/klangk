@@ -58,6 +58,11 @@ class TestLifespan:
         app = FastAPI()
         with (
             patch.object(
+                main.container_manager,
+                "adopt_orphaned_containers",
+                new_callable=AsyncMock,
+            ) as mock_adopt,
+            patch.object(
                 main.container_manager, "start_cleanup_loop"
             ) as mock_start,
             patch.object(
@@ -65,6 +70,7 @@ class TestLifespan:
             ) as mock_shutdown,
         ):
             async with main.lifespan(app):
+                mock_adopt.assert_awaited_once()
                 mock_start.assert_called_once()
             mock_shutdown.assert_awaited_once()
 

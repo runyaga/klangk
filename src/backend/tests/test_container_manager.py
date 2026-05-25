@@ -1008,3 +1008,57 @@ class TestConnectionRefcount:
 
     def test_connection_count_unknown(self):
         assert container_manager.connection_count("nonexistent") == 0
+
+
+class TestAdoptOrphanedContainers:
+    async def test_adopts_running_containers(self):
+        mock_container = MagicMock()
+        mock_container.id = "orphan-123"
+        mock_container.show = AsyncMock(
+            return_value={
+                "Config": {"Labels": {"bark.workspace-id": "ws-orphan"}}
+            }
+        )
+        mock_docker = AsyncMock()
+        mock_docker.containers.list = AsyncMock(return_value=[mock_container])
+        container_manager._containers.pop("orphan-123", None)
+        with patch.object(
+            container_manager, "get_docker", return_value=mock_docker
+        ):
+            await container_manager.adopt_orphaned_containers()
+        assert "orphan-123" in container_manager._containers
+        assert (
+            container_manager._containers["orphan-123"]["workspace_id"]
+            == "ws-orphan"
+        )
+        container_manager._containers.pop("orphan-123", None)
+
+    async def test_skips_already_tracked(self):
+        container_manager._containers["tracked-456"] = {
+            "last_activity": 0,
+            "workspace_id": "ws-tracked",
+        }
+        mock_container = MagicMock()
+        mock_container.id = "tracked-456"
+        mock_docker = AsyncMock()
+        mock_docker.containers.list = AsyncMock(return_value=[mock_container])
+        with patch.object(
+            container_manager, "get_docker", return_value=mock_docker
+        ):
+            await container_manager.adopt_orphaned_containers()
+        # Should not have called show() since it's already tracked
+        mock_container.show.assert_not_called()
+        container_manager._containers.pop("tracked-456", None)
+
+    async def test_docker_error_handled(self):
+        mock_docker = AsyncMock()
+        mock_docker.containers.list = AsyncMock(
+            side_effect=aiodocker.exceptions.DockerError(
+                "err", {"message": "fail"}
+            )
+        )
+        with patch.object(
+            container_manager, "get_docker", return_value=mock_docker
+        ):
+            await container_manager.adopt_orphaned_containers()
+        # Should not raise

@@ -392,6 +392,33 @@ async def cleanup_idle_containers() -> None:
             await stop_and_remove_container(cid)
 
 
+async def adopt_orphaned_containers() -> None:
+    """Register any running bark containers left from a previous process.
+
+    After a crash (SIGKILL), containers survive but the in-memory
+    tracking is lost.  This scans Docker for containers with our
+    instance label and registers them so the idle timeout loop will
+    eventually clean them up.
+    """
+    try:
+        docker = await get_docker()
+        containers = await docker.containers.list(
+            filters={"label": [f"bark.instance={INSTANCE_ID}"]},
+        )
+        for c in containers:
+            if c.id not in _containers:
+                labels = (await c.show())["Config"]["Labels"]
+                workspace_id = labels.get("bark.workspace-id", "unknown")
+                track_activity(c.id, workspace_id)
+                logger.info(
+                    "Adopted orphaned container %s (workspace %s)",
+                    c.id[:12],
+                    workspace_id,
+                )
+    except (aiodocker.exceptions.DockerError, OSError) as e:
+        logger.warning("Error scanning for orphaned containers: %s", e)
+
+
 def start_cleanup_loop() -> None:
     """Start the background cleanup task."""
     global _cleanup_task

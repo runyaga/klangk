@@ -61,6 +61,7 @@ async def seed_default_user() -> None:
 async def lifespan(app: FastAPI):
     await user_store.init_db()
     await seed_default_user()
+    await container_manager.adopt_orphaned_containers()
     container_manager.start_cleanup_loop()
     logger.info("Bark backend started")
     yield
