@@ -156,6 +156,10 @@ class TestMainCLI:
             main.shell(None)
 
     def test_status_not_logged_in(self, tmp_path, monkeypatch):
+        from io import StringIO
+
+        from rich.console import Console
+
         from bark_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
@@ -167,19 +171,32 @@ class TestMainCLI:
         cfg.auth.token = None
         cfg.save()
 
-        with patch("typer.echo") as mock_echo:
-            main.status()
-        assert any("custom" in str(c) for c in mock_echo.call_args_list)
-        assert any("Not logged in" in str(c) for c in mock_echo.call_args_list)
+        buf = StringIO()
+        monkeypatch.setattr(
+            "bark_backend.cli.main.Console",
+            lambda: Console(file=buf, force_terminal=True),
+        )
+        main.status()
+        output = buf.getvalue()
+        assert "custom:1234" in output
+        assert "not logged in" in output
 
-    def test_status_logged_in(self, logged_in_cfg):
+    def test_status_logged_in(self, logged_in_cfg, monkeypatch):
+        from io import StringIO
+
+        from rich.console import Console
+
         from bark_backend.cli import main
 
-        with patch("typer.echo") as mock_echo:
-            main.status()
-        assert any(
-            "test@example.com" in str(c) for c in mock_echo.call_args_list
+        buf = StringIO()
+        monkeypatch.setattr(
+            "bark_backend.cli.main.Console",
+            lambda: Console(file=buf, force_terminal=True),
         )
+        main.status()
+        output = buf.getvalue()
+        assert "test@example.com" in output
+        assert "logged in" in output
 
     def test_logout_command(self, logged_in_cfg):
         from bark_backend.cli import main

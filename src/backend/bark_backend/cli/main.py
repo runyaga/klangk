@@ -7,6 +7,8 @@ import asyncio
 import logging
 
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from .auth import login, logout as do_logout
 from .client import BarkClient, WorkspaceNotFoundError, _ws_shell
@@ -63,12 +65,17 @@ def logout() -> None:
 def status() -> None:
     """Show connection info (server, user)."""
     cfg = _cfg()
+    console = Console()
+    table = Table(show_header=False, box=None, pad_edge=False)
+    table.add_column(style="bold")
+    table.add_column()
+    table.add_row("Server", cfg.server.url)
     if cfg.auth.token:
-        typer.echo(f"Server:   {cfg.server.url}")
-        typer.echo(f"Logged in as: {cfg.auth.email or 'unknown'}")
+        table.add_row("User", cfg.auth.email or "unknown")
+        table.add_row("Status", "[green]logged in[/green]")
     else:
-        typer.echo(f"Server:   {cfg.server.url}")
-        typer.echo("Not logged in — run bark login to authenticate.")
+        table.add_row("Status", "[yellow]not logged in[/yellow]")
+    console.print(table)
 
 
 @app.command("workspaces")
