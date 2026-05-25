@@ -44,15 +44,6 @@ DEFAULT_PORTS_PER_WORKSPACE = 5
 class ContainerState:
     """Per-workspace container lifecycle state."""
 
-    __slots__ = (
-        "workspace_id",
-        "container_id",
-        "last_activity",
-        "idle_timeout",
-        "idle_callbacks",
-        "connection_count",
-    )
-
     def __init__(self, workspace_id: str, container_id: str):
         self.workspace_id = workspace_id
         self.container_id = container_id

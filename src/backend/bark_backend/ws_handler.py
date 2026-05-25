@@ -17,13 +17,59 @@ logger = logging.getLogger(__name__)
 
 # Active connections: ws -> {user, workspace_id, container_id, ...}
 _connections: dict[WebSocket, dict] = {}
-# Shared per-workspace state: workspace_id -> {pi_client, event_task, subscribers}
-# Owned by the first connection, cleaned up by the last.
-# subscribers is a set of WebSockets that receive Pi AG-UI events.
-_workspace_state: dict[str, dict] = {}
-# Per-workspace locks to serialize workspace_connect and prevent races
-# where two connections both see conn_num==1 and both try to start Pi.
-_workspace_locks: dict[str, asyncio.Lock] = {}
+
+
+class WorkspaceSession:
+    """Shared Pi/event state for a single workspace.
+
+    Created by the first WebSocket connection, cleaned up by the last.
+    """
+
+    def __init__(self, workspace_id: str):
+        self.workspace_id = workspace_id
+        self.pi_client = None
+        self.container_id: str | None = None
+        self.agent_running = False
+        self.subscribers: set[WebSocket] = set()
+        self.event_task: asyncio.Task | None = None
+        self.lock = asyncio.Lock()
+
+    async def reset(self) -> None:
+        """Clean up Pi client and event task."""
+        if self.event_task:
+            self.event_task.cancel()
+            try:
+                await self.event_task
+            except asyncio.CancelledError:
+                pass
+            self.event_task = None
+
+        if self.pi_client:
+            await self.pi_client.disconnect()
+            self.pi_client = None
+
+        self.subscribers.clear()
+        self.agent_running = False
+
+
+# Active sessions keyed by workspace_id.
+_sessions: dict[str, WorkspaceSession] = {}
+
+
+def get_session(workspace_id: str) -> WorkspaceSession | None:
+    return _sessions.get(workspace_id)
+
+
+def get_or_create_session(workspace_id: str) -> WorkspaceSession:
+    if workspace_id not in _sessions:
+        _sessions[workspace_id] = WorkspaceSession(workspace_id)
+    return _sessions[workspace_id]
+
+
+async def remove_session(workspace_id: str) -> None:
+    session = _sessions.pop(workspace_id, None)
+    if session:
+        await session.reset()
 
 
 async def handle_websocket(ws: WebSocket) -> None:
@@ -197,35 +243,25 @@ async def start_workspace_container(
     state["workspace_id"] = workspace_id
     state["container_id"] = container_id
 
-    # Per-workspace lock prevents two simultaneous connects from both
-    # seeing conn_num==1 and both trying to start Pi.
-    if workspace_id not in _workspace_locks:
-        _workspace_locks[workspace_id] = asyncio.Lock()
-    async with _workspace_locks[workspace_id]:
+    session = get_or_create_session(workspace_id)
+    async with session.lock:
         conn_num = container_manager.registry.add_connection(workspace_id)
 
         if conn_num == 1:
             pi_client = PiRpcClient(container_id)
             await pi_client.connect()
 
-            ws_state = {
-                "pi_client": pi_client,
-                "container_id": container_id,
-                "agent_running": False,
-                "subscribers": {ws},
-                "event_task": asyncio.create_task(
-                    forward_events(pi_client, workspace_id)
-                ),
-            }
-            _workspace_state[workspace_id] = ws_state
+            session.pi_client = pi_client
+            session.container_id = container_id
+            session.agent_running = False
+            session.subscribers.add(ws)
+            session.event_task = asyncio.create_task(
+                forward_events(pi_client, workspace_id)
+            )
             state["pi_client"] = pi_client
         else:
-            # Share the Pi client and subscribe to events
-            ws_state = _workspace_state.get(workspace_id, {})
-            state["pi_client"] = ws_state.get("pi_client")
-            subscribers = ws_state.get("subscribers")
-            if subscribers is not None:
-                subscribers.add(ws)
+            state["pi_client"] = session.pi_client
+            session.subscribers.add(ws)
 
     # Register idle timeout notification (per-connection)
     async def on_idle(wid: str) -> None:
@@ -347,8 +383,8 @@ async def handle_prompt(ws: WebSocket, state: dict, msg: dict) -> None:
         if pi_client is None or not pi_client.is_alive:
             raise PiDeadError("Pi client is dead or missing")
         container_manager.registry.record_activity(state["container_id"])
-        ws_state = _workspace_state.get(workspace_id, {})
-        is_queued = ws_state.get("agent_running", False)
+        session = get_session(workspace_id)
+        is_queued = session.agent_running if session else False
         await user_store.save_message(
             workspace_id, "user", text, is_queued=is_queued
         )
@@ -774,20 +810,17 @@ async def forward_terminal_output(
 
 async def _broadcast(workspace_id: str, message: dict) -> None:
     """Send a message to all subscribers for a workspace, removing dead ones."""
-    ws_state = _workspace_state.get(workspace_id)
-    if not ws_state:  # pragma: no cover
-        return
-    subscribers = ws_state.get("subscribers")
-    if not subscribers:  # pragma: no cover
+    session = get_session(workspace_id)
+    if not session:  # pragma: no cover
         return
     dead = []
-    for sub_ws in list(subscribers):
+    for sub_ws in list(session.subscribers):
         try:
             await sub_ws.send_json(message)
         except (WebSocketDisconnect, RuntimeError, ConnectionError):
             dead.append(sub_ws)
     for sub_ws in dead:
-        subscribers.discard(sub_ws)
+        session.subscribers.discard(sub_ws)
 
 
 async def forward_events(pi_client: PiRpcClient, workspace_id: str) -> None:
@@ -818,17 +851,16 @@ async def forward_events(pi_client: PiRpcClient, workspace_id: str) -> None:
                 etype = agui_event.get("type", "")
 
                 # Track agent running state and keep container alive.
-                # Use the real workspace_state dict, not a fallback —
-                # if it's been popped (cleanup raced us), skip updates.
-                ws_state = _workspace_state.get(workspace_id)
-                if ws_state is not None:
+                session = get_session(workspace_id)
+                if session is not None:
                     if etype == "RUN_STARTED":
-                        ws_state["agent_running"] = True
+                        session.agent_running = True
                     elif etype in ("RUN_FINISHED", "RUN_ERROR"):
-                        ws_state["agent_running"] = False
-                    cid = ws_state.get("container_id")
-                    if cid:
-                        container_manager.registry.record_activity(cid)
+                        session.agent_running = False
+                    if session.container_id:
+                        container_manager.registry.record_activity(
+                            session.container_id
+                        )
 
                 # Accumulate and save to history
                 if etype == "TEXT_MESSAGE_CONTENT":
@@ -883,10 +915,9 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
     await stop_exec(state)
 
     # Remove this WebSocket from event subscribers
-    if workspace_id and workspace_id in _workspace_state:
-        subscribers = _workspace_state[workspace_id].get("subscribers")
-        if subscribers is not None:  # pragma: no cover
-            subscribers.discard(ws)
+    session = get_session(workspace_id) if workspace_id else None
+    if session:
+        session.subscribers.discard(ws)
 
     # Decrement connection refcount. Only the last connection to disconnect
     # kills Pi and (optionally) destroys the container.
@@ -895,28 +926,13 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
         remaining = container_manager.registry.remove_connection(workspace_id)
 
     if remaining == 0 and workspace_id:
-        # Last connection — clean up shared Pi state
-        ws_state = _workspace_state.pop(workspace_id, {})
-
-        event_task = ws_state.get("event_task")
-        if event_task:
-            event_task.cancel()
-            try:
-                await event_task
-            except asyncio.CancelledError:
-                pass
-
-        pi_client: PiRpcClient | None = ws_state.get("pi_client")
-        if pi_client:
-            await pi_client.disconnect()
+        await remove_session(workspace_id)
 
         container_id = state.get("container_id")
         if container_id:
             await container_manager.registry.stop_and_remove_container(
                 container_id
             )
-
-        _workspace_locks.pop(workspace_id, None)
 
 
 async def reset_workspace_state(workspace_id: str) -> None:
@@ -926,25 +942,8 @@ async def reset_workspace_state(workspace_id: str) -> None:
     manual stop) so the next workspace_connect starts Pi fresh
     instead of reusing a dead client.
     """
-    ws_state = _workspace_state.pop(workspace_id, {})
-
-    event_task = ws_state.get("event_task")
-    if event_task:
-        event_task.cancel()
-        try:
-            await event_task
-        except asyncio.CancelledError:
-            pass
-
-    pi_client: PiRpcClient | None = ws_state.get("pi_client")
-    if pi_client:
-        await pi_client.disconnect()
-
-    # Remove all container-level state (refcount, idle callbacks, timeout)
+    await remove_session(workspace_id)
     container_manager.registry.remove_state(workspace_id)
-
-    _workspace_locks.pop(workspace_id, None)
-
     logger.info("Reset workspace state for %s", workspace_id)
 
 

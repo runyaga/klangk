@@ -16,6 +16,7 @@ from bark_backend import (
 )
 from bark_backend.pi_rpc_client import PiDeadError
 from bark_backend.ws_handler import (
+    WorkspaceSession,
     derive_hosting_info,
     start_workspace_container,
     handle_workspace_connect,
@@ -540,16 +541,15 @@ class TestForwardTerminalOutput:
 
 def _setup_workspace_state(workspace_id, ws, pi, container_id="cid-1"):
     """Helper to set up _workspace_state for forward_events tests."""
-    ws_handler._workspace_state[workspace_id] = {
-        "pi_client": pi,
-        "container_id": container_id,
-        "agent_running": False,
-        "subscribers": {ws},
-    }
+    session = WorkspaceSession(workspace_id)
+    session.pi_client = pi
+    session.container_id = container_id
+    session.subscribers = {ws}
+    ws_handler._sessions[workspace_id] = session
 
 
 def _teardown_workspace_state(workspace_id):
-    ws_handler._workspace_state.pop(workspace_id, None)
+    ws_handler._sessions.pop(workspace_id, None)
     container_manager.registry.states.pop(workspace_id, None)
 
 
@@ -584,8 +584,8 @@ class TestForwardEvents:
         await forward_events(pi, workspace["id"])
 
         assert ws.send_json.call_count >= 5
-        ws_state = ws_handler._workspace_state.get(workspace["id"], {})
-        assert ws_state.get("agent_running") is False
+        session = ws_handler._sessions.get(workspace["id"])
+        assert session is None or session.agent_running is False
         _teardown_workspace_state(workspace["id"])
 
     async def test_saves_assistant_text(self, db):
@@ -686,8 +686,8 @@ class TestForwardEvents:
         pi.events = fake_events
         await forward_events(pi, "ws-track")
 
-        ws_state = ws_handler._workspace_state.get("ws-track", {})
-        assert ws_state.get("agent_running") is False
+        session = ws_handler._sessions.get("ws-track")
+        assert session is None or session.agent_running is False
         _teardown_workspace_state("ws-track")
 
     async def test_records_activity_on_events(self):
@@ -721,8 +721,8 @@ class TestForwardEvents:
         await forward_events(pi, "ws-dead")
 
         # Dead subscriber should be removed
-        ws_state = ws_handler._workspace_state.get("ws-dead", {})
-        assert ws not in ws_state.get("subscribers", set())
+        session = ws_handler._sessions.get("ws-dead")
+        assert session is None or ws not in session.subscribers
         _teardown_workspace_state("ws-dead")
 
     async def test_broadcasts_to_multiple_subscribers(self):
@@ -730,7 +730,7 @@ class TestForwardEvents:
         ws2 = _mock_ws()
         pi = _mock_pi_client()
         _setup_workspace_state("ws-multi", ws1, pi)
-        ws_handler._workspace_state["ws-multi"]["subscribers"].add(ws2)
+        ws_handler._sessions["ws-multi"].subscribers.add(ws2)
 
         async def fake_events():
             yield {"type": "agent_start"}
@@ -763,10 +763,10 @@ class TestCleanupConnection:
         # Simulate: one connection, shared Pi state
         container_manager.registry.track_activity("ctr-full", "ws-cleanup-1")
         container_manager.registry.add_connection("ws-cleanup-1")
-        ws_handler._workspace_state["ws-cleanup-1"] = {
-            "pi_client": pi,
-            "event_task": asyncio.create_task(asyncio.sleep(10)),
-        }
+        session = WorkspaceSession("ws-cleanup-1")
+        session.pi_client = pi
+        session.event_task = asyncio.create_task(asyncio.sleep(10))
+        ws_handler._sessions["ws-cleanup-1"] = session
         container_manager.registry.states[
             "ws-cleanup-1"
         ].idle_callbacks.append(state["_idle_cb"])
@@ -783,7 +783,7 @@ class TestCleanupConnection:
         mock_stop.assert_awaited_once_with("ctr-full")
         assert state["_idle_cb"] is None
         assert state["terminal_session"] is None
-        assert "ws-cleanup-1" not in ws_handler._workspace_state
+        assert "ws-cleanup-1" not in ws_handler._sessions
 
         container_manager.registry.states.pop("ws-cleanup-1", None)
 
@@ -804,10 +804,10 @@ class TestCleanupConnection:
         container_manager.registry.track_activity("ctr-shared", "ws-cleanup-2")
         container_manager.registry.add_connection("ws-cleanup-2")
         container_manager.registry.add_connection("ws-cleanup-2")
-        ws_handler._workspace_state["ws-cleanup-2"] = {
-            "pi_client": pi,
-            "event_task": asyncio.create_task(asyncio.sleep(10)),
-        }
+        session = WorkspaceSession("ws-cleanup-2")
+        session.pi_client = pi
+        session.event_task = asyncio.create_task(asyncio.sleep(10))
+        ws_handler._sessions["ws-cleanup-2"] = session
         container_manager.registry.states[
             "ws-cleanup-2"
         ].idle_callbacks.append(state["_idle_cb"])
@@ -825,13 +825,13 @@ class TestCleanupConnection:
         # Terminal for THIS connection should be stopped
         t.stop.assert_awaited_once()
         # Shared state still present
-        assert "ws-cleanup-2" in ws_handler._workspace_state
+        assert "ws-cleanup-2" in ws_handler._sessions
 
         # Cleanup
         container_manager.registry.states.pop("ws-cleanup-2", None)
-        ws_state = ws_handler._workspace_state.pop("ws-cleanup-2", {})
-        if ws_state.get("event_task"):
-            ws_state["event_task"].cancel()
+        session = ws_handler._sessions.pop("ws-cleanup-2", None)
+        if session and session.event_task:
+            session.event_task.cancel()
 
     async def test_cleanup_minimal(self):
         ws = _mock_ws()
@@ -899,9 +899,9 @@ class TestHandlePrompt:
         state["pi_client"] = pi
         state["workspace_id"] = workspace["id"]
         state["container_id"] = "cid"
-        ws_handler._workspace_state[workspace["id"]] = {
-            "agent_running": True,
-        }
+        session = WorkspaceSession(workspace["id"])
+        session.agent_running = True
+        ws_handler._sessions[workspace["id"]] = session
         container_manager.registry.track_activity("cid", workspace["id"])
 
         await handle_prompt(ws, state, {"text": "queued msg"})
@@ -916,7 +916,7 @@ class TestHandlePrompt:
         ]
         assert len(queued_events) == 1
         container_manager.registry.states.pop(workspace["id"], None)
-        ws_handler._workspace_state.pop(workspace["id"], None)
+        ws_handler._sessions.pop(workspace["id"], None)
 
     async def test_prompt_auto_restart(self, db):
         ws = _mock_ws()
@@ -1309,14 +1309,14 @@ class TestStartWorkspaceContainer:
         assert state["pi_client"] is pi
         assert state["workspace"] == workspace
         assert state["resume_session"] is None
-        assert workspace["id"] in ws_handler._workspace_state
+        assert workspace["id"] in ws_handler._sessions
         assert state["_idle_cb"] is not None
 
-        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
-        if ws_state.get("event_task"):
-            ws_state["event_task"].cancel()
+        session = ws_handler._sessions.pop(workspace["id"], None)
+        if session and session.event_task:
+            session.event_task.cancel()
             try:
-                await ws_state["event_task"]
+                await session.event_task
             except asyncio.CancelledError:
                 pass
         container_manager.registry.states.pop(workspace["id"], None)
@@ -1364,7 +1364,7 @@ class TestStartWorkspaceContainer:
 
         # First connection owns Pi
         assert state1["pi_client"] is pi
-        assert workspace["id"] in ws_handler._workspace_state
+        assert workspace["id"] in ws_handler._sessions
 
         with (
             patch.object(
@@ -1385,11 +1385,11 @@ class TestStartWorkspaceContainer:
         )
 
         # Cleanup
-        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
-        if ws_state.get("event_task"):
-            ws_state["event_task"].cancel()
+        session = ws_handler._sessions.pop(workspace["id"], None)
+        if session and session.event_task:
+            session.event_task.cancel()
             try:
-                await ws_state["event_task"]
+                await session.event_task
             except asyncio.CancelledError:
                 pass
         container_manager.registry.states.pop(workspace["id"], None)
@@ -1436,11 +1436,11 @@ class TestStartWorkspaceContainer:
         assert "/home/bark/.pi/sessions" in state["resume_session"]
         assert state["container_status"] == "connected"
 
-        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
-        if ws_state.get("event_task"):
-            ws_state["event_task"].cancel()
+        session = ws_handler._sessions.pop(workspace["id"], None)
+        if session and session.event_task:
+            session.event_task.cancel()
             try:
-                await ws_state["event_task"]
+                await session.event_task
             except asyncio.CancelledError:
                 pass
         container_manager.registry.states.pop(workspace["id"], None)
@@ -1482,11 +1482,11 @@ class TestStartWorkspaceContainer:
         await idle_cb(workspace["id"])  # should not raise
         assert ws.send_json.call_count == 1
 
-        ws_state = ws_handler._workspace_state.pop(workspace["id"], {})
-        if ws_state.get("event_task"):
-            ws_state["event_task"].cancel()
+        session = ws_handler._sessions.pop(workspace["id"], None)
+        if session and session.event_task:
+            session.event_task.cancel()
             try:
-                await ws_state["event_task"]
+                await session.event_task
             except asyncio.CancelledError:
                 pass
         container_manager.registry.states.pop(workspace["id"], None)
@@ -2086,20 +2086,17 @@ class TestExecDispatch:
 class TestResetWorkspaceState:
     async def test_resets_pi_and_refcount(self):
         pi = _mock_pi_client()
-        ws_handler._workspace_state["ws-reset"] = {
-            "pi_client": pi,
-            "event_task": asyncio.create_task(asyncio.sleep(10)),
-            "subscribers": set(),
-        }
+        session = WorkspaceSession("ws-reset")
+        session.pi_client = pi
+        session.event_task = asyncio.create_task(asyncio.sleep(10))
+        ws_handler._sessions["ws-reset"] = session
         container_manager.registry.track_activity("cid-reset", "ws-reset")
         container_manager.registry.states["ws-reset"].connection_count = 2
-        ws_handler._workspace_locks["ws-reset"] = asyncio.Lock()
 
         await reset_workspace_state("ws-reset")
 
-        assert "ws-reset" not in ws_handler._workspace_state
+        assert "ws-reset" not in ws_handler._sessions
         assert "ws-reset" not in container_manager.registry.states
-        assert "ws-reset" not in ws_handler._workspace_locks
         pi.disconnect.assert_awaited_once()
 
     async def test_noop_for_unknown_workspace(self):
@@ -2107,9 +2104,8 @@ class TestResetWorkspaceState:
 
     async def test_no_event_task(self):
         pi = _mock_pi_client()
-        ws_handler._workspace_state["ws-no-task"] = {
-            "pi_client": pi,
-            "subscribers": set(),
-        }
+        session = WorkspaceSession("ws-no-task")
+        session.pi_client = pi
+        ws_handler._sessions["ws-no-task"] = session
         await reset_workspace_state("ws-no-task")
         pi.disconnect.assert_awaited_once()
