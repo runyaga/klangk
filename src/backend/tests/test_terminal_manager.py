@@ -123,7 +123,7 @@ class TestStart:
 
 
 class TestOnReadable:
-    def test_data_queued(self, mock_os):
+    async def test_data_queued(self, mock_os):
         mock_os["fd_read"].return_value = b"hello"
         s = TerminalSession("cid")
         s._master_fd = mock_os["master_fd"]
@@ -133,7 +133,7 @@ class TestOnReadable:
         assert s._output_queue.qsize() == 1
         assert s._output_queue.get_nowait() == "hello"
 
-    def test_empty_read_sends_none(self, mock_os):
+    async def test_empty_read_sends_none(self, mock_os):
         mock_os["fd_read"].return_value = b""
         s = TerminalSession("cid")
         s._master_fd = mock_os["master_fd"]
@@ -142,7 +142,7 @@ class TestOnReadable:
 
         assert s._output_queue.get_nowait() is None
 
-    def test_oserror_sends_none(self, mock_os):
+    async def test_oserror_sends_none(self, mock_os):
         mock_os["fd_read"].side_effect = OSError("fd closed")
         s = TerminalSession("cid")
         s._master_fd = mock_os["master_fd"]
@@ -151,7 +151,7 @@ class TestOnReadable:
 
         assert s._output_queue.get_nowait() is None
 
-    def test_binary_decoded_with_replacement(self, mock_os):
+    async def test_binary_decoded_with_replacement(self, mock_os):
         mock_os["fd_read"].return_value = b"\x80\x81\x82"
         s = TerminalSession("cid")
         s._master_fd = mock_os["master_fd"]
@@ -163,19 +163,19 @@ class TestOnReadable:
 
 
 class TestRemoveReader:
-    def test_valueerror_suppressed(self):
+    async def test_valueerror_suppressed(self):
         s = TerminalSession("cid")
         s._master_fd = 99
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with patch.object(
             loop, "remove_reader", side_effect=ValueError("bad fd")
         ):
             s.remove_reader()
 
-    def test_oserror_suppressed(self):
+    async def test_oserror_suppressed(self):
         s = TerminalSession("cid")
         s._master_fd = 99
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         with patch.object(
             loop, "remove_reader", side_effect=OSError("bad fd")
         ):
