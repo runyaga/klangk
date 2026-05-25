@@ -21,9 +21,9 @@ _connections: dict[WebSocket, dict] = {}
 # Owned by the first connection, cleaned up by the last.
 # subscribers is a set of WebSockets that receive Pi AG-UI events.
 _workspace_state: dict[str, dict] = {}
-# Serializes workspace_connect for the same workspace to prevent races
+# Per-workspace locks to serialize workspace_connect and prevent races
 # where two connections both see conn_num==1 and both try to start Pi.
-_workspace_connect_lock: asyncio.Lock = asyncio.Lock()
+_workspace_locks: dict[str, asyncio.Lock] = {}
 
 
 async def handle_websocket(ws: WebSocket) -> None:
@@ -44,8 +44,6 @@ async def handle_websocket(ws: WebSocket) -> None:
         "user": user,
         "pi_client": None,
         "container_id": None,
-        "event_task": None,
-        "agent_running": False,
         "terminal_session": None,
         "terminal_task": None,
         "exec_session": None,
@@ -196,9 +194,11 @@ async def start_workspace_container(
     state["workspace_id"] = workspace_id
     state["container_id"] = container_id
 
-    # Lock prevents two simultaneous workspace_connect calls from both
+    # Per-workspace lock prevents two simultaneous connects from both
     # seeing conn_num==1 and both trying to start Pi.
-    async with _workspace_connect_lock:
+    if workspace_id not in _workspace_locks:
+        _workspace_locks[workspace_id] = asyncio.Lock()
+    async with _workspace_locks[workspace_id]:
         conn_num = container_manager.add_connection(workspace_id)
 
         if conn_num == 1:
@@ -873,6 +873,8 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
         container_id = state.get("container_id")
         if container_id:
             await container_manager.stop_and_remove_container(container_id)
+
+        _workspace_locks.pop(workspace_id, None)
 
 
 async def send_error(ws: WebSocket, message: str) -> None:

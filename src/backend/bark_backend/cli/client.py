@@ -353,6 +353,13 @@ async def _ws_exec(
                 elif data.get("type") == "exec_exit":
                     exit_code = data.get("code", 0)
                     break
+                elif data.get("type") == "error":  # pragma: no cover
+                    logging.error(
+                        "Server error: %s",
+                        data.get("message", "unknown"),
+                    )
+                    exit_code = 1
+                    break
 
         # stdout_forward drives the lifecycle — when it receives
         # exec_exit, it sets stop so stdin_forward exits promptly.
@@ -361,7 +368,14 @@ async def _ws_exec(
         await stdout_task
         stop.set()
         # stdin_forward exits within 0.2s thanks to select timeout
-        await asyncio.wait_for(stdin_task, timeout=2)
+        try:
+            await asyncio.wait_for(stdin_task, timeout=2)
+        except asyncio.TimeoutError:  # pragma: no cover
+            stdin_task.cancel()
+            try:
+                await stdin_task
+            except asyncio.CancelledError:
+                pass
 
         await ws.send(json.dumps({"cmd": "exec_stop"}))
         return exit_code

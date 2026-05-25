@@ -65,8 +65,15 @@ class ExecSession:
     async def write(self, data: bytes) -> None:
         """Write data to the process stdin."""
         if self._proc is not None and self._proc.stdin is not None:
-            self._proc.stdin.write(data)
-            await self._proc.stdin.drain()
+            try:
+                self._proc.stdin.write(data)
+                await self._proc.stdin.drain()
+            except (
+                BrokenPipeError,
+                ConnectionResetError,
+                OSError,
+            ):  # pragma: no cover
+                pass  # Process already exited
 
     async def close_stdin(self) -> None:
         """Signal EOF on stdin."""
