@@ -149,6 +149,12 @@
     exec python -m pytest src/backend/tests -v -n auto "$@"
   '';
 
+  # CLI E2E tests: start real server, run bark commands, need Docker
+  scripts.test-cli-e2e.exec = ''
+    cd $DEVENV_ROOT
+    exec python -m pytest src/cli-e2e -v -p no:xdist --no-cov "$@"
+  '';
+
   scripts.test-e2e.exec = ''
     cd $DEVENV_ROOT
     devenv tasks run bark:flutter-build bark:docker-build
