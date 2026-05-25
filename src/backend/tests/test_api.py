@@ -928,6 +928,7 @@ class TestSetIdleTimeout:
         """Per-workspace idle timeout should not affect global."""
         original_timeout = container_manager.IDLE_TIMEOUT_SECONDS
         try:
+            container_manager.registry.track_activity("cid-test", "ws-test")
             container_manager.set_workspace_idle_timeout("ws-test", 5)
             assert container_manager.get_workspace_idle_timeout("ws-test") == 5
             assert container_manager.IDLE_TIMEOUT_SECONDS == original_timeout
@@ -937,24 +938,24 @@ class TestSetIdleTimeout:
                 == original_timeout
             )
         finally:
-            container_manager._workspace_idle_timeouts.clear()
+            container_manager.registry.states.pop("ws-test", None)
 
     async def test_cleanup_loop_adapts_to_short_timeout(self, db):
         """Cleanup loop interval adapts when per-workspace timeouts exist."""
         try:
+            container_manager.registry.track_activity("cid-fast", "ws-fast")
             container_manager.set_workspace_idle_timeout("ws-fast", 6)
             # With a 6s per-workspace timeout, the minimum is 6, so
             # the loop should sleep max(2, 6//2) = 3 seconds.
-            assert (
-                min(container_manager._workspace_idle_timeouts.values()) == 6
-            )
+            state = container_manager.registry.states["ws-fast"]
+            assert state.idle_timeout == 6
             # Global CHECK_INTERVAL_SECONDS should be unchanged
             assert (
                 container_manager.CHECK_INTERVAL_SECONDS
                 == container_manager.parse_idle_timeout()[1]
             )
         finally:
-            container_manager._workspace_idle_timeouts.clear()
+            container_manager.registry.states.pop("ws-fast", None)
 
 
 # --- Roles ---

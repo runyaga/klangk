@@ -193,15 +193,12 @@ class TestHandleSteer:
         state = _base_state()
         state["pi_client"] = pi
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
 
         await handle_steer(state, {"text": "go left"})
 
         pi.steer.assert_awaited_once_with("go left")
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
     async def test_steer_no_client(self):
         state = _base_state()
@@ -214,12 +211,9 @@ class TestHandleSteer:
         state = _base_state()
         state["pi_client"] = pi
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
         await handle_steer(state, {"text": "go left"})  # should not raise
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
 
 # --- handle_follow_up ---
@@ -231,15 +225,12 @@ class TestHandleFollowUp:
         state = _base_state()
         state["pi_client"] = pi
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
 
         await handle_follow_up(state, {"text": "and then?"})
 
         pi.follow_up.assert_awaited_once_with("and then?")
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
     async def test_follow_up_no_client(self):
         state = _base_state()
@@ -252,12 +243,9 @@ class TestHandleFollowUp:
         state = _base_state()
         state["pi_client"] = pi
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
         await handle_follow_up(state, {"text": "x"})  # should not raise
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
 
 # --- handle_abort ---
@@ -359,15 +347,12 @@ class TestHandleTerminalInput:
         state = _base_state()
         state["terminal_session"] = t
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
 
         await handle_terminal_input(state, {"data": "ls\n"})
 
         t.write.assert_awaited_once_with("ls\n")
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
     async def test_no_session(self):
         state = _base_state()
@@ -441,10 +426,7 @@ class TestHandleTerminalStart:
         ws = _mock_ws()
         state = _base_state()
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": "ws",
-        }
+        container_manager.registry.track_activity("cid", "ws")
 
         with patch.object(ws_handler, "TerminalSession") as MockTS:
             mock_session = _mock_terminal()
@@ -469,7 +451,7 @@ class TestHandleTerminalStart:
             await state["terminal_task"]
         except asyncio.CancelledError:
             pass
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop("ws", None)
 
     async def test_no_container(self):
         ws = _mock_ws()
@@ -504,8 +486,8 @@ class TestForwardTerminalOutput:
         assert calls[2][0][0]["type"] == "event"
         assert calls[2][0][0]["event"]["name"] == "container_stopped"
         # Activity was bumped on each output chunk
-        assert "ctr-fwd" in container_manager._containers
-        container_manager._containers.pop("ctr-fwd", None)
+        assert "ws-fwd" in container_manager.registry.states
+        container_manager.registry.states.pop("ws-fwd", None)
 
     async def test_cancelled_error_propagates(self):
         ws = _mock_ws()
@@ -568,7 +550,7 @@ def _setup_workspace_state(workspace_id, ws, pi, container_id="cid-1"):
 
 def _teardown_workspace_state(workspace_id):
     ws_handler._workspace_state.pop(workspace_id, None)
-    container_manager._containers.pop(workspace_id, None)
+    container_manager.registry.states.pop(workspace_id, None)
 
 
 class TestForwardEvents:
@@ -712,10 +694,8 @@ class TestForwardEvents:
         ws = _mock_ws()
         pi = _mock_pi_client()
         _setup_workspace_state("ws-activity", ws, pi, container_id="cid-act")
-        container_manager._containers["cid-act"] = {
-            "last_activity": 0,
-            "workspace_id": "ws-activity",
-        }
+        container_manager.registry.track_activity("cid-act", "ws-activity")
+        container_manager.registry.states["ws-activity"].last_activity = 0
 
         async def fake_events():
             yield {"type": "agent_start"}
@@ -723,9 +703,10 @@ class TestForwardEvents:
         pi.events = fake_events
         await forward_events(pi, "ws-activity")
 
-        assert container_manager._containers["cid-act"]["last_activity"] > 0
+        assert (
+            container_manager.registry.states["ws-activity"].last_activity > 0
+        )
         _teardown_workspace_state("ws-activity")
-        container_manager._containers.pop("cid-act", None)
 
     async def test_ws_error_removes_dead_subscriber(self):
         ws = _mock_ws()
@@ -780,14 +761,15 @@ class TestCleanupConnection:
         state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
 
         # Simulate: one connection, shared Pi state
+        container_manager.registry.track_activity("ctr-full", "ws-cleanup-1")
         container_manager.add_connection("ws-cleanup-1")
         ws_handler._workspace_state["ws-cleanup-1"] = {
             "pi_client": pi,
             "event_task": asyncio.create_task(asyncio.sleep(10)),
         }
-        container_manager._idle_callbacks.setdefault(
-            "ws-cleanup-1", []
-        ).append(state["_idle_cb"])
+        container_manager.registry.states[
+            "ws-cleanup-1"
+        ].idle_callbacks.append(state["_idle_cb"])
 
         with patch.object(
             container_manager,
@@ -803,8 +785,7 @@ class TestCleanupConnection:
         assert state["terminal_session"] is None
         assert "ws-cleanup-1" not in ws_handler._workspace_state
 
-        container_manager._idle_callbacks.pop("ws-cleanup-1", None)
-        container_manager._workspace_connections.pop("ws-cleanup-1", None)
+        container_manager.registry.states.pop("ws-cleanup-1", None)
 
     async def test_cleanup_not_last_connection(self):
         """When other connections remain, Pi and container survive."""
@@ -820,15 +801,16 @@ class TestCleanupConnection:
         state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
 
         # Two connections
+        container_manager.registry.track_activity("ctr-shared", "ws-cleanup-2")
         container_manager.add_connection("ws-cleanup-2")
         container_manager.add_connection("ws-cleanup-2")
         ws_handler._workspace_state["ws-cleanup-2"] = {
             "pi_client": pi,
             "event_task": asyncio.create_task(asyncio.sleep(10)),
         }
-        container_manager._idle_callbacks.setdefault(
-            "ws-cleanup-2", []
-        ).append(state["_idle_cb"])
+        container_manager.registry.states[
+            "ws-cleanup-2"
+        ].idle_callbacks.append(state["_idle_cb"])
 
         with patch.object(
             container_manager,
@@ -846,11 +828,10 @@ class TestCleanupConnection:
         assert "ws-cleanup-2" in ws_handler._workspace_state
 
         # Cleanup
-        container_manager._workspace_connections.pop("ws-cleanup-2", None)
+        container_manager.registry.states.pop("ws-cleanup-2", None)
         ws_state = ws_handler._workspace_state.pop("ws-cleanup-2", {})
         if ws_state.get("event_task"):
             ws_state["event_task"].cancel()
-        container_manager._idle_callbacks.pop("ws-cleanup-2", None)
 
     async def test_cleanup_minimal(self):
         ws = _mock_ws()
@@ -871,7 +852,7 @@ class TestCleanupConnection:
         ) as mock_stop:
             await cleanup_connection(ws, state)
         mock_stop.assert_awaited_once_with("ctr-1")
-        container_manager._workspace_connections.pop("ws-cleanup-3", None)
+        container_manager.registry.states.pop("ws-cleanup-3", None)
 
 
 # --- handle_prompt ---
@@ -900,17 +881,14 @@ class TestHandlePrompt:
         state["pi_client"] = pi
         state["workspace_id"] = workspace["id"]
         state["container_id"] = "cid"
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": workspace["id"],
-        }
+        container_manager.registry.track_activity("cid", workspace["id"])
 
         await handle_prompt(ws, state, {"text": "hello world"})
 
         pi.prompt.assert_awaited_once_with("hello world")
         msgs = await user_store.get_messages(workspace["id"])
         assert any(m["content"] == "hello world" for m in msgs)
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_prompt_queued(self, db):
         ws = _mock_ws()
@@ -924,10 +902,7 @@ class TestHandlePrompt:
         ws_handler._workspace_state[workspace["id"]] = {
             "agent_running": True,
         }
-        container_manager._containers["cid"] = {
-            "last_activity": 0,
-            "workspace_id": workspace["id"],
-        }
+        container_manager.registry.track_activity("cid", workspace["id"])
 
         await handle_prompt(ws, state, {"text": "queued msg"})
 
@@ -940,7 +915,7 @@ class TestHandlePrompt:
             and c.get("event", {}).get("name") == "prompt_queued"
         ]
         assert len(queued_events) == 1
-        container_manager._containers.pop("cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
         ws_handler._workspace_state.pop(workspace["id"], None)
 
     async def test_prompt_auto_restart(self, db):
@@ -972,15 +947,14 @@ class TestHandlePrompt:
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
-            container_manager._containers["new-cid"] = {
-                "last_activity": 0,
-                "workspace_id": workspace["id"],
-            }
+            container_manager.registry.track_activity(
+                "new-cid", workspace["id"]
+            )
             await handle_prompt(ws, state, {"text": "hello after restart"})
             await state["_retry_task"]
 
         pi_new.prompt.assert_awaited_once_with("hello after restart")
-        container_manager._containers.pop("new-cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_prompt_auto_restart_workspace_gone(self, db):
         ws = _mock_ws()
@@ -1063,15 +1037,14 @@ class TestHandlePrompt:
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
-            container_manager._containers["new-cid"] = {
-                "last_activity": 0,
-                "workspace_id": workspace["id"],
-            }
+            container_manager.registry.track_activity(
+                "new-cid", workspace["id"]
+            )
             await handle_prompt(ws, state, {"text": "hello"})
             await state["_retry_task"]
 
         pi_new.prompt.assert_awaited_once()
-        container_manager._containers.pop("new-cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_prompt_restart_ws_send_fails(self, db):
         ws = _mock_ws()
@@ -1114,15 +1087,14 @@ class TestHandlePrompt:
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
-            container_manager._containers["new-cid"] = {
-                "last_activity": 0,
-                "workspace_id": workspace["id"],
-            }
+            container_manager.registry.track_activity(
+                "new-cid", workspace["id"]
+            )
             await handle_prompt(ws, state, {"text": "hello"})
             await state["_retry_task"]
 
         pi_new.prompt.assert_awaited_once()
-        container_manager._containers.pop("new-cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
 
 # --- handle_workspace_connect ---
@@ -1269,10 +1241,7 @@ class TestHandleRestartContainer:
             state["container_id"] = "new-cid"
             state["pi_client"] = _mock_pi_client()
 
-        container_manager._containers["new-cid"] = {
-            "last_activity": 0,
-            "workspace_id": workspace["id"],
-        }
+        container_manager.registry.track_activity("new-cid", workspace["id"])
 
         with (
             patch.object(
@@ -1294,7 +1263,7 @@ class TestHandleRestartContainer:
             and c.get("event", {}).get("name") == "container_ready"
         ]
         assert len(ready) == 1
-        container_manager._containers.pop("new-cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
 
 # --- start_workspace_container ---
@@ -1315,12 +1284,15 @@ class TestStartWorkspaceContainer:
 
         pi.events = fake_events
 
+        async def fake_start(*a, **kw):
+            container_manager.registry.track_activity("cid-1", workspace["id"])
+            return ("cid-1", "created")
+
         with (
             patch.object(
                 container_manager,
                 "start_container",
-                new_callable=AsyncMock,
-                return_value=("cid-1", "created"),
+                side_effect=fake_start,
             ),
             patch.object(ws_handler, "PiRpcClient", return_value=pi),
             patch("glob.glob", return_value=[]),
@@ -1343,8 +1315,7 @@ class TestStartWorkspaceContainer:
                 await ws_state["event_task"]
             except asyncio.CancelledError:
                 pass
-        container_manager._idle_callbacks.pop(workspace["id"], None)
-        container_manager._workspace_connections.pop(workspace["id"], None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_second_connection_shares_pi(self, user):
         ws1 = _mock_ws(headers={"host": "localhost:8997"})
@@ -1362,12 +1333,23 @@ class TestStartWorkspaceContainer:
 
         pi.events = fake_events
 
+        async def fake_start_created(*a, **kw):
+            container_manager.registry.track_activity(
+                "cid-shared", workspace["id"]
+            )
+            return ("cid-shared", "created")
+
+        async def fake_start_connected(*a, **kw):
+            container_manager.registry.track_activity(
+                "cid-shared", workspace["id"]
+            )
+            return ("cid-shared", "connected")
+
         with (
             patch.object(
                 container_manager,
                 "start_container",
-                new_callable=AsyncMock,
-                return_value=("cid-shared", "created"),
+                side_effect=fake_start_created,
             ),
             patch.object(ws_handler, "PiRpcClient", return_value=pi),
             patch("glob.glob", return_value=[]),
@@ -1384,8 +1366,7 @@ class TestStartWorkspaceContainer:
             patch.object(
                 container_manager,
                 "start_container",
-                new_callable=AsyncMock,
-                return_value=("cid-shared", "connected"),
+                side_effect=fake_start_connected,
             ),
             patch("glob.glob", return_value=[]),
         ):
@@ -1405,8 +1386,7 @@ class TestStartWorkspaceContainer:
                 await ws_state["event_task"]
             except asyncio.CancelledError:
                 pass
-        container_manager._idle_callbacks.pop(workspace["id"], None)
-        container_manager._workspace_connections.pop(workspace["id"], None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_resume_session(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
@@ -1426,12 +1406,15 @@ class TestStartWorkspaceContainer:
             workspace_manager.get_home_host_path(user["id"], workspace["id"])
         )
 
+        async def fake_start(*a, **kw):
+            container_manager.registry.track_activity("cid-2", workspace["id"])
+            return ("cid-2", "connected")
+
         with (
             patch.object(
                 container_manager,
                 "start_container",
-                new_callable=AsyncMock,
-                return_value=("cid-2", "connected"),
+                side_effect=fake_start,
             ),
             patch.object(ws_handler, "PiRpcClient", return_value=pi),
             patch(
@@ -1454,8 +1437,7 @@ class TestStartWorkspaceContainer:
                 await ws_state["event_task"]
             except asyncio.CancelledError:
                 pass
-        container_manager._idle_callbacks.pop(workspace["id"], None)
-        container_manager._workspace_connections.pop(workspace["id"], None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_idle_callback_ws_error(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
@@ -1471,12 +1453,15 @@ class TestStartWorkspaceContainer:
 
         pi.events = fake_events
 
+        async def fake_start(*a, **kw):
+            container_manager.registry.track_activity("cid-3", workspace["id"])
+            return ("cid-3", "created")
+
         with (
             patch.object(
                 container_manager,
                 "start_container",
-                new_callable=AsyncMock,
-                return_value=("cid-3", "created"),
+                side_effect=fake_start,
             ),
             patch.object(ws_handler, "PiRpcClient", return_value=pi),
             patch("glob.glob", return_value=[]),
@@ -1498,8 +1483,7 @@ class TestStartWorkspaceContainer:
                 await ws_state["event_task"]
             except asyncio.CancelledError:
                 pass
-        container_manager._idle_callbacks.pop(workspace["id"], None)
-        container_manager._workspace_connections.pop(workspace["id"], None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
 
 # --- handle_websocket dispatch branches ---
@@ -1642,10 +1626,7 @@ class TestHandleRestartContainerExtra:
             state["container_id"] = "new-cid"
             state["pi_client"] = _mock_pi_client()
 
-        container_manager._containers["new-cid"] = {
-            "last_activity": 0,
-            "workspace_id": workspace["id"],
-        }
+        container_manager.registry.track_activity("new-cid", workspace["id"])
 
         with (
             patch.object(
@@ -1672,7 +1653,7 @@ class TestHandleRestartContainerExtra:
             and c.get("event", {}).get("name") == "container_ready"
         ]
         assert len(ready) == 1
-        container_manager._containers.pop("new-cid", None)
+        container_manager.registry.states.pop(workspace["id"], None)
 
     async def test_restart_fractional_timeout_with_resume(
         self, user, monkeypatch
@@ -1694,10 +1675,7 @@ class TestHandleRestartContainerExtra:
             state["pi_client"] = _mock_pi_client()
             state["resume_session"] = "/some/session.jsonl"
 
-        container_manager._containers["new-cid"] = {
-            "last_activity": 0,
-            "workspace_id": workspace["id"],
-        }
+        container_manager.registry.track_activity("new-cid", workspace["id"])
 
         try:
             with (
@@ -1724,7 +1702,7 @@ class TestHandleRestartContainerExtra:
             assert "session resumed" in ready[0]["event"]["value"]["reason"]
         finally:
             container_manager.IDLE_TIMEOUT_SECONDS = original_timeout
-            container_manager._containers.pop("new-cid", None)
+            container_manager.registry.states.pop(workspace["id"], None)
 
 
 # --- handle_websocket (integration) ---
@@ -2099,13 +2077,14 @@ class TestResetWorkspaceState:
             "event_task": asyncio.create_task(asyncio.sleep(10)),
             "subscribers": set(),
         }
-        container_manager._workspace_connections["ws-reset"] = 2
+        container_manager.registry.track_activity("cid-reset", "ws-reset")
+        container_manager.registry.states["ws-reset"].connection_count = 2
         ws_handler._workspace_locks["ws-reset"] = asyncio.Lock()
 
         await reset_workspace_state("ws-reset")
 
         assert "ws-reset" not in ws_handler._workspace_state
-        assert "ws-reset" not in container_manager._workspace_connections
+        assert "ws-reset" not in container_manager.registry.states
         assert "ws-reset" not in ws_handler._workspace_locks
         pi.disconnect.assert_awaited_once()
 
