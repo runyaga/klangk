@@ -269,5 +269,60 @@ def exec_cmd(
     raise typer.Exit(code=exit_code)
 
 
+@ws_app.command(
+    "sync",
+    context_settings={
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+    },
+)
+def sync(
+    ctx: typer.Context,
+    src: str = typer.Argument(
+        ..., help="Source (local path or workspace:path)"
+    ),
+    dest: str = typer.Argument(
+        ..., help="Destination (local path or workspace:path)"
+    ),
+) -> None:
+    """Sync files to/from a workspace container via rsync.
+
+    Examples:
+
+        bark ws sync ~/project my-workspace:/work/project
+
+        bark ws sync my-workspace:/work/output ~/output
+
+    Extra flags are passed to rsync (e.g. --delete, --exclude).
+    """
+    import shutil
+    import subprocess
+
+    _require_auth()
+
+    bark_bin = shutil.which("bark")
+    if not bark_bin:  # pragma: no cover
+        _err.print("[red]Cannot find bark in PATH[/red]")
+        raise typer.Exit(code=1)
+
+    rsync_bin = shutil.which("rsync")
+    if not rsync_bin:
+        _err.print("[red]Cannot find rsync in PATH[/red]")
+        raise typer.Exit(code=1)
+
+    cmd = [
+        rsync_bin,
+        "-avz",
+        "-e",
+        f"{bark_bin} ws exec",
+        *ctx.args,
+        src,
+        dest,
+    ]
+    _err.print(f"[dim]{' '.join(cmd)}[/dim]")
+    result = subprocess.run(cmd)
+    raise typer.Exit(code=result.returncode)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

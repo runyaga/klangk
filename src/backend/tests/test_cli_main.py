@@ -504,3 +504,63 @@ class TestMainCLI:
         with pytest.raises(typer.Exit) as exc_info:
             main.exec_cmd(ctx, workspace="nope")
         assert exc_info.value.exit_code == 1
+
+    def test_sync_runs_rsync(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        ctx = MagicMock()
+        ctx.args = []
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("shutil.which", side_effect=lambda x: f"/usr/bin/{x}"):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                with pytest.raises(typer.Exit) as exc_info:
+                    main.sync(ctx, src="/tmp/foo", dest="ws:/work/foo")
+        assert exc_info.value.exit_code == 0
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "/usr/bin/rsync"
+        assert "-avz" in cmd
+        assert "/tmp/foo" in cmd
+        assert "ws:/work/foo" in cmd
+        assert "bark ws exec" in " ".join(cmd)
+
+    def test_sync_no_rsync(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        def which_no_rsync(name):
+            return "/usr/bin/bark" if name == "bark" else None
+
+        ctx = MagicMock()
+        ctx.args = []
+        with patch("shutil.which", side_effect=which_no_rsync):
+            with pytest.raises(typer.Exit) as exc_info:
+                main.sync(ctx, src="/tmp/foo", dest="ws:/work/foo")
+        assert exc_info.value.exit_code == 1
+
+    def test_sync_passes_extra_args(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        ctx = MagicMock()
+        ctx.args = ["--delete", "--exclude=.git"]
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        with patch("shutil.which", side_effect=lambda x: f"/usr/bin/{x}"):
+            with patch("subprocess.run", return_value=mock_result) as mock_run:
+                with pytest.raises(typer.Exit):
+                    main.sync(ctx, src="/tmp/foo", dest="ws:/work/foo")
+        cmd = mock_run.call_args[0][0]
+        assert "--delete" in cmd
+        assert "--exclude=.git" in cmd
+
+    def test_sync_rsync_failure(self, logged_in_cfg):
+        from bark_backend.cli import main
+
+        ctx = MagicMock()
+        ctx.args = []
+        mock_result = MagicMock()
+        mock_result.returncode = 23
+        with patch("shutil.which", side_effect=lambda x: f"/usr/bin/{x}"):
+            with patch("subprocess.run", return_value=mock_result):
+                with pytest.raises(typer.Exit) as exc_info:
+                    main.sync(ctx, src="/tmp/foo", dest="ws:/work/foo")
+        assert exc_info.value.exit_code == 23
