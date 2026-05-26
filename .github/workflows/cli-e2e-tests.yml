@@ -29,6 +29,11 @@ jobs:
         with:
           build-tasks: bark:docker-build
 
+      - name: Stop devenv services
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv processes down --no-tui 2>/dev/null || true
+
       - name: Run CLI E2E tests
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
