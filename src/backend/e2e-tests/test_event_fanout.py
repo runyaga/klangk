@@ -15,6 +15,7 @@ import os
 import signal
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -121,6 +122,12 @@ def server():
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
+    if proc.stdout:
+        server_log = proc.stdout.read().decode("utf-8", errors="replace")
+        if server_log.strip():
+            sys.stderr.write(
+                f"\n=== Fanout server log ===\n{server_log}\n===\n"
+            )
     if nginx_proc:
         try:
             nginx_proc.kill()
@@ -343,16 +350,23 @@ class TestEventFanout:
 
         try:
             # Diagnostic: check available memory and running containers
-            mem = subprocess.run(
-                ["free", "-m"], capture_output=True, text=True
+            with open("/proc/meminfo") as f:
+                meminfo = [
+                    ln
+                    for ln in f.readlines()
+                    if "MemAvailable" in ln or "MemTotal" in ln
+                ]
+            sys.stderr.write(
+                f"\n=== Memory before prompt ===\n{''.join(meminfo)}"
             )
-            print(f"\n=== Memory before prompt ===\n{mem.stdout}")
             containers = subprocess.run(
                 ["docker", "ps", "--format", "{{.ID}} {{.Names}} {{.Status}}"],
                 capture_output=True,
                 text=True,
             )
-            print(f"=== Running containers ===\n{containers.stdout}")
+            sys.stderr.write(
+                f"=== Running containers ===\n{containers.stdout}\n"
+            )
 
             # ws1 sends a prompt
             await ws1.send(json.dumps({"cmd": "prompt", "text": "say hello"}))
@@ -392,8 +406,9 @@ class TestEventFanout:
                 capture_output=True,
                 text=True,
             )
-            print(f"\n=== Containers after recv ===\n{dead.stdout}")
-            # Inspect any exited containers for OOMKilled
+            sys.stderr.write(
+                f"\n=== Containers after recv ===\n{dead.stdout}\n"
+            )
             for line in dead.stdout.strip().split("\n"):
                 if line and "Exited" in line:
                     cid = line.split()[0]
@@ -408,13 +423,16 @@ class TestEventFanout:
                         capture_output=True,
                         text=True,
                     )
-                    print(
-                        f"Container {cid}: OOMKilled/ExitCode/Error = {inspect.stdout.strip()}"
+                    sys.stderr.write(
+                        f"Container {cid}: OOMKilled/ExitCode/Error = {inspect.stdout.strip()}\n"
                     )
-            mem2 = subprocess.run(
-                ["free", "-m"], capture_output=True, text=True
-            )
-            print(f"=== Memory after recv ===\n{mem2.stdout}")
+            with open("/proc/meminfo") as f:
+                meminfo = [
+                    ln
+                    for ln in f.readlines()
+                    if "MemAvailable" in ln or "MemTotal" in ln
+                ]
+            sys.stderr.write(f"=== Memory after recv ===\n{''.join(meminfo)}")
             dmesg = subprocess.run(
                 ["dmesg", "--since", "-5min"],
                 capture_output=True,
@@ -426,8 +444,10 @@ class TestEventFanout:
                 if "oom" in line.lower() or "killed" in line.lower()
             ]
             if oom_lines:
-                print(
-                    "=== dmesg OOM/kill entries ===\n" + "\n".join(oom_lines)
+                sys.stderr.write(
+                    "=== dmesg OOM/kill entries ===\n"
+                    + "\n".join(oom_lines)
+                    + "\n"
                 )
 
             assert any(is_pi_event(m) for m in msgs1), (
