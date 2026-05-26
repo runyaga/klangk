@@ -46,6 +46,10 @@ plugins:
     git: git@github.com:mcdonc/bark.git
     path: plugins/word-count
     ref: main
+  - name: browser-fetch
+    git: git@github.com:mcdonc/bark.git
+    path: plugins/browser-fetch
+    ref: main
   # Add more plugins:
   # - name: my-plugin
   #   git: git@github.com:user/repo.git
@@ -54,7 +58,7 @@ plugins:
   #
   # Plugin structure:
   #   extension.ts              # required: Pi extension (TypeScript)
-  #   dart/                     # optional: Dart package for client-side tools
+  #   bark/                     # optional: Dart package for client-side tools
   #     pubspec.yaml            #   depends on bark_plugin_api
   #     lib/
   #       plugin.dart           #   class extending ToolPlugin
