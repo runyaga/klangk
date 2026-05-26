@@ -126,7 +126,7 @@ nginx reverse proxy (port 8995)
 - **Backend**: nginx reverse proxy + FastAPI serving API, WebSocket, and frontend static files. Role-based access control with JWT roles claim
 - **Agent**: Pi coding agent in interactive terminal mode with any OpenAI-compatible LLM provider
 
-Each workspace gets its own Docker container with a bind-mounted directory. Pi sessions persist across container restarts (resumed automatically via `--session` flag).
+Each workspace gets its own Docker container with a bind-mounted directory.
 
 ### Plugins
 
