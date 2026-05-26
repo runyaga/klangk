@@ -15,6 +15,8 @@ from .terminal_manager import TerminalSession
 
 logger = logging.getLogger(__name__)
 
+_WS_DEBUG = bool(resolve_env_secret("BARK_WS_DEBUG"))
+
 # Active connections: ws -> {user, workspace_id, container_id, ...}
 _connections: dict[WebSocket, dict] = {}
 
@@ -90,6 +92,9 @@ async def handle_websocket(ws: WebSocket) -> None:
             except json.JSONDecodeError:
                 await send_error(ws, "Invalid JSON")
                 continue
+
+            if _WS_DEBUG:
+                _log_ws_msg("RECV", msg, user)
 
             cmd = msg.get("cmd")
             if cmd == "workspace_connect":
@@ -617,6 +622,8 @@ async def forward_terminal_output(
 
 async def _broadcast(workspace_id: str, message: dict) -> None:
     """Send a message to all subscribers for a workspace, removing dead ones."""
+    if _WS_DEBUG:
+        _log_ws_msg("BCAST", message)
     session = get_session(workspace_id)
     if not session:  # pragma: no cover
         return
@@ -674,4 +681,21 @@ async def reset_workspace_state(workspace_id: str) -> None:
 
 
 async def send_error(ws: WebSocket, message: str) -> None:
-    await ws.send_json({"type": "error", "message": message})
+    msg = {"type": "error", "message": message}
+    if _WS_DEBUG:
+        _log_ws_msg("SEND", msg)
+    await ws.send_json(msg)
+
+
+def _log_ws_msg(direction: str, msg: dict, user: dict | None = None) -> None:
+    """Log a WebSocket message for debugging (BARK_WS_DEBUG=1)."""
+    msg_type = msg.get("type") or msg.get("cmd") or "?"
+    # Truncate terminal_output/terminal_input data to avoid log spam
+    if msg_type in ("terminal_output", "terminal_input"):
+        data = msg.get("data", "")
+        preview = repr(data[:80]) + ("..." if len(data) > 80 else "")
+        who = f" [{user['email']}]" if user else ""
+        logger.debug("WS %s%s: %s data=%s", direction, who, msg_type, preview)
+    else:
+        who = f" [{user['email']}]" if user else ""
+        logger.debug("WS %s%s: %s", direction, who, json.dumps(msg)[:200])
