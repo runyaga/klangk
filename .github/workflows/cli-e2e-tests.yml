@@ -17,35 +17,44 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: https://ollama.com/v1
+      LLM_MODEL: gemma4:31b
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-          cache: pip
+      - uses: DeterminateSystems/determinate-nix-action@main
 
-      - name: Install dependencies
+      - name: Free disk space
         run: |
-          sudo apt-get install -y -qq nginx
-          sudo systemctl stop nginx || true
-          pip install -e src/backend/
+          set -x
+          rm -rf "$HOME/.cache"
+          nohup sudo ionice -c3 nice -n19 rm -rf \
+            /usr/share/dotnet /usr/local/lib/android \
+            /opt/hostedtoolcache /usr/lib/jvm \
+            /usr/share/swift "$HOME/.rustup" \
+            /usr/local/share/chromium \
+            /usr/lib/google-cloud-sdk \
+            /usr/local/powershell /usr/local/.ghcup \
+            /usr/local/julia* &
 
-      - name: Pull base image
-        run: docker pull ghcr.io/mcdonc/bark/bark-pi-base:latest
-
-      - name: Build workspace image
+      - name: Bootstrap
         run: |
-          STAGING=$(mktemp -d)
-          mkdir -p "$STAGING/extensions" "$STAGING/tools"
-          docker build --platform linux/amd64 \
-            --build-context plugin-extensions="$STAGING/extensions" \
-            --build-context plugin-tools="$STAGING/tools" \
-            -t bark-pi src/docker/
+          ./bootstrap --unattended --cachix-version v1.11.1
+
+      - name: Prepare bark devenv
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- true
+
+      - name: Build Docker image
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv tasks run bark:docker-build
 
       - name: Run CLI E2E tests
-        env:
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          LLM_BASE_URL: https://ollama.com/v1
-          LLM_MODEL: gemma4:31b
-        run: python -m pytest src/backend/e2e-tests -v -p no:xdist --no-cov
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- test-cli-e2e
