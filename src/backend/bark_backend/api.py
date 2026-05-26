@@ -405,19 +405,6 @@ async def delete_workspace(
     return {"status": "deleted"}
 
 
-# --- Message history endpoints ---
-
-
-@router.get("/workspaces/{workspace_id}/messages")
-async def get_messages(
-    workspace_id: str, user: dict = Depends(auth.get_current_user)
-):
-    workspace = await workspace_manager.get_workspace(workspace_id, user["id"])
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    return await user_store.get_messages(workspace_id)
-
-
 # --- File endpoints ---
 
 

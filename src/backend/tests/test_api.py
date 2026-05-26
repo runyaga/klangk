@@ -629,31 +629,6 @@ class TestWorkspaceRoutes:
 # --- Messages ---
 
 
-class TestMessageRoutes:
-    async def test_get_messages(self, client, user):
-        headers = await _auth_headers(client)
-        create_resp = await client.post(
-            "/workspaces", headers=headers, json={"name": "msg-ws"}
-        )
-        ws_id = create_resp.json()["id"]
-
-        await user_store.save_message(ws_id, "user", "hello")
-        resp = await client.get(
-            f"/workspaces/{ws_id}/messages", headers=headers
-        )
-        assert resp.status_code == 200
-        msgs = resp.json()
-        assert len(msgs) == 1
-        assert msgs[0]["content"] == "hello"
-
-    async def test_get_messages_nonexistent_workspace(self, client, user):
-        headers = await _auth_headers(client)
-        resp = await client.get(
-            "/workspaces/fake-id/messages", headers=headers
-        )
-        assert resp.status_code == 404
-
-
 # --- Browser bridge ---
 
 

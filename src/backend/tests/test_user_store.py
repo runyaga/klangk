@@ -75,23 +75,6 @@ class TestWorkspaces:
             await user_store.create_workspace(user["id"], "unique-name")
 
 
-class TestMessages:
-    async def test_save_and_get_messages(self, workspace):
-        await user_store.save_message(workspace["id"], "user", "hello")
-        await user_store.save_message(workspace["id"], "assistant", "hi there")
-        messages = await user_store.get_messages(workspace["id"])
-        assert len(messages) == 2
-        assert messages[0]["entry_type"] == "user"
-        assert messages[0]["content"] == "hello"
-        assert messages[1]["entry_type"] == "assistant"
-
-    async def test_messages_cascade_on_workspace_delete(self, workspace, user):
-        await user_store.save_message(workspace["id"], "user", "test")
-        await user_store.delete_workspace(workspace["id"], user["id"])
-        messages = await user_store.get_messages(workspace["id"])
-        assert len(messages) == 0
-
-
 class TestPortAllocations:
     async def test_add_and_get_ports(self, workspace):
         await user_store.add_port_allocations(
@@ -202,60 +185,6 @@ class TestTokenBlocklist:
         # INSERT OR IGNORE should not raise
         await user_store.blocklist_token("jti-2", "2099-01-01T00:00:00Z")
         assert await user_store.is_token_blocklisted("jti-2") is True
-
-
-class TestDeleteWorkspaceMessages:
-    async def test_delete_messages(self, workspace):
-        await user_store.save_message(workspace["id"], "user", "msg1")
-        await user_store.save_message(workspace["id"], "assistant", "msg2")
-        await user_store.delete_workspace_messages(workspace["id"])
-        messages = await user_store.get_messages(workspace["id"])
-        assert messages == []
-
-    async def test_delete_messages_empty(self, workspace):
-        # Should not raise when no messages exist
-        await user_store.delete_workspace_messages(workspace["id"])
-        messages = await user_store.get_messages(workspace["id"])
-        assert messages == []
-
-
-class TestMessageDetails:
-    async def test_save_message_with_tool_data(self, workspace):
-        msg_id = await user_store.save_message(
-            workspace["id"],
-            "tool",
-            "tool_call",
-            tool_args='{"cmd": "ls"}',
-            tool_output="file.txt",
-            is_complete=True,
-        )
-        assert msg_id > 0
-        messages = await user_store.get_messages(workspace["id"])
-        msg = messages[0]
-        assert msg["tool_args"] == '{"cmd": "ls"}'
-        assert msg["tool_output"] == "file.txt"
-        assert msg["is_complete"] is True
-        assert msg["is_queued"] is False
-
-    async def test_save_queued_message(self, workspace):
-        await user_store.save_message(
-            workspace["id"], "user", "queued msg", is_queued=True
-        )
-        messages = await user_store.get_messages(workspace["id"])
-        assert messages[0]["is_queued"] is True
-
-    async def test_messages_ordered_by_id(self, workspace):
-        await user_store.save_message(workspace["id"], "user", "first")
-        await user_store.save_message(workspace["id"], "assistant", "second")
-        await user_store.save_message(workspace["id"], "user", "third")
-        messages = await user_store.get_messages(workspace["id"])
-        contents = [m["content"] for m in messages]
-        assert contents == ["first", "second", "third"]
-
-    async def test_messages_have_created_at(self, workspace):
-        await user_store.save_message(workspace["id"], "user", "hello")
-        messages = await user_store.get_messages(workspace["id"])
-        assert messages[0]["created_at"] is not None
 
 
 class TestLoginAttempts:

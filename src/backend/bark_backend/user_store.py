@@ -79,29 +79,12 @@ async def init_db() -> None:
             )
         """)
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-                entry_type TEXT NOT NULL,
-                content TEXT NOT NULL DEFAULT '',
-                tool_args TEXT,
-                tool_output TEXT,
-                is_complete INTEGER NOT NULL DEFAULT 0,
-                is_queued INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            )
-        """)
-        await db.execute("""
             CREATE TABLE IF NOT EXISTS login_attempts (
                 email TEXT PRIMARY KEY,
                 attempt_count INTEGER NOT NULL DEFAULT 0,
                 first_attempt_at TEXT NOT NULL,
                 locked_until TEXT
             )
-        """)
-        await db.execute("""
-            CREATE INDEX IF NOT EXISTS idx_messages_workspace
-            ON messages(workspace_id, id)
         """)
         await db.commit()
     finally:
@@ -536,62 +519,6 @@ async def is_token_blocklisted(jti: str) -> bool:
 # Message history
 
 
-async def save_message(
-    workspace_id: str,
-    entry_type: str,
-    content: str,
-    tool_args: str | None = None,
-    tool_output: str | None = None,
-    is_complete: bool = False,
-    is_queued: bool = False,
-) -> int:
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            """INSERT INTO messages (workspace_id, entry_type, content, tool_args, tool_output, is_complete, is_queued)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                workspace_id,
-                entry_type,
-                content,
-                tool_args,
-                tool_output,
-                1 if is_complete else 0,
-                1 if is_queued else 0,
-            ),
-        )
-        await db.commit()
-        return cursor.lastrowid
-    finally:
-        await db.close()
-
-
-async def get_messages(workspace_id: str) -> list[dict]:
-    db = await get_db()
-    try:
-        cursor = await db.execute(
-            """SELECT id, entry_type, content, tool_args, tool_output, is_complete, is_queued, created_at
-               FROM messages WHERE workspace_id = ? ORDER BY id""",
-            (workspace_id,),
-        )
-        rows = await cursor.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "entry_type": row["entry_type"],
-                "content": row["content"],
-                "tool_args": row["tool_args"],
-                "tool_output": row["tool_output"],
-                "is_complete": bool(row["is_complete"]),
-                "is_queued": bool(row["is_queued"]),
-                "created_at": row["created_at"],
-            }
-            for row in rows
-        ]
-    finally:
-        await db.close()
-
-
 # Login attempt tracking (brute-force protection)
 
 
@@ -660,12 +587,3 @@ async def clear_login_attempts(email: str) -> None:
         await db.close()
 
 
-async def delete_workspace_messages(workspace_id: str) -> None:
-    db = await get_db()
-    try:
-        await db.execute(
-            "DELETE FROM messages WHERE workspace_id = ?", (workspace_id,)
-        )
-        await db.commit()
-    finally:
-        await db.close()
