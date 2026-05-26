@@ -39,10 +39,14 @@ class AguiClient extends ChangeNotifier {
   final _eventController = StreamController<AguiEvent>.broadcast();
   final _errorController = StreamController<String>.broadcast();
   final _terminalOutputController = StreamController<String>.broadcast();
+  final _browserRequestController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<AguiEvent> get events => _eventController.stream;
   Stream<String> get errors => _errorController.stream;
   Stream<String> get terminalOutput => _terminalOutputController.stream;
+  Stream<Map<String, dynamic>> get browserRequests =>
+      _browserRequestController.stream;
   bool get connected => _connected;
   String? get currentWorkspaceId => _currentWorkspaceId;
 
@@ -94,6 +98,8 @@ class AguiClient extends ChangeNotifier {
             _terminalOutputController.add(json['data'] as String? ?? '');
           } else if (type == 'error') {
             _errorController.add(json['message'] as String? ?? 'Unknown error');
+          } else if (type == 'browser_request') {
+            _browserRequestController.add(json);
           }
         } catch (e) {
           _errorController.add('Parse error: $e');
@@ -190,6 +196,10 @@ class AguiClient extends ChangeNotifier {
     _send({'cmd': 'heartbeat'});
   }
 
+  void sendBrowserResponse(String id, Map<String, dynamic> result) {
+    _send({'cmd': 'browser_response', 'id': id, ...result});
+  }
+
   void _startHeartbeat() {
     _stopHeartbeat();
     _heartbeatTimer = Timer.periodic(
@@ -209,6 +219,7 @@ class AguiClient extends ChangeNotifier {
     _eventController.close();
     _errorController.close();
     _terminalOutputController.close();
+    _browserRequestController.close();
     super.dispose();
   }
 }

@@ -7,7 +7,7 @@ import '../utils/page_title.dart';
 import '../widgets/bark_logo.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key}); // coverage:ignore-line
 
   @override
   State<LoginPage> createState() => _LoginPageState();

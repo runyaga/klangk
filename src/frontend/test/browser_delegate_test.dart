@@ -1,0 +1,312 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:bark_frontend/agui/agui_client.dart';
+import 'package:bark_frontend/browser/browser_delegate.dart';
+import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+
+class _FakeWebSocketChannel extends Fake implements WebSocketChannel {
+  final _incoming = StreamController<dynamic>.broadcast();
+  final _sink = _FakeSink();
+
+  @override
+  Stream<dynamic> get stream => _incoming.stream;
+
+  @override
+  WebSocketSink get sink => _sink;
+
+  @override
+  Future<void> get ready => Future.value();
+
+  void serverSend(Map<String, dynamic> msg) => _incoming.add(jsonEncode(msg));
+
+  List<dynamic> get sentMessages => _sink.sent;
+
+  void dispose() => _incoming.close();
+}
+
+class _FakeSink extends Fake implements WebSocketSink {
+  final List<dynamic> sent = [];
+
+  @override
+  void add(dynamic data) => sent.add(data);
+
+  @override
+  Future close([int? closeCode, String? closeReason]) async {}
+}
+
+List<Map<String, dynamic>> _browserResponses(_FakeWebSocketChannel channel) {
+  return channel.sentMessages
+      .map((s) => jsonDecode(s as String) as Map<String, dynamic>)
+      .where((m) => m['cmd'] == 'browser_response')
+      .toList();
+}
+
+void main() {
+  setUp(() {
+    testBaseUrlOverride = 'http://localhost:8997';
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  tearDown(() {
+    testBaseUrlOverride = null;
+  });
+
+  group('BrowserDelegate', () {
+    late AguiClient client;
+    late _FakeWebSocketChannel channel;
+    late BrowserDelegate delegate;
+    late MockClient mockHttp;
+
+    setUp(() {
+      client = AguiClient();
+      channel = _FakeWebSocketChannel();
+      client.connectForTest(channel);
+      mockHttp = MockClient((request) async {
+        return http.Response('mock-body', 200);
+      });
+      delegate = BrowserDelegate(client, httpClient: mockHttp);
+      delegate.start();
+    });
+
+    tearDown(() {
+      delegate.stop();
+      client.disconnect();
+      client.dispose();
+    });
+
+    test('responds to celebrate action', () async {
+      bool celebrated = false;
+      delegate.onCelebrate = () => celebrated = true;
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-1',
+        'action': 'celebrate',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(celebrated, isTrue);
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['id'], 'req-1');
+      expect(responses[0]['status'], 'ok');
+    });
+
+    test('responds to beep action', () async {
+      bool beeped = false;
+      delegate.onBeep = () => beeped = true;
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-2',
+        'action': 'beep',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(beeped, isTrue);
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['id'], 'req-2');
+      expect(responses[0]['status'], 'ok');
+    });
+
+    test('returns error for unknown action', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-3',
+        'action': 'unknown_action',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['id'], 'req-3');
+      expect(responses[0]['error'], contains('unknown action'));
+    });
+
+    test('ignores request without id', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'action': 'celebrate',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(_browserResponses(channel), isEmpty);
+    });
+
+    test('celebrate works without callback set', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-4',
+        'action': 'celebrate',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['status'], 'ok');
+    });
+
+    test('stop cancels subscription', () async {
+      delegate.stop();
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-5',
+        'action': 'celebrate',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(_browserResponses(channel), isEmpty);
+    });
+
+    test('fetch returns response from HTTP client', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-1',
+        'action': 'fetch',
+        'url': 'http://example.com/data',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['id'], 'req-fetch-1');
+      expect(responses[0]['status'], 200);
+      expect(responses[0]['body'], 'mock-body');
+    });
+
+    test('fetch with POST method', () async {
+      final requests = <http.BaseRequest>[];
+      final postClient = MockClient((request) async {
+        requests.add(request);
+        return http.Response('post-result', 201);
+      });
+      delegate.stop();
+      delegate = BrowserDelegate(client, httpClient: postClient);
+      delegate.start();
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-2',
+        'action': 'fetch',
+        'url': 'http://example.com/submit',
+        'method': 'POST',
+        'body': 'payload',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(requests.length, 1);
+      expect(requests[0].method, 'POST');
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['status'], 201);
+      expect(responses[0]['body'], 'post-result');
+    });
+
+    test('fetch passes custom headers', () async {
+      final requests = <http.BaseRequest>[];
+      delegate.stop();
+      final headerClient = MockClient((request) async {
+        requests.add(request);
+        return http.Response('ok', 200);
+      });
+      delegate = BrowserDelegate(client, httpClient: headerClient);
+      delegate.start();
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-hdr',
+        'action': 'fetch',
+        'url': 'http://example.com/api',
+        'headers': {'Authorization': 'Bearer tok123'},
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      expect(requests.length, 1);
+      expect(requests[0].headers['Authorization'], 'Bearer tok123');
+    });
+
+    test('fetch missing url returns error', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-3',
+        'action': 'fetch',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['error'], contains('missing url'));
+    });
+
+    test('fetch HTTP error returns error', () async {
+      delegate.stop();
+      final errorClient = MockClient((request) async {
+        throw Exception('network error');
+      });
+      delegate = BrowserDelegate(client, httpClient: errorClient);
+      delegate.start();
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-4',
+        'action': 'fetch',
+        'url': 'http://example.com/fail',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['error'], contains('fetch failed'));
+    });
+  });
+
+  group('AguiClient browser_request stream', () {
+    test('browser_request emitted on stream', () async {
+      final client = AguiClient();
+      final channel = _FakeWebSocketChannel();
+      client.connectForTest(channel);
+
+      final requests = <Map<String, dynamic>>[];
+      client.browserRequests.listen(requests.add);
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-1',
+        'action': 'fetch',
+        'url': 'http://example.com',
+      });
+      await Future.delayed(Duration.zero);
+
+      expect(requests.length, 1);
+      expect(requests[0]['action'], 'fetch');
+
+      client.disconnect();
+      client.dispose();
+    });
+
+    test('sendBrowserResponse sends correct JSON', () {
+      final client = AguiClient();
+      final channel = _FakeWebSocketChannel();
+      client.connectForTest(channel);
+
+      client.sendBrowserResponse('req-1', {'status': 200, 'body': 'hello'});
+
+      final msg = jsonDecode(channel.sentMessages.last as String)
+          as Map<String, dynamic>;
+      expect(msg['cmd'], 'browser_response');
+      expect(msg['id'], 'req-1');
+      expect(msg['status'], 200);
+      expect(msg['body'], 'hello');
+
+      client.disconnect();
+      client.dispose();
+    });
+  });
+}

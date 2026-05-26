@@ -16,6 +16,7 @@ import '../layout/ide_layout.dart';
 import '../debug/debug_panel.dart';
 import '../terminal/container_terminal.dart';
 import '../terminal/chat_panel.dart';
+import '../browser/browser_delegate.dart';
 import 'package:bark_plugins/bark_plugins.dart';
 
 class WorkspacePage extends StatefulWidget {
@@ -39,6 +40,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
   bool _restarting = false;
   String _stopReason = '';
   StreamSubscription? _eventSub;
+  BrowserDelegate? _browserDelegate;
   late final ToolPluginRegistry _pluginRegistry;
   late final List<ToolPlugin> _plugins;
 
@@ -94,6 +96,10 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
     // Listen for workspace_ready
     aguiClient.addListener(_onClientUpdate);
+
+    // Start browser delegate for bridge requests
+    _browserDelegate = BrowserDelegate(aguiClient);
+    _browserDelegate!.start();
 
     // Track agent running state and extension UI requests
     _eventSub = aguiClient.events.listen((event) {
@@ -202,6 +208,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
   @override
   void dispose() {
+    _browserDelegate?.stop();
     for (final plugin in _plugins) {
       plugin.dispose();
     }

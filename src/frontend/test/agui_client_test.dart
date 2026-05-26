@@ -127,6 +127,7 @@ void main() {
       client.sendTerminalResize(120, 40);
       client.sendTerminalStop();
       client.sendHeartbeat();
+      client.sendBrowserResponse('req-1', {'status': 'ok'});
 
       expect(client.connected, isFalse);
       client.dispose();
@@ -270,6 +271,12 @@ void main() {
     test('terminalOutput stream is broadcast', () {
       final client = AguiClient();
       expect(client.terminalOutput.isBroadcast, isTrue);
+      client.dispose();
+    });
+
+    test('browserRequests stream is broadcast', () {
+      final client = AguiClient();
+      expect(client.browserRequests.isBroadcast, isTrue);
       client.dispose();
     });
   });
