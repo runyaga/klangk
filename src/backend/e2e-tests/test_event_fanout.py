@@ -342,8 +342,13 @@ class TestEventFanout:
         """When one connection sends a prompt, both receive the Pi events."""
         ws1 = await ws_connect(server, auth)
 
-        # Wait for Pi to be ready (first few Pi events take time)
-        await asyncio.sleep(5)
+        # Wait for Pi to fully initialize — drain messages until we stop
+        # receiving them (Pi startup can take 10-20s on slow CI).
+        for _ in range(30):
+            try:
+                await asyncio.wait_for(ws1.recv(), timeout=2)
+            except asyncio.TimeoutError:
+                break
 
         ws2 = await ws_connect(server, auth)
         await asyncio.sleep(1)
