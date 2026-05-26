@@ -282,6 +282,9 @@ class ContainerRegistry:
         ]
         env_vars.append(f"BARK_PORT_MAPPINGS={','.join(mappings)}")
         env_vars.append(f"BARK_WORKSPACE_ID={workspace_id}")
+        env_vars.append(
+            f"BARK_BRIDGE_URL=http://host.docker.internal:{nginx_port}"
+        )
         env_vars.append(f"BARK_HOSTING_HOSTNAME={hosting_hostname}")
         env_vars.append(f"BARK_HOSTING_PROTO={hosting_proto}")
         env_vars.append(f"BARK_HOSTING_BASE_PATH={hosting_base_path}")
