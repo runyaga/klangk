@@ -34,6 +34,11 @@ def server():
     # Start nginx as an LLM proxy so containers can reach the LLM.
     nginx_proc = None
     nginx_log = os.path.join(data_dir, "nginx.log")
+    print(f"LLM_BASE_URL={os.environ.get('LLM_BASE_URL', '<unset>')}")
+    print(
+        f"LLM_API_KEY={'set' if os.environ.get('LLM_API_KEY') else '<unset>'}"
+    )
+    print(f"LLM_MODEL={os.environ.get('LLM_MODEL', '<unset>')}")
     if os.environ.get("LLM_BASE_URL"):
         log_fd = open(nginx_log, "w")
         nginx_proc = subprocess.Popen(
@@ -122,6 +127,8 @@ def server():
         server_log = proc.stdout.read().decode("utf-8", errors="replace")
         if server_log.strip():
             print(f"\n=== Fanout E2E server log ===\n{server_log}\n===")
+    if os.path.exists(nginx_log):
+        print(f"\n=== Nginx log ===\n{open(nginx_log).read()}\n===")
     if nginx_proc:
         try:
             nginx_proc.kill()
