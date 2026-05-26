@@ -76,19 +76,21 @@ class _IdeLayoutState extends State<IdeLayout> {
         ),
         // Content area
         Expanded(
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: [
-              Container(
-                color: const Color(0xFF1D1F21),
-                padding: const EdgeInsets.only(left: 5),
-                child: widget.terminal,
-              ),
-              Container(
-                color: const Color(0xFFFFFEFC),
-                child: widget.fileViewer,
-              ),
-            ],
+          child: ClipRect(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                Container(
+                  color: const Color(0xFF1D1F21),
+                  padding: const EdgeInsets.only(left: 5),
+                  child: widget.terminal,
+                ),
+                Container(
+                  color: const Color(0xFFFFFEFC),
+                  child: widget.fileViewer,
+                ),
+              ],
+            ),
           ),
         ),
         // Debug divider + pane
