@@ -40,7 +40,6 @@
 
 - **Preserve user Pi settings across container restarts**: The entrypoint wipes `~/.pi/agent/` and overwrites `settings.json` on every container start, losing any user customizations (e.g., settings Pi wrote during the session). Pi has a two-level settings system: global (`$PI_CODING_AGENT_DIR/settings.json`) and project (`<cwd>/.pi/settings.json`), where project settings deep-merge on top of global and take precedence. User customizations in `/work/.pi/settings.json` would survive since `/work` is persistent. Also consider switching from `pi install` to `npm install -g` for builtin extensions to avoid the `"packages"` key in settings.json entirely (Pi discovers globally installed extensions without it). User-installed extensions (`pi install` during a session) would be lost on restart either way since `~/.pi/agent/` is wiped.
 - **Lock npm extension versions**: The `pi install npm:pi-subagents` commands in the Dockerfile install whatever `latest` resolves to at build time, with no lock file. Pin to specific versions (e.g., `pi install npm:pi-subagents@0.25.0`) or find a way to lock versions so builds are reproducible.
-- **Build a second Docker image for testing image selection**: Create an alternative workspace image (e.g., a minimal image without Pi, or a data-science image with Jupyter) to test the custom image feature interactively. Currently only `bark-pi` exists so there's nothing to select from.
 
 ## CI
 
