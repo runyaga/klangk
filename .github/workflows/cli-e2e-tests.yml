@@ -26,7 +26,10 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -e src/backend/
+        run: |
+          sudo apt-get install -y -qq nginx
+          sudo systemctl stop nginx || true
+          pip install -e src/backend/
 
       - name: Pull base image
         run: docker pull ghcr.io/mcdonc/bark/bark-pi-base:latest
