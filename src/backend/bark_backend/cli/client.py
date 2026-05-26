@@ -295,7 +295,11 @@ async def _run_shell(
 
     async def resize_loop() -> None:
         while not stop_event.is_set():
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=1)
+                return  # pragma: no cover
+            except asyncio.TimeoutError:
+                pass
             new_cols, new_rows = _get_terminal_size()
             if new_cols != _current_cols[0] or new_rows != _current_rows[0]:
                 _current_cols[0] = new_cols
@@ -304,7 +308,11 @@ async def _run_shell(
 
     async def heartbeat_loop() -> None:  # pragma: no cover
         while not stop_event.is_set():
-            await asyncio.sleep(60)
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60)
+                return
+            except asyncio.TimeoutError:
+                pass
             if not stop_event.is_set():
                 await ws.send(json.dumps({"cmd": "heartbeat"}))
 
@@ -392,7 +400,11 @@ async def _ws_exec(
 
         async def heartbeat_loop() -> None:  # pragma: no cover
             while not stop.is_set():
-                await asyncio.sleep(60)
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=60)
+                    return
+                except asyncio.TimeoutError:
+                    pass
                 if not stop.is_set():
                     await ws.send(json.dumps({"cmd": "heartbeat"}))
 
