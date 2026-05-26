@@ -253,9 +253,7 @@ async def start_workspace_container(
     # Cache workspace info for auto-restart
     state["workspace"] = workspace
 
-    logger.info(
-        "Container ready for workspace %s", workspace_id
-    )
+    logger.info("Container ready for workspace %s", workspace_id)
 
 
 async def handle_workspace_connect(
@@ -479,7 +477,9 @@ def handle_browser_response(msg: dict) -> None:
     if future and not future.done():
         future.set_result(msg)
     elif request_id:
-        logger.debug("Browser response for unknown/completed request %s", request_id)
+        logger.debug(
+            "Browser response for unknown/completed request %s", request_id
+        )
 
 
 async def dispatch_browser_request(
@@ -505,7 +505,10 @@ async def dispatch_browser_request(
         "type": "browser_request",
         "id": request_id,
     }
-    await _broadcast(workspace_id, message)
+    delivered = await _broadcast(workspace_id, message)
+    if delivered == 0:
+        _pending_browser_requests.pop(request_id, None)
+        return {"error": "No browser client connected to this workspace"}
 
     try:
         result = await asyncio.wait_for(future, timeout=timeout)
@@ -620,21 +623,27 @@ async def forward_terminal_output(
             pass
 
 
-async def _broadcast(workspace_id: str, message: dict) -> None:
-    """Send a message to all subscribers for a workspace, removing dead ones."""
+async def _broadcast(workspace_id: str, message: dict) -> int:
+    """Send a message to all subscribers for a workspace, removing dead ones.
+
+    Returns the number of live subscribers the message was delivered to.
+    """
     if _WS_DEBUG:
         _log_ws_msg("BCAST", message)
     session = get_session(workspace_id)
     if not session:  # pragma: no cover
-        return
+        return 0
     dead = []
+    delivered = 0
     for sub_ws in list(session.subscribers):
         try:
             await sub_ws.send_json(message)
+            delivered += 1
         except (WebSocketDisconnect, RuntimeError, ConnectionError):
             dead.append(sub_ws)
     for sub_ws in dead:
         session.subscribers.discard(sub_ws)
+    return delivered
 
 
 async def cleanup_connection(ws: WebSocket, state: dict) -> None:
