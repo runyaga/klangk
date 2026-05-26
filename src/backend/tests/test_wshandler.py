@@ -19,6 +19,7 @@ from bark_backend.wshandler import (
     start_workspace_container,
     handle_workspace_connect,
     handle_workspace_disconnect,
+    handle_restart_container,
     handle_terminal_start,
     handle_terminal_input,
     handle_terminal_resize,
@@ -34,6 +35,8 @@ from bark_backend.wshandler import (
     forward_exec_output,
     stop_exec,
     reset_workspace_state,
+    _broadcast,
+    _log_ws_msg,
 )
 
 
@@ -387,9 +390,9 @@ class TestCleanupConnection:
         container.registry.add_connection("ws-cleanup-1")
         session = WorkspaceSession("ws-cleanup-1")
         wshandler._sessions["ws-cleanup-1"] = session
-        container.registry.states[
-            "ws-cleanup-1"
-        ].idle_callbacks.append(state["_idle_cb"])
+        container.registry.states["ws-cleanup-1"].idle_callbacks.append(
+            state["_idle_cb"]
+        )
 
         with patch.object(
             container.registry,
@@ -423,9 +426,9 @@ class TestCleanupConnection:
         container.registry.add_connection("ws-cleanup-2")
         session = WorkspaceSession("ws-cleanup-2")
         wshandler._sessions["ws-cleanup-2"] = session
-        container.registry.states[
-            "ws-cleanup-2"
-        ].idle_callbacks.append(state["_idle_cb"])
+        container.registry.states["ws-cleanup-2"].idle_callbacks.append(
+            state["_idle_cb"]
+        )
 
         with patch.object(
             container.registry,
@@ -485,9 +488,7 @@ class TestHandleWorkspaceConnect:
 
     async def test_connect_success(self, user):
         ws = _mock_ws()
-        workspace = await ws_mod.create_workspace(
-            user["id"], "test-ws"
-        )
+        workspace = await ws_mod.create_workspace(user["id"], "test-ws")
         state = _base_state(user=user)
 
         async def fake_start(ws, state, wid, workspace):
@@ -542,9 +543,7 @@ class TestStartWorkspaceContainer:
     async def test_new_session(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
         state = _base_state(user=user)
-        workspace = await ws_mod.create_workspace(
-            user["id"], "start-ws"
-        )
+        workspace = await ws_mod.create_workspace(user["id"], "start-ws")
 
         async def fake_start(*a, **kw):
             container.registry.track_activity("cid-1", workspace["id"])
@@ -573,9 +572,7 @@ class TestStartWorkspaceContainer:
     async def test_idle_callback_ws_error(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
         state = _base_state(user=user)
-        workspace = await ws_mod.create_workspace(
-            user["id"], "idle-ws"
-        )
+        workspace = await ws_mod.create_workspace(user["id"], "idle-ws")
 
         async def fake_start(*a, **kw):
             container.registry.track_activity("cid-3", workspace["id"])
@@ -660,9 +657,7 @@ class TestHandleWebsocketDispatch:
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
 
-        workspace = await ws_mod.create_workspace(
-            user["id"], "stop-ws"
-        )
+        workspace = await ws_mod.create_workspace(user["id"], "stop-ws")
         ws.receive_text = AsyncMock(
             side_effect=[
                 json.dumps(
@@ -763,9 +758,7 @@ class TestHandleWebsocket:
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
-        workspace = await ws_mod.create_workspace(
-            user["id"], "ui-ready-ws"
-        )
+        workspace = await ws_mod.create_workspace(user["id"], "ui-ready-ws")
 
         async def fake_start(ws_arg, state, wid, ws_obj):
             state["container_id"] = "cid"
@@ -1209,3 +1202,353 @@ class TestBrowserBridge:
 class TestResetWorkspaceState:
     async def test_noop_for_unknown_workspace(self):
         await reset_workspace_state("ws-unknown")  # should not raise
+
+
+class TestWsDebugLogging:
+    async def test_recv_logged_when_debug(self, user, monkeypatch):
+        from bark_backend import auth as auth_mod
+
+        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
+        token = auth_mod.create_token(user["id"], user["email"])
+        ws = _mock_ws(query_params={"token": token})
+        ws.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "heartbeat"}),
+                WebSocketDisconnect(),
+            ]
+        )
+        await handle_websocket(ws)
+        ws.accept.assert_awaited_once()
+
+    async def test_send_error_logged_when_debug(self, monkeypatch):
+        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
+        ws = _mock_ws()
+        await send_error(ws, "test error")
+        ws.send_json.assert_awaited_once()
+
+    async def test_broadcast_logged_when_debug(self, monkeypatch):
+        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
+        session = wshandler.get_or_create_session("ws-debug-bcast")
+        mock_ws = AsyncMock()
+        session.subscribers.add(mock_ws)
+        try:
+            delivered = await _broadcast("ws-debug-bcast", {"type": "test"})
+            assert delivered == 1
+        finally:
+            wshandler._sessions.pop("ws-debug-bcast", None)
+
+
+class TestLogWsMsg:
+    def test_terminal_output_truncated(self):
+        _log_ws_msg(
+            "RECV",
+            {"type": "terminal_output", "data": "x" * 200},
+            {"email": "test@example.com"},
+        )
+
+    def test_terminal_input_truncated(self):
+        _log_ws_msg(
+            "SEND",
+            {"type": "terminal_input", "data": "y" * 50},
+        )
+
+    def test_other_message(self):
+        _log_ws_msg("RECV", {"type": "heartbeat"})
+
+    def test_other_message_with_user(self):
+        _log_ws_msg(
+            "RECV",
+            {"cmd": "workspace_connect", "workspaceId": "ws-1"},
+            {"email": "test@example.com"},
+        )
+
+
+class TestBroadcastDeadSubscribers:
+    async def test_dead_subscriber_removed(self):
+        session = wshandler.get_or_create_session("ws-dead-sub")
+        live_ws = AsyncMock()
+        dead_ws = AsyncMock()
+        dead_ws.send_json = AsyncMock(side_effect=RuntimeError("ws closed"))
+        session.subscribers.add(live_ws)
+        session.subscribers.add(dead_ws)
+        try:
+            delivered = await _broadcast("ws-dead-sub", {"type": "test"})
+            assert delivered == 1
+            assert dead_ws not in session.subscribers
+            assert live_ws in session.subscribers
+        finally:
+            wshandler._sessions.pop("ws-dead-sub", None)
+
+
+class TestStartWorkspaceContainerResumeSession:
+    async def test_resume_session_found(self, user):
+        ws = _mock_ws(headers={"host": "localhost:8997"})
+        state = _base_state(user=user)
+        workspace = await ws_mod.create_workspace(user["id"], "resume-ws")
+
+        async def fake_start(*a, **kw):
+            container.registry.track_activity("cid-r", workspace["id"])
+            assert (
+                kw.get("resume_session") == "/home/bark/.pi/sessions/s/r.jsonl"
+            )
+            return ("cid-r", "created")
+
+        home_path = str(ws_mod.get_home_host_path(user["id"], workspace["id"]))
+        session_file = f"{home_path}/.pi/sessions/s/r.jsonl"
+
+        with (
+            patch.object(
+                container.registry,
+                "start_container",
+                side_effect=fake_start,
+            ),
+            patch("glob.glob", return_value=[session_file]),
+        ):
+            await start_workspace_container(
+                ws, state, workspace["id"], workspace
+            )
+
+        assert state["container_id"] == "cid-r"
+        wshandler._sessions.pop(workspace["id"], None)
+        container.registry.states.pop(workspace["id"], None)
+
+
+class TestHandleRestartContainer:
+    async def test_restart_not_connected(self):
+        ws = _mock_ws()
+        state = _base_state()
+        await handle_restart_container(ws, state)
+        calls = [c[0][0] for c in ws.send_json.call_args_list]
+        assert any("Not connected" in str(c) for c in calls)
+
+    async def test_restart_success(self, user):
+        ws = _mock_ws(headers={"host": "localhost:8997"})
+        workspace = await ws_mod.create_workspace(user["id"], "restart-ws")
+        state = _base_state(user=user)
+        state["workspace_id"] = workspace["id"]
+        state["container_id"] = "cid-old"
+        state["workspace"] = workspace
+
+        async def fake_start(ws_arg, st, wid, ws_obj):
+            st["container_id"] = "cid-new"
+            st["workspace_id"] = wid
+
+        with (
+            patch.object(
+                wshandler,
+                "start_workspace_container",
+                side_effect=fake_start,
+            ),
+            patch.object(
+                container.registry,
+                "stop_and_remove_container",
+                new_callable=AsyncMock,
+            ),
+            patch.object(container.registry, "record_activity"),
+            patch.object(
+                container.registry,
+                "get_workspace_ports",
+                return_value=[9000],
+            ),
+        ):
+            await handle_restart_container(ws, state)
+
+        calls = [c[0][0] for c in ws.send_json.call_args_list]
+        restart_events = [
+            c
+            for c in calls
+            if isinstance(c, dict)
+            and c.get("type") == "event"
+            and c.get("event", {}).get("name") == "container_restart"
+        ]
+        ready_events = [
+            c
+            for c in calls
+            if isinstance(c, dict)
+            and c.get("type") == "event"
+            and c.get("event", {}).get("name") == "container_ready"
+        ]
+        assert len(restart_events) == 1
+        assert len(ready_events) == 1
+
+    async def test_restart_workspace_gone(self, user):
+        ws = _mock_ws(headers={"host": "localhost:8997"})
+        state = _base_state(user=user)
+        state["workspace_id"] = "ws-gone"
+        state["container_id"] = "cid-gone"
+        state["workspace"] = None
+
+        with (
+            patch.object(
+                ws_mod,
+                "get_workspace",
+                return_value=None,
+            ),
+            patch.object(
+                container.registry,
+                "stop_and_remove_container",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await handle_restart_container(ws, state)
+
+        calls = [c[0][0] for c in ws.send_json.call_args_list]
+        assert any("not found" in str(c) for c in calls)
+
+    async def test_restart_fractional_timeout(self, user, monkeypatch):
+        monkeypatch.setattr(container, "IDLE_TIMEOUT_SECONDS", 90)
+        ws = _mock_ws(headers={"host": "localhost:8997"})
+        workspace = await ws_mod.create_workspace(user["id"], "restart-frac")
+        state = _base_state(user=user)
+        state["workspace_id"] = workspace["id"]
+        state["container_id"] = "cid-frac"
+        state["workspace"] = workspace
+
+        async def fake_start(ws_arg, st, wid, ws_obj):
+            st["container_id"] = "cid-frac-new"
+            st["workspace_id"] = wid
+
+        with (
+            patch.object(
+                wshandler,
+                "start_workspace_container",
+                side_effect=fake_start,
+            ),
+            patch.object(
+                container.registry,
+                "stop_and_remove_container",
+                new_callable=AsyncMock,
+            ),
+            patch.object(container.registry, "record_activity"),
+            patch.object(
+                container.registry,
+                "get_workspace_ports",
+                return_value=[],
+            ),
+        ):
+            await handle_restart_container(ws, state)
+
+        calls = [c[0][0] for c in ws.send_json.call_args_list]
+        ready = [
+            c
+            for c in calls
+            if isinstance(c, dict)
+            and c.get("type") == "event"
+            and c.get("event", {}).get("name") == "container_ready"
+        ]
+        assert len(ready) == 1
+        assert "1.5m" in ready[0]["event"]["value"]["reason"]
+
+    async def test_restart_cleanup_error(self, user):
+        ws = _mock_ws(headers={"host": "localhost:8997"})
+        workspace = await ws_mod.create_workspace(user["id"], "restart-err")
+        state = _base_state(user=user)
+        state["workspace_id"] = workspace["id"]
+        state["container_id"] = "cid-err"
+        state["workspace"] = workspace
+
+        async def fail_cleanup(ws_arg, st):
+            raise RuntimeError("cleanup boom")
+
+        async def fake_start(ws_arg, st, wid, ws_obj):
+            st["container_id"] = "cid-new"
+            st["workspace_id"] = wid
+
+        with (
+            patch.object(
+                wshandler,
+                "cleanup_connection",
+                side_effect=fail_cleanup,
+            ),
+            patch.object(
+                wshandler,
+                "start_workspace_container",
+                side_effect=fake_start,
+            ),
+            patch.object(container.registry, "record_activity"),
+            patch.object(
+                container.registry,
+                "get_workspace_ports",
+                return_value=[],
+            ),
+        ):
+            await handle_restart_container(ws, state)
+
+        calls = [c[0][0] for c in ws.send_json.call_args_list]
+        ready = [
+            c
+            for c in calls
+            if isinstance(c, dict)
+            and c.get("type") == "event"
+            and c.get("event", {}).get("name") == "container_ready"
+        ]
+        assert len(ready) == 1
+
+
+class TestFractionalTimeout:
+    async def test_fractional_timeout_display(self, user, monkeypatch):
+        monkeypatch.setattr(container, "IDLE_TIMEOUT_SECONDS", 90)
+        ws = _mock_ws()
+        workspace = await ws_mod.create_workspace(user["id"], "frac-ws")
+        state = _base_state(user=user)
+
+        async def fake_start(ws_arg, state, wid, workspace):
+            state["container_id"] = "cid"
+            state["container_status"] = "created"
+
+        with (
+            patch.object(
+                wshandler,
+                "start_workspace_container",
+                side_effect=fake_start,
+            ),
+            patch.object(
+                container.registry,
+                "get_workspace_ports",
+                return_value=[],
+            ),
+        ):
+            await handle_workspace_connect(
+                ws, state, {"workspaceId": workspace["id"]}
+            )
+
+        assert "1.5m" in state["pending_status_msg"]
+
+
+class TestDispatchBrowserRequestCancelled:
+    async def test_cancelled_cleans_up(self):
+        session = wshandler.get_or_create_session("ws-cancel")
+        mock_ws = AsyncMock()
+        session.subscribers.add(mock_ws)
+        try:
+            task = asyncio.create_task(
+                wshandler.dispatch_browser_request(
+                    "ws-cancel",
+                    {"action": "fetch"},
+                    timeout=10.0,
+                )
+            )
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert len(wshandler._pending_browser_requests) == 0
+        finally:
+            wshandler._sessions.pop("ws-cancel", None)
+
+
+class TestDispatchBrowserRequestDeadSubscribers:
+    async def test_all_subscribers_dead(self):
+        session = wshandler.get_or_create_session("ws-all-dead")
+        dead_ws = AsyncMock()
+        dead_ws.send_json = AsyncMock(side_effect=RuntimeError("ws closed"))
+        session.subscribers.add(dead_ws)
+        try:
+            result = await wshandler.dispatch_browser_request(
+                "ws-all-dead",
+                {"action": "fetch", "url": "http://example.com"},
+            )
+            assert "error" in result
+            assert "No browser client" in result["error"]
+        finally:
+            wshandler._sessions.pop("ws-all-dead", None)

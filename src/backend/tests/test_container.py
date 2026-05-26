@@ -71,9 +71,19 @@ class TestActivityTracking:
     def testtrack_activity_overwrites(self):
         container.registry.track_activity("cid-1", "ws-1")
         container.registry.track_activity("cid-1", "ws-2")
-        assert (
-            container.registry.states["ws-2"].container_id == "cid-1"
-        )
+        assert container.registry.states["ws-2"].container_id == "cid-1"
+
+    def test_track_activity_same_workspace_updates_container(self):
+        container.registry.track_activity("cid-1", "ws-1")
+        container.registry.track_activity("cid-1", "ws-1")
+        assert container.registry.states["ws-1"].container_id == "cid-1"
+
+    def test_remove_state_cleans_up_reverse_mapping(self):
+        container.registry.track_activity("cid-rm", "ws-rm")
+        assert "cid-rm" in container.registry._cid_to_wsid
+        container.registry.remove_state("ws-rm")
+        assert "ws-rm" not in container.registry.states
+        assert "cid-rm" not in container.registry._cid_to_wsid
 
     def test_get_state_returns_state(self):
         container.registry.track_activity("cid-1", "ws-1")
@@ -100,8 +110,7 @@ class TestIdleCallbacks:
         container.registry.track_activity("cid-1", "ws-1")
         container.registry.on_idle_stop("ws-1", _noop_callback)
         assert (
-            _noop_callback
-            in container.registry.states["ws-1"].idle_callbacks
+            _noop_callback in container.registry.states["ws-1"].idle_callbacks
         )
 
     def test_multiple_callbacks(self):
@@ -111,9 +120,7 @@ class TestIdleCallbacks:
         container.registry.track_activity("cid-1", "ws-1")
         container.registry.on_idle_stop("ws-1", _noop_callback)
         container.registry.on_idle_stop("ws-1", cb2)
-        assert (
-            len(container.registry.states["ws-1"].idle_callbacks) == 2
-        )
+        assert len(container.registry.states["ws-1"].idle_callbacks) == 2
 
     def test_remove_idle_callback(self):
         container.registry.track_activity("cid-1", "ws-1")
@@ -133,9 +140,7 @@ class TestIdleCallbacks:
         )
 
     def test_remove_idle_callback_unknown_workspace(self):
-        container.registry.remove_idle_callback(
-            "nonexistent", _noop_callback
-        )
+        container.registry.remove_idle_callback("nonexistent", _noop_callback)
         assert "nonexistent" not in container.registry.states
 
     def test_callbacks_per_workspace(self):
@@ -147,8 +152,7 @@ class TestIdleCallbacks:
         container.registry.on_idle_stop("ws-1", _noop_callback)
         container.registry.on_idle_stop("ws-2", cb2)
         assert (
-            _noop_callback
-            in container.registry.states["ws-1"].idle_callbacks
+            _noop_callback in container.registry.states["ws-1"].idle_callbacks
         )
         assert cb2 in container.registry.states["ws-2"].idle_callbacks
         assert (
@@ -188,9 +192,7 @@ class TestPortAllocation:
         assert retrieved == sorted(allocated)
 
     async def test_get_workspace_ports_empty(self, workspace):
-        ports = await container.registry.get_workspace_ports(
-            workspace["id"]
-        )
+        ports = await container.registry.get_workspace_ports(workspace["id"])
         assert ports == []
 
 
@@ -501,9 +503,7 @@ class TestStartContainer:
                 num_ports=3,
             )
         # Ports should have been allocated
-        ports = await container.registry.get_workspace_ports(
-            workspace["id"]
-        )
+        ports = await container.registry.get_workspace_ports(workspace["id"])
         assert len(ports) == 3
 
     async def test_excess_ports_trimmed(self, workspace):
@@ -526,9 +526,7 @@ class TestStartContainer:
                 "/tmp/home",
                 num_ports=2,
             )
-        ports = await container.registry.get_workspace_ports(
-            workspace["id"]
-        )
+        ports = await container.registry.get_workspace_ports(workspace["id"])
         assert len(ports) == 2
 
     async def test_container_config_structure(self, workspace):
@@ -990,9 +988,7 @@ class TestCleanupIdleContainers:
         mock_docker.containers.get = AsyncMock(return_value=mock_c)
 
         container.registry.track_activity("cid", "ws-fast")
-        container.registry.states["ws-fast"].last_activity = (
-            time.time() - 100
-        )
+        container.registry.states["ws-fast"].last_activity = time.time() - 100
         container.registry.states["ws-fast"].idle_timeout = 5
 
         try:
@@ -1026,9 +1022,7 @@ class TestCleanupIdleContainers:
         mock_docker.containers.get = AsyncMock(return_value=mock_c)
 
         container.registry.track_activity("cid", "ws-fast")
-        container.registry.states["ws-fast"].last_activity = (
-            time.time() - 100
-        )
+        container.registry.states["ws-fast"].last_activity = time.time() - 100
         container.registry.states["ws-fast"].idle_timeout = 4
 
         try:
@@ -1149,8 +1143,7 @@ class TestAdoptOrphanedContainers:
             await container.registry.adopt_orphaned_containers()
         assert "ws-orphan" in container.registry.states
         assert (
-            container.registry.states["ws-orphan"].container_id
-            == "orphan-123"
+            container.registry.states["ws-orphan"].container_id == "orphan-123"
         )
 
     async def test_skips_already_tracked(self):
