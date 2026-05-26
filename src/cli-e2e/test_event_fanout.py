@@ -25,12 +25,32 @@ import websockets
 
 @pytest.fixture(scope="module")
 def server():
-    """Start a real Bark server for the test module."""
+    """Start a real Bark server (with nginx LLM proxy) for the test module."""
     data_dir = tempfile.mkdtemp(prefix="bark-fanout-e2e-")
     port = "18996"
+    nginx_port = "18994"
+    project_root = os.path.join(os.path.dirname(__file__), "..", "..")
+
+    # Start nginx as an LLM proxy so containers can reach the LLM.
+    nginx_proc = None
+    if os.environ.get("LLM_BASE_URL"):
+        nginx_proc = subprocess.Popen(
+            [os.path.join(project_root, "scripts", "nginx.sh")],
+            env={
+                **os.environ,
+                "DEVENV_STATE": data_dir,
+                "BARK_NGINX_PORT": nginx_port,
+                "BARK_PORT": port,
+            },
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+
     env = {
         **os.environ,
         "BARK_PORT": port,
+        "BARK_NGINX_PORT": nginx_port,
         "BARK_DATA_DIR": data_dir,
         "BARK_JWT_SECRET": "fanout-e2e-secret",
         "BARK_DEFAULT_USER": "test@example.com",
@@ -49,7 +69,7 @@ def server():
             "--port",
             port,
         ],
-        cwd=os.path.join(os.path.dirname(__file__), "..", "backend"),
+        cwd=os.path.join(project_root, "src", "backend"),
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -75,6 +95,11 @@ def server():
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
+    if nginx_proc:
+        try:
+            nginx_proc.kill()
+        except OSError:
+            pass
     result = subprocess.run(
         [
             "docker",
@@ -285,14 +310,19 @@ class TestEventFanout:
                     "TEXT_MESSAGE_CONTENT",
                 )
 
-            msgs1 = await recv_until(ws1, is_pi_event, timeout=60)
-            msgs2 = await recv_until(ws2, is_pi_event, timeout=60)
+            msgs1, msgs2 = await asyncio.gather(
+                recv_until(ws1, is_pi_event, timeout=60),
+                recv_until(ws2, is_pi_event, timeout=60),
+            )
+
+            def event_types(msgs):
+                return [m.get("event", {}).get("type", m.get("type")) for m in msgs]
 
             assert any(is_pi_event(m) for m in msgs1), (
-                f"ws1 did not receive Pi event. Got: {[m.get('type') for m in msgs1]}"
+                f"ws1 did not receive Pi event. Got: {event_types(msgs1)}"
             )
             assert any(is_pi_event(m) for m in msgs2), (
-                f"ws2 did not receive Pi event. Got: {[m.get('type') for m in msgs2]}"
+                f"ws2 did not receive Pi event. Got: {event_types(msgs2)}"
             )
         finally:
             for ws in (ws1, ws2):
