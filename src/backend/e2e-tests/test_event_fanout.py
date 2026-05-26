@@ -324,11 +324,6 @@ class TestEventFanout:
             await ws2.close()
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(
-        os.environ.get("CI") == "true",
-        reason="Pi container gets OOM-killed on CI runners; "
-        "covered by Flutter E2E LLM tests instead",
-    )
     async def test_prompt_response_reaches_both_connections(
         self, server, auth
     ):
@@ -347,6 +342,18 @@ class TestEventFanout:
         await asyncio.sleep(1)
 
         try:
+            # Diagnostic: check available memory and running containers
+            mem = subprocess.run(
+                ["free", "-m"], capture_output=True, text=True
+            )
+            print(f"\n=== Memory before prompt ===\n{mem.stdout}")
+            containers = subprocess.run(
+                ["docker", "ps", "--format", "{{.ID}} {{.Names}} {{.Status}}"],
+                capture_output=True,
+                text=True,
+            )
+            print(f"=== Running containers ===\n{containers.stdout}")
+
             # ws1 sends a prompt
             await ws1.send(json.dumps({"cmd": "prompt", "text": "say hello"}))
 
@@ -370,6 +377,58 @@ class TestEventFanout:
                 return [
                     m.get("event", {}).get("type", m.get("type")) for m in msgs
                 ]
+
+            # Diagnostic: check containers and memory after waiting
+            dead = subprocess.run(
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "--filter",
+                    "label=bark.instance=fanout-e2e",
+                    "--format",
+                    "{{.ID}} {{.Status}}",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            print(f"\n=== Containers after recv ===\n{dead.stdout}")
+            # Inspect any exited containers for OOMKilled
+            for line in dead.stdout.strip().split("\n"):
+                if line and "Exited" in line:
+                    cid = line.split()[0]
+                    inspect = subprocess.run(
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{.State.OOMKilled}} {{.State.ExitCode}} {{.State.Error}}",
+                            cid,
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+                    print(
+                        f"Container {cid}: OOMKilled/ExitCode/Error = {inspect.stdout.strip()}"
+                    )
+            mem2 = subprocess.run(
+                ["free", "-m"], capture_output=True, text=True
+            )
+            print(f"=== Memory after recv ===\n{mem2.stdout}")
+            dmesg = subprocess.run(
+                ["dmesg", "--since", "-5min"],
+                capture_output=True,
+                text=True,
+            )
+            oom_lines = [
+                line
+                for line in dmesg.stdout.splitlines()
+                if "oom" in line.lower() or "killed" in line.lower()
+            ]
+            if oom_lines:
+                print(
+                    "=== dmesg OOM/kill entries ===\n" + "\n".join(oom_lines)
+                )
 
             assert any(is_pi_event(m) for m in msgs1), (
                 f"ws1 did not receive Pi event. Got: {event_types(msgs1)}"
