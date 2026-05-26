@@ -136,6 +136,14 @@ class AuthError(Exception):
 # --- Shell session ---
 
 
+async def _send_ignore_closed(ws, msg: str) -> None:  # pragma: no cover
+    """Send a WebSocket message, ignoring errors if the connection is closed."""
+    try:
+        await ws.send(msg)
+    except (websockets.ConnectionClosed, OSError):
+        pass
+
+
 def _raw_mode_enter() -> object:
     """Enter raw mode on stdin.  Returns opaque old-settings object."""
     return termios.tcgetattr(sys.stdin)
@@ -210,7 +218,9 @@ async def _ws_shell(
         finally:
             if raw_mode:
                 _raw_mode_exit(old_settings)
-        await ws.send(json.dumps({"cmd": "terminal_stop"}))  # pragma: no cover
+        await _send_ignore_closed(  # pragma: no cover
+            ws, json.dumps({"cmd": "terminal_stop"})
+        )
 
 
 async def _run_shell(
@@ -290,7 +300,8 @@ async def _run_shell(
                         stop_event.set()
                         break
         except websockets.ConnectionClosed:
-            logging.info("[connection lost]")
+            stdout.write("\r\nServer disconnected.\r\n")
+            stdout.flush()
         stop_event.set()
 
     async def resize_loop() -> None:
@@ -427,7 +438,7 @@ async def _ws_exec(
         heartbeat_task.cancel()
         try:
             await heartbeat_task
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # pragma: no cover
             pass
 
         await ws.send(json.dumps({"cmd": "exec_stop"}))
