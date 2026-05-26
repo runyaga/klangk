@@ -40,9 +40,10 @@ class _IdeLayoutState extends State<IdeLayout> {
       children: [
         // Tab bar
         Container(
-          height: 36,
+          height: 40,
           color: const Color(0xFFD0CFC8),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: _SkeuoTab(
@@ -103,7 +104,6 @@ class _SkeuoTab extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.only(left: 2, top: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFF7F6F2) : const Color(0xFFBEBDB6),
@@ -112,22 +112,14 @@ class _SkeuoTab extends StatelessWidget {
             topRight: Radius.circular(8),
           ),
           border: Border(
-            top: BorderSide(
+            bottom: BorderSide(
               color: isSelected
-                  ? const Color(0xFF8A8880)
-                  : const Color(0xFFA0A098),
-              width: 1,
+                  ? const Color(0xFFF7F6F2)
+                  : const Color(0xFF8A8880),
+              width: 2,
             ),
-            left: BorderSide(
-              color: isSelected
-                  ? const Color(0xFF8A8880)
-                  : const Color(0xFFA0A098),
-              width: 1,
-            ),
-            right: BorderSide(
-              color: isSelected
-                  ? const Color(0xFF8A8880)
-                  : const Color(0xFFA0A098),
+            right: const BorderSide(
+              color: Color(0xFFA0A098),
               width: 1,
             ),
           ),

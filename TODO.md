@@ -3,7 +3,9 @@
 ## Frontend
 
 - **Stop button not showing during agent runs**: The chat send button should switch to a red stop button while the agent is running, but sometimes stays green for the entire 40+ second turn. The `_agentRunning` state is toggled by `runStarted`/`runFinished` AG-UI events — investigate whether the `runStarted` event is arriving late or not at all.
+- **Debug panel showing WebSocket messages**: Bring back the debug panel as a collapsible pane that displays live WebSocket traffic (sent and received messages). Useful for debugging browser bridge requests, container lifecycle events, and terminal protocol issues. Could be a third tab (Terminal / Files / Debug) or a slide-up panel.
 - **Local files pane**: Add a browser-side file pane where users can upload files into an in-browser-memory filesystem (e.g., using the File System Access API or an in-memory store). These files would be accessible to client-side plugins and could be passed to the REPL as context without uploading to the server. Useful for working with sensitive files that shouldn't leave the browser, or for quick one-off analysis without persisting to the workspace.
+- **Make workspace tabs more skeuomorphic**: The Terminal/Files tabs in the workspace view are plain Flutter TabBar widgets. Make them look more like physical tabs (rounded tops, depth/shadow, active tab visually "in front") to match the IDE aesthetic.
 - **Terminal focus requires precise click target**: In Firefox, the terminal only receives keyboard focus when clicking very specific areas of the terminal pane. Clicking elsewhere in the pane does nothing — the cursor doesn't appear and typing has no effect. The entire terminal pane should grant focus on click.
 - **Clipboard image paste in chat**: Investigate whether Pi supports image inputs and, if so, allow pasting images from the clipboard into the chat input field. Would need to intercept paste events, detect image MIME types, convert to a format Pi can accept (base64 or URL), and pass via the `images` parameter of `prompt()`.
 - **Flutter UI: image picker for workspace creation**: Add a dropdown to the create workspace dialog that fetches available images from `GET /images` and passes the selection in the POST body. Currently the Flutter UI always uses the default image.
@@ -36,6 +38,7 @@
 ## Soliplex Integration
 
 - **Prevent soliplex tools from being called for non-Soliplex queries**: The LLM calls `soliplex_list_rooms` speculatively for general knowledge questions. Update the soliplex extension's tool description to make it clear it's only for querying Soliplex knowledge bases.
+- **Update soliplex bark plugin for browser bridge**: The soliplex plugin's Dart code uses the old AG-UI `HOST_TOOL_REQUEST` delegation via `ctx.ui.input`. Update it to use `@bark/bridge` for browser-side actions, and rename its `dart/` subdirectory to `bark/`.
 
 ## Docker
 
