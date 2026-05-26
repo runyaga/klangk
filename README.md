@@ -112,22 +112,21 @@ Then restart the processes.
 
 ```text
 Browser (Flutter Web)
-    ↕ WebSocket (AG-UI protocol)
+    ↕ WebSocket (terminal I/O, exec, browser bridge, lifecycle events)
 nginx reverse proxy (port 8995)
     ├── /hosted/ → container ports (direct proxy)
     └── /        → FastAPI backend (port 8997)
-                     ↕ docker attach (JSON-RPC)
+                     ↕ docker exec
                  Pi coding agent (Docker container)
                      ↕ bind mount
                  Workspace files on disk
 ```
 
-- **Frontend**: Flutter Web with markdown rendering, syntax-highlighted code blocks, file viewer, container terminal, debug panel, admin user management
+- **Frontend**: Flutter Web with terminal, file viewer, browser delegate for plugin actions, debug panel, admin user management
 - **Backend**: nginx reverse proxy + FastAPI serving API, WebSocket, and frontend static files. Role-based access control with JWT roles claim
-- **Agent**: Pi coding agent in RPC mode with any OpenAI-compatible LLM provider
-- **Protocol**: [AG-UI](https://docs.ag-ui.com/) for standardized agent-user communication
+- **Agent**: Pi coding agent in interactive terminal mode with any OpenAI-compatible LLM provider
 
-Each workspace gets its own Docker container with a bind-mounted directory. Pi sessions persist across container restarts (resumed automatically via `--session` flag), and conversation history is stored in SQLite. API keys are delivered via FIFO (named pipe) so they never persist on disk inside the container.
+Each workspace gets its own Docker container with a bind-mounted directory. Pi sessions persist across container restarts (resumed automatically via `--session` flag).
 
 ### Plugins
 

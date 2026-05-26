@@ -7,22 +7,20 @@ Bark is a multi-user web app that gives each user their own isolated Pi coding a
 ## Architecture
 
 ```text
-Browser (Flutter Web + Chat UI + AG-UI)
-    ├── AG-UI events over WebSocket (authenticated)
-    ├── Extension UI responses (client-side tool results)
+Browser (Flutter Web + Terminal + Files)
+    ├── WebSocket (authenticated): terminal I/O, exec, browser bridge, lifecycle events
+    ├── Browser delegate: handles bridge requests from Pi extensions (fetch, plugin actions)
 nginx reverse proxy (port 8995, serves UI + API + hosted app proxy + LLM proxy)
     ↕ LLM proxy: container → host.docker.internal:8995/llm-proxy/ → ${LLM_BASE_URL}
     ↕
 Python/FastAPI backend (port 8997, serves API + frontend static files)
     ├── Auth (JWT sessions, SQLite user store)
     ├── Workspace registry (user → [workspace] → container)
-    ├── Pi-to-AG-UI translator (Pi RPC events → AG-UI events)
-    ├── Extension UI request/response forwarding
-    ├── Message history (SQLite)
-    ↕ docker attach subprocess
-Pi container per workspace (stdin/stdout JSON-RPC)
+    ├── Browser bridge (/api/browser-delegate → WebSocket → Flutter)
+    ├── Terminal/exec session management
+    ↕ docker exec subprocess
+Pi container per workspace (interactive terminal mode)
     ├── Pi extensions (from $BARK_PLUGINS_DIR/*/extension.ts)
-    ├── Server-side tools (from $BARK_PLUGINS_DIR/*/tools/)
     ├── AGENTS.md (dynamically generated on container start)
     ↕ bind mount
 $BARK_DATA_DIR/workspaces/<user-id>/work/<workspace-id>/
@@ -57,8 +55,7 @@ In CI, `devenv processes up -d` starts nginx before E2E tests run.
 
 ### Key Technologies
 
-- **AG-UI Protocol**: Standardized agent-user interaction protocol for event streaming
-- **Pi Coding Agent**: Minimal terminal coding harness (pi.dev) running in RPC mode with native session persistence and extension tools
+- **Pi Coding Agent**: Minimal terminal coding harness (pi.dev) running in interactive terminal mode with native session persistence and extension tools
 - **LLM Provider**: Any OpenAI-compatible LLM provider (Ollama Cloud, self-hosted Ollama, etc.), configurable via env vars (`LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`). The model must support tool/function calling — Pi uses tools (bash, edit, write, read) to interact with the workspace.
 - **Pydantic Logfire**: AI observability — FastAPI auto-instrumentation via Logfire Python SDK (`LOGFIRE_TOKEN`), Pi agent tracing via [pi-otel-telemetry](https://github.com/mprokopov/pi-otel-telemetry) extension (OTLP export to Logfire). Both trace sources appear in the same Logfire project. Container OTEL env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`) are auto-constructed from `LOGFIRE_TOKEN`/`LOGFIRE_BASE_URL` when set.
 - **devenv**: Nix-based development environment with auto-setup, conditional build tasks (`execIfModified`), auto-reload disabled
@@ -106,19 +103,17 @@ bark/
         auth.py                 # Login/logout with token reuse, rich prompts, --password-file
         client.py               # BarkClient (HTTP), WebSocket shell/exec session forwarding
         config.py               # Config storage (~/.config/bark/cli.toml)
-      exec_session.py           # Raw docker exec subprocess (no PTY) for piped commands (rsync transport)
+      dockerexec.py             # Raw docker exec subprocess (no PTY) for piped commands (rsync transport)
       main.py                   # FastAPI app, lifespan, default user seeding, static file serving
-      api.py                    # API route handlers (health, auth, workspaces, files, messages, admin) via APIRouter
+      api.py                    # API route handlers (health, auth, workspaces, files, browser-delegate, admin) via APIRouter
       auth.py                   # Register/login/logout, JWT with roles, bcrypt, require_role(), email validation, verification tokens
-      email_service.py          # Email sending via SMTP or sendmail (verification emails)
-      user_store.py             # SQLite: users (with verified flag), workspaces, roles, user_roles, token blocklist, login_attempts, message history
-      workspace_manager.py      # Workspace CRUD + host directory management + user data archival
-      container_manager.py      # Docker lifecycle, port allocation, idle timeout, session resume env, shutdown cleanup
-      pi_rpc_client.py          # docker attach subprocess for Pi stdin/stdout JSON-RPC (chunked reads for large events)
-      agui_translator.py        # Pi RPC events → AG-UI events mapping, file-change detection
-      ws_handler.py             # WebSocket auth, workspace routing, AG-UI streaming, exec sessions, session resume, auto-restart
-      file_service.py           # Host-side file read/write/delete/rename with path traversal protection
-      terminal_manager.py      # Docker exec PTY subprocess for interactive shell access
+      emailsvc.py               # Email sending via SMTP or sendmail (verification emails)
+      model.py                  # SQLite: users (with verified flag), workspaces, roles, user_roles, token blocklist, login_attempts
+      workspaces.py             # Workspace CRUD + host directory management + user data archival
+      container.py              # Docker lifecycle, port allocation, idle timeout, bridge tokens, session resume env, shutdown cleanup
+      wshandler.py              # WebSocket auth, workspace routing, terminal/exec/bridge, session resume, auto-restart
+      files.py                  # Host-side file read/write/delete/rename with path traversal protection
+      terminal.py               # Docker exec PTY subprocess for interactive shell access
     tests/                      # pytest unit tests (100% coverage, parallel via xdist)
 
   src/backend/e2e-tests/
@@ -146,20 +141,20 @@ bark/
         admin_users_page.dart   # Admin user management: list, add, edit, delete users, toggle roles
       workspace/
         workspace_list_page.dart  # Workspace CRUD UI
-        workspace_page.dart     # IDE view: WebSocket, container lifecycle, ui_ready handshake
-      agui/
-        agui_client.dart        # WebSocket client, AG-UI event stream, ui_ready command
-        agui_events.dart        # AG-UI event type definitions
+        workspace_page.dart     # IDE view: WebSocket, container lifecycle, browser delegate, ui_ready handshake
+      ws/
+        ws_client.dart          # WebSocket client: terminal, exec, browser bridge, custom events, debug log
+      browser/
+        browser_delegate.dart   # Handles browser_request messages: built-in fetch + plugin dispatch
       terminal/
-        chat_panel.dart         # Chat UI: markdown, syntax highlighting, tool cards, history loading
         container_terminal.dart # xterm.dart terminal widget with dark theme, PTY via WebSocket
       file_viewer/
         file_viewer_panel.dart  # File tree + content viewer (16pt JetBrains Mono)
         file_upload.dart        # Drag-and-drop upload
-      output/
-        output_panel.dart       # Debug panel: container lifecycle, queries, tool calls, errors
+      debug/
+        debug_panel.dart        # Live WebSocket message viewer with auto-scroll and detail dialog
       layout/
-        ide_layout.dart         # Split layout: chat left, Terminal+Files tabs + slidable Debug right
+        ide_layout.dart         # Full-width Terminal+Files tabs with optional debug panel
     test/                       # Dart unit tests (VM-mode, no browser required)
 
   src/frontend/e2e-tests/                # Playwright E2E tests with isolated test server
@@ -193,15 +188,13 @@ bark/
 - URL-based workspace routing (survives page reload via hash URL reading)
 - Deep link preservation: unauthenticated visits to protected URLs redirect to login with a `?redirect=` param, then return to the original URL after successful login
 - Workspace name and logged-in user email shown in app bar, browser tab title
-- Containers stop when navigating away (browser back, in-app back, logout)
-- Containers auto-restart transparently when user sends next prompt
+- Containers stay alive after disconnect — idle timeout handles cleanup
 - Container lifecycle visible in debug panel
 
 ### Pi Agent Integration
 
-- One Docker container per workspace running Pi in RPC mode
-- Container communicates via stdin/stdout JSON-RPC (docker attach subprocess)
-- Pi RPC events translated to AG-UI events in real-time
+- One Docker container per workspace running Pi in interactive terminal mode
+- Users interact with Pi directly through the terminal pane
 - Native Pi session persistence (JSONL files in workspace `.pi/sessions/`)
 - Session resume on reconnect via `--session` CLI flag (passed as `BARK_RESUME_SESSION` env var to the container; avoids `switch_session` RPC which would re-read the FIFO)
 - Per-workspace port allocation: well-known container ports (8000+) mapped to host ports (9000+), persisted in SQLite (`port_allocations` table with per-port PRIMARY KEY preventing overlap). Ports allocated at workspace creation, stable across restarts, freed by CASCADE on workspace delete. `num_ports` column on workspaces table (default 5) controls how many; on container start, ports are added/removed to match. `BARK_PORT_MAPPINGS` env var passes container:host pairs to the container.
@@ -464,10 +457,10 @@ The test server spawns the bark server on a non-default port (18997) with a temp
 devenv shell -- test-frontend
 
 # Run a single test file
-devenv shell -- test-frontend test/agui_events_test.dart
+devenv shell -- test-frontend test/ws_client_test.dart
 ```
 
-Tests cover agui events, agui client, auth service, chat panel, container terminal, file upload (conflict detection, upload paths, auth headers, error handling, directory flattening), file viewer panel (navigation, breadcrumbs, refresh), IDE layout (tabs, dividers, IndexedStack), login page, output panel, tool plugin registry, workspace list page (CRUD dialogs, loading/error states), and bark logo. Every test has at least one assertion. Browser-only APIs (`dart:html`, `dart:js_interop`) are abstracted via conditional imports (`web_helpers_stub.dart`/`web_helpers_web.dart`) so tests run in VM mode without a browser.
+Tests cover WebSocket client, auth service, browser delegate, container terminal, file upload (conflict detection, upload paths, auth headers, error handling, directory flattening), file viewer panel (navigation, breadcrumbs, refresh), IDE layout (tabs, dividers, IndexedStack), login page, tool plugin registry, workspace list page (CRUD dialogs, loading/error states), and bark logo. Every test has at least one assertion. Browser-only APIs (`dart:html`, `dart:js_interop`) are abstracted via conditional imports (`web_helpers_stub.dart`/`web_helpers_web.dart`) so tests run in VM mode without a browser.
 
 ### Pre-commit Hooks
 
@@ -599,12 +592,10 @@ LLM calls tool → Pi extension execute()
 
 Soliplex has its own Bark plugins currently hosted on the `bark-integration` branch of the Soliplex repository within `bark-plugin`.
 
-The Soliplex tools run entirely in the browser, which has the user's Soliplex authentication cookies. When deployed behind nginx on the same domain, the browser can call Soliplex APIs directly with no CORS issues. Set `SOLIPLEX_URL` in `.env` to tell the frontend where Soliplex is (served via the `/api/config` endpoint). Leave it empty when Bark and Soliplex share the same origin (the typical nginx setup). Cross-origin setups require CORS configuration on the Soliplex side.
-
-The query flow: frontend creates a thread in the Soliplex room, posts the user's question as an AG-UI `RunAgentInput`, collects the streamed SSE response, extracts `TEXT_MESSAGE_CONTENT` deltas, and returns the assembled text to the Pi extension.
+The Soliplex tools use the browser bridge to make authenticated requests to the Soliplex API using the browser's session cookies. The Pi extension inside the container POSTs to the bridge endpoint, the backend relays to the Flutter client, and the Dart plugin handler makes the actual HTTP calls to Soliplex.
 
 - **soliplex_list_rooms** (external, via `plugins.yaml`): Lists available Soliplex knowledge base rooms
-- **soliplex_query** (external, via `plugins.yaml`): Queries a Soliplex room via AG-UI (creates thread, posts question, collects SSE response). Default room: `search`
+- **soliplex_query** (external, via `plugins.yaml`): Queries a Soliplex room (creates thread, posts question, collects SSE response). Default room: `search`
 
 The devenv.nix runs nginx as the primary access point:
 
