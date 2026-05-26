@@ -185,6 +185,17 @@ async def start_workspace_container(
         workspace_manager.get_home_host_path(user["id"], workspace_id)
     )
 
+    # Find the most recent Pi session file to resume (if any).
+    import glob
+
+    session_files = sorted(
+        glob.glob(f"{home_path}/.pi/sessions/**/*.jsonl", recursive=True)
+    )
+    resume_session = None
+    if session_files:
+        most_recent = session_files[-1]
+        resume_session = most_recent.replace(home_path, "/home/bark")
+
     hosting_hostname, hosting_proto, hosting_base_path = derive_hosting_info(
         ws.headers
     )
@@ -196,6 +207,7 @@ async def start_workspace_container(
         host_path,
         home_path,
         workspace.get("container_id"),
+        resume_session=resume_session,
         num_ports=workspace.get(
             "num_ports", container_manager.DEFAULT_PORTS_PER_WORKSPACE
         ),
@@ -458,6 +470,8 @@ def handle_browser_response(msg: dict) -> None:
     future = _pending_browser_requests.pop(request_id, None)
     if future and not future.done():
         future.set_result(msg)
+    elif request_id:
+        logger.debug("Browser response for unknown/completed request %s", request_id)
 
 
 async def dispatch_browser_request(
@@ -471,7 +485,7 @@ async def dispatch_browser_request(
     import uuid
 
     request_id = str(uuid.uuid4())
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     future: asyncio.Future = loop.create_future()
     _pending_browser_requests[request_id] = future
 
@@ -493,6 +507,9 @@ async def dispatch_browser_request(
     except asyncio.TimeoutError:
         _pending_browser_requests.pop(request_id, None)
         return {"error": "Browser client did not respond within timeout"}
+    except asyncio.CancelledError:
+        _pending_browser_requests.pop(request_id, None)
+        raise
 
 
 async def stop_exec(state: dict) -> None:

@@ -557,6 +557,7 @@ async def upload_file(
 
 
 class BrowserDelegateRequest(BaseModel):
+    model_config = {"extra": "allow"}
     action: str
     token: str
 

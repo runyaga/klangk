@@ -152,6 +152,21 @@ void main() {
       expect(responses[0]['status'], 'ok');
     });
 
+    test('action callback exception returns error', () async {
+      delegate.onCelebrate = () => throw Exception('boom');
+
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-boom',
+        'action': 'celebrate',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['error'], contains('action failed'));
+    });
+
     test('stop cancels subscription', () async {
       delegate.stop();
 
@@ -230,6 +245,20 @@ void main() {
 
       expect(requests.length, 1);
       expect(requests[0].headers['Authorization'], 'Bearer tok123');
+    });
+
+    test('fetch with invalid url returns error', () async {
+      channel.serverSend({
+        'type': 'browser_request',
+        'id': 'req-fetch-invalid',
+        'action': 'fetch',
+        'url': 'not-a-url',
+      });
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      final responses = _browserResponses(channel);
+      expect(responses.length, 1);
+      expect(responses[0]['error'], contains('invalid url'));
     });
 
     test('fetch missing url returns error', () async {

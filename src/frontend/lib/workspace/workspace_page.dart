@@ -80,6 +80,32 @@ class _WorkspacePageState extends State<WorkspacePage> {
     _browserDelegate = BrowserDelegate(wsClient);
     _browserDelegate!.start();
 
+    // Listen for container lifecycle events
+    wsClient.customEvents.listen((msg) {
+      final event = msg['event'] as Map<String, dynamic>?;
+      if (event == null) return;
+      final name = event['name'] as String?;
+      if (name == 'container_stopped' && !_containerStopped) {
+        final value = event['value'] as Map<String, dynamic>?;
+        final reason = value?['reason'] ?? '';
+        if (mounted) {
+          setState(() {
+            _containerStopped = true;
+            _stopReason = reason.toString().isNotEmpty
+                ? 'Container stopped ($reason)'
+                : 'Container stopped';
+          });
+        }
+      } else if (name == 'container_ready' && _restarting) {
+        if (mounted) {
+          setState(() {
+            _restarting = false;
+            _containerStopped = false;
+          });
+        }
+      }
+    });
+
     // Listen for errors
     wsClient.errors.listen((error) {
       if (mounted) {

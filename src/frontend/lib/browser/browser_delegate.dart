@@ -31,17 +31,21 @@ class BrowserDelegate {
     final action = request['action'] as String?;
     Map<String, dynamic> result;
 
-    switch (action) {
-      case 'fetch':
-        result = await _handleFetch(request);
-      case 'celebrate':
-        result = {'status': 'ok'};
-        onCelebrate?.call();
-      case 'beep':
-        result = {'status': 'ok'};
-        onBeep?.call();
-      default:
-        result = {'error': 'unknown action: $action'};
+    try {
+      switch (action) {
+        case 'fetch':
+          result = await _handleFetch(request);
+        case 'celebrate':
+          result = {'status': 'ok'};
+          onCelebrate?.call();
+        case 'beep':
+          result = {'status': 'ok'};
+          onBeep?.call();
+        default:
+          result = {'error': 'unknown action: $action'};
+      }
+    } catch (e) {
+      result = {'error': 'action failed: $e'};
     }
 
     _client.sendBrowserResponse(id, result);
@@ -54,19 +58,31 @@ class BrowserDelegate {
       return {'error': 'missing url'};
     }
 
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      return {'error': 'invalid url: $url'};
+    }
+
     final method = (request['method'] as String?) ?? 'GET';
-    final headers = (request['headers'] as Map<String, dynamic>?)
-            ?.map((k, v) => MapEntry(k, v.toString())) ??
-        {};
+    final rawHeaders = request['headers'] as Map<String, dynamic>?;
+    final headers = <String, String>{};
+    if (rawHeaders != null) {
+      for (final entry in rawHeaders.entries) {
+        if (entry.value != null) {
+          headers[entry.key] = entry.value.toString();
+        }
+      }
+    }
     final body = request['body'] as String?;
 
     try {
-      final uri = Uri.parse(url);
       final httpRequest = http.Request(method.toUpperCase(), uri);
       httpRequest.headers.addAll(headers);
       if (body != null) httpRequest.body = body;
 
-      final streamed = await _httpClient.send(httpRequest);
+      final streamed = await _httpClient.send(httpRequest).timeout(
+            const Duration(seconds: 30),
+          );
       final response = await http.Response.fromStream(streamed);
 
       return {

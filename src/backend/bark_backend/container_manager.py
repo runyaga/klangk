@@ -115,9 +115,13 @@ class ContainerRegistry:
                 state.record_activity()
 
     def create_bridge_token(self, workspace_id: str) -> str:
-        """Generate a unique token that maps to a workspace_id."""
+        """Generate a unique token that maps to a workspace_id.
+
+        Revokes any existing tokens for this workspace first.
+        """
         import uuid
 
+        self.revoke_bridge_token(workspace_id)
         token = str(uuid.uuid4())
         self._bridge_tokens[token] = workspace_id
         return token

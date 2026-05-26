@@ -5,25 +5,24 @@
  * which executes them with its session credentials (cookies, OAuth tokens, etc.).
  */
 
-const BRIDGE_URL = process.env.BARK_BRIDGE_URL;
-const BRIDGE_TOKEN = process.env.BARK_BRIDGE_TOKEN;
-
 function getConfig() {
-  if (!BRIDGE_URL) {
+  const bridgeUrl = process.env.BARK_BRIDGE_URL;
+  const token = process.env.BARK_BRIDGE_TOKEN;
+  if (!bridgeUrl) {
     throw new Error(
       "@bark/bridge: BARK_BRIDGE_URL is not set. " +
         "Are you running inside a Bark container?",
     );
   }
-  if (!BRIDGE_TOKEN) {
+  if (!token) {
     throw new Error(
       "@bark/bridge: BARK_BRIDGE_TOKEN is not set. " +
         "Are you running inside a Bark container?",
     );
   }
   return {
-    bridgeUrl: `${BRIDGE_URL}/api/browser-delegate`,
-    token: BRIDGE_TOKEN,
+    bridgeUrl: `${bridgeUrl}/api/browser-delegate`,
+    token,
   };
 }
 
@@ -54,10 +53,13 @@ async function browserFetch(url, options = {}) {
   });
 
   if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(
-      `@bark/bridge: fetch request failed (${resp.status}): ${text}`,
-    );
+    let text;
+    try {
+      text = await resp.text();
+    } catch {
+      text = `(status ${resp.status})`;
+    }
+    throw new Error(`@bark/bridge: fetch request failed (${resp.status}): ${text}`);
   }
 
   return await resp.json();
@@ -73,21 +75,27 @@ async function browserFetch(url, options = {}) {
 async function browserAction(action, payload = {}) {
   const { bridgeUrl, token } = getConfig();
 
+  // Prevent payload from overwriting action or token
+  const { action: _a, token: _t, ...safePayload } = payload;
+
   const resp = await fetch(bridgeUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       action,
       token,
-      ...payload,
+      ...safePayload,
     }),
   });
 
   if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(
-      `@bark/bridge: action '${action}' failed (${resp.status}): ${text}`,
-    );
+    let text;
+    try {
+      text = await resp.text();
+    } catch {
+      text = `(status ${resp.status})`;
+    }
+    throw new Error(`@bark/bridge: action '${action}' failed (${resp.status}): ${text}`);
   }
 
   return await resp.json();
@@ -98,9 +106,11 @@ async function browserAction(action, payload = {}) {
  * @returns {Promise<boolean>}
  */
 async function isBridgeAvailable() {
-  if (!BRIDGE_URL || !BRIDGE_TOKEN) return false;
+  const bridgeUrl = process.env.BARK_BRIDGE_URL;
+  const token = process.env.BARK_BRIDGE_TOKEN;
+  if (!bridgeUrl || !token) return false;
   try {
-    const resp = await fetch(`${BRIDGE_URL}/health`, {
+    const resp = await fetch(`${bridgeUrl}/health`, {
       signal: AbortSignal.timeout(2000),
     });
     return resp.ok;
