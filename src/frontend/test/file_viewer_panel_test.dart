@@ -1093,7 +1093,8 @@ void main() {
       var renamePath = '';
       testHttpClientOverride = MockClient((request) async {
         if (request.url.path.contains('/files/rename')) {
-          renamePath = request.url.queryParameters['new_path'] ?? '';
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          renamePath = body['new_path'] as String? ?? '';
           return http.Response('', 200);
         }
         if (request.url.path.contains('/files')) {
