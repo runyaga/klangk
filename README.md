@@ -2,22 +2,21 @@
 
 ![Bark Web Coding Agent](docs/screenshot.png)
 
-A multi-user web coding agent powered by [Pi](https://pi.dev) and any OpenAI-compatible LLM provider (e.g., [Ollama](https://ollama.com) cloud or self-hosted).
+A multi-user web coding agent powered by [Pi](https://pi.dev) and any OpenAI-compatible LLM provider.
 
-Bark gives each user their own isolated coding environment with an AI agent that can write, run, and test code directly. Each workspace runs in a Docker container with Python, Node.js, and C/C++ available.
+Bark gives each user their own isolated coding environment (a "workspace") using a Docker container. `pi` and other tools can be run within a workspace.
 
 ## Quick Start
 
 ### Prerequisites
 
-- [Nix](https://nixos.org/download/) with [devenv](https://devenv.sh/) installed (run `./bootstrap` to install both)
 - Docker daemon running
-- An OpenAI-compatible LLM provider (e.g., [Ollama](https://ollama.com) cloud or self-hosted)
+- An OpenAI-compatible LLM provider (e.g., [Ollama Cloud](https://ollama.com) or self-hosted Ollama)
 
 ### Setup
 
 ```bash
-git clone <repo-url> bark
+git clone git@github.com/mcdonc/bark
 cd bark
 
 # Create .env with your LLM provider credentials
@@ -42,18 +41,16 @@ EOF
 devenv processes up
 ```
 
-Open [http://localhost:8995](http://localhost:8995) (nginx) and log in with `admin@example.com` (or whatever you set `BARK_DEFAULT_USER` to). If you set `BARK_DEFAULT_PASSWORD` in `.env`, use that password. Otherwise, check the server log output for the generated password. The default user has the admin role and can manage other users at `/admin/users`.
+Open [http://localhost:8995](http://localhost:8995) and log in with `admin@example.com` (or whatever you set `BARK_DEFAULT_USER` to). If you set `BARK_DEFAULT_PASSWORD` in `.env`, use that password. Otherwise, check the server log output for the generated password. The default user has the admin role and can manage other users at `/admin/users`.
 
 ### What You Can Do
 
 1. **Create a workspace** — each workspace is an isolated coding environment
-2. **Chat with the AI agent** — ask it to write code, create projects, fix bugs
-3. **The agent writes files directly** — no copy-paste needed
-4. **The agent runs and tests code** — it has shell access inside the container
-5. **View files** in the file viewer panel, drag-and-drop files or folders to upload, right-click to download, rename, or delete
-6. **Use the terminal** for direct shell access to the container (bash with tab completion and colors)
-7. **Monitor activity** in the debug panel
-8. **Manage users** (admin only) — add, edit, delete users and toggle admin roles
+2. **View files** in the file viewer panel, drag-and-drop files or folders to upload, right-click to download, rename, or delete
+3. **Use the terminal** for direct shell access to the container (bash with tab completion and colors)
+4. **Monitor activity** in the debug panel
+5. **Manage users** (admin only) — add, edit, delete users and toggle admin roles
+6. **Chat with the AI agent** — execute "pi" in the terminal, then ask it to write code, create projects, fix bugs
 
 ### CLI Access
 
@@ -139,18 +136,6 @@ devenv up                                # builds and starts
 ```
 
 Sample plugins (celebrate, beep, pig-latin, word-count) are included in the generated template. Sample plugin source lives in `plugins/` in this repo.
-
-Each plugin directory can contain:
-
-| File                   | Purpose                                                           |
-| ---------------------- | ----------------------------------------------------------------- |
-| `extension.ts`         | Pi extension (TypeScript) — registered as an LLM-callable tool    |
-| `dart/lib/plugin.dart` | Dart plugin class — handles client-side execution and optional UI |
-| `dart/lib/*.dart`      | Supporting Dart files (widgets, utilities)                        |
-| `dart/pubspec.yaml`    | Dart package definition, depends on `bark_plugin_api`             |
-| `tools/`               | Server-side scripts copied into the Docker image                  |
-
-**Client-side plugins** use Pi's Extension UI Sub-Protocol to delegate execution to the browser. This enables tools that need browser authentication (e.g., Soliplex cookies) or browser-native capabilities (audio, animations).
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture and feature documentation.
 
