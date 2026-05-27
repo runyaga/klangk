@@ -735,6 +735,8 @@ class TestHandleWebsocket:
 
         async def fake_start(ws_arg, state, wid, ws_obj):
             state["container_id"] = "cid"
+            state["workspace_id"] = wid
+            wshandler.get_or_create_session(wid)
 
         ws.receive_text = AsyncMock(
             side_effect=[
@@ -1125,10 +1127,27 @@ class TestBrowserBridge:
         finally:
             wshandler._sessions.pop("ws-empty", None)
 
+    async def test_dispatch_browser_request_cli_only(self):
+        """CLI-only connections get immediate error, not 30s timeout."""
+        session = wshandler.get_or_create_session("ws-cli-only")
+        mock_ws = AsyncMock()
+        session.subscribers.add(mock_ws)
+        # No browser_subscribers — CLI never sends ui_ready
+        try:
+            result = await wshandler.dispatch_browser_request(
+                "ws-cli-only",
+                {"action": "fetch", "url": "http://example.com"},
+            )
+            assert "error" in result
+            assert "No browser client" in result["error"]
+        finally:
+            wshandler._sessions.pop("ws-cli-only", None)
+
     async def test_dispatch_browser_request_success(self):
         session = wshandler.get_or_create_session("ws-bridge")
         mock_ws = AsyncMock()
         session.subscribers.add(mock_ws)
+        session.browser_subscribers.add(mock_ws)
 
         async def respond_later():
             await asyncio.sleep(0.1)
@@ -1160,6 +1179,7 @@ class TestBrowserBridge:
         session = wshandler.get_or_create_session("ws-timeout")
         mock_ws = AsyncMock()
         session.subscribers.add(mock_ws)
+        session.browser_subscribers.add(mock_ws)
         try:
             result = await wshandler.dispatch_browser_request(
                 "ws-timeout",
@@ -1209,6 +1229,19 @@ class TestWsDebugLogging:
             assert delivered == 1
         finally:
             wshandler._sessions.pop("ws-debug-bcast", None)
+
+    async def test_broadcast_to_browsers_logged_when_debug(self, monkeypatch):
+        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
+        session = wshandler.get_or_create_session("ws-debug-browser")
+        mock_ws = AsyncMock()
+        session.browser_subscribers.add(mock_ws)
+        try:
+            delivered = await wshandler._broadcast_to_browsers(
+                "ws-debug-browser", {"type": "test"}
+            )
+            assert delivered == 1
+        finally:
+            wshandler._sessions.pop("ws-debug-browser", None)
 
 
 class TestLogWsMsg:
@@ -1493,6 +1526,7 @@ class TestDispatchBrowserRequestCancelled:
         session = wshandler.get_or_create_session("ws-cancel")
         mock_ws = AsyncMock()
         session.subscribers.add(mock_ws)
+        session.browser_subscribers.add(mock_ws)
         try:
             # Snapshot request IDs before so we can check ours was cleaned up
             before = set(wshandler._pending_browser_requests.keys())
@@ -1522,6 +1556,7 @@ class TestDispatchBrowserRequestDeadSubscribers:
         dead_ws = AsyncMock()
         dead_ws.send_json = AsyncMock(side_effect=RuntimeError("ws closed"))
         session.subscribers.add(dead_ws)
+        session.browser_subscribers.add(dead_ws)
         try:
             result = await wshandler.dispatch_browser_request(
                 "ws-all-dead",

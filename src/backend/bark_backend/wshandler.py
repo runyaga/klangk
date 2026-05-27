@@ -104,6 +104,13 @@ async def handle_websocket(ws: WebSocket) -> None:
             elif cmd == "workspace_disconnect":
                 await handle_workspace_disconnect(ws, conn_state)
             elif cmd == "ui_ready":
+                # Mark this connection as a browser (Flutter) client.
+                # CLI connections never send ui_ready.
+                wid = conn_state.get("workspace_id")
+                if wid:
+                    sess = get_session(wid)
+                    if sess:
+                        sess.browser_subscribers.add(ws)
                 status_msg = conn_state.pop("pending_status_msg", None)
                 if status_msg:
                     await ws.send_json(
@@ -478,10 +485,12 @@ def handle_browser_response(msg: dict) -> None:
 async def dispatch_browser_request(
     workspace_id: str, request: dict, timeout: float = 30.0
 ) -> dict:
-    """Send a browser_request to all workspace subscribers and wait for the response.
+    """Send a browser_request to browser (Flutter) subscribers and wait for the response.
 
     Called by the /api/browser-delegate HTTP endpoint. Holds the connection
     open until a browser_response arrives or the timeout expires.
+    Only sends to browser_subscribers (connections that sent ui_ready),
+    not CLI connections which can't handle browser requests.
     """
     request_id = str(uuid.uuid4())
     loop = asyncio.get_running_loop()
@@ -489,7 +498,7 @@ async def dispatch_browser_request(
     _pending_browser_requests[request_id] = future
 
     session = get_session(workspace_id)
-    if not session or not session.subscribers:
+    if not session or not session.browser_subscribers:
         _pending_browser_requests.pop(request_id, None)
         return {"error": "No browser client connected to this workspace"}
 
@@ -498,7 +507,7 @@ async def dispatch_browser_request(
         "type": "browser_request",
         "id": request_id,
     }
-    delivered = await _broadcast(workspace_id, message)
+    delivered = await _broadcast_to_browsers(workspace_id, message)
     if delivered == 0:
         _pending_browser_requests.pop(request_id, None)
         return {"error": "No browser client connected to this workspace"}
@@ -639,6 +648,26 @@ async def _broadcast(workspace_id: str, message: dict) -> int:
     return delivered
 
 
+async def _broadcast_to_browsers(workspace_id: str, message: dict) -> int:
+    """Send a message to browser (Flutter) subscribers only, removing dead ones."""
+    if _WS_DEBUG:
+        _log_ws_msg("BCAST", message)
+    session = get_session(workspace_id)
+    if not session:  # pragma: no cover
+        return 0
+    dead = []
+    delivered = 0
+    for sub_ws in list(session.browser_subscribers):
+        try:
+            await sub_ws.send_json(message)
+            delivered += 1
+        except (WebSocketDisconnect, RuntimeError, ConnectionError):
+            dead.append(sub_ws)
+    for sub_ws in dead:
+        session.browser_subscribers.discard(sub_ws)
+    return delivered
+
+
 async def cleanup_connection(ws: WebSocket, state: dict) -> None:
     # Remove idle callback
     workspace_id = state.get("workspace_id")
@@ -654,6 +683,7 @@ async def cleanup_connection(ws: WebSocket, state: dict) -> None:
     session = get_session(workspace_id) if workspace_id else None
     if session:
         session.subscribers.discard(ws)
+        session.browser_subscribers.discard(ws)
 
     # Clean up session if no subscribers remain. The container is NOT
     # killed — the idle timeout handles container cleanup. This avoids

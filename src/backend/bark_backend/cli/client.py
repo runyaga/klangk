@@ -178,9 +178,6 @@ async def _ws_shell(
         if resp.get("type") != "workspace_ready":
             raise ConnectionError(f"Connection failed: {resp}")
 
-        # 1b. Signal UI is ready so the backend can deliver pending status.
-        await ws.send(json.dumps({"cmd": "ui_ready"}))
-
         # 2. Start terminal
         cols, rows = _get_terminal_size()
         await ws.send(
@@ -356,8 +353,6 @@ async def _ws_exec(
         resp = json.loads(await ws.recv())
         if resp.get("type") != "workspace_ready":
             raise ConnectionError(f"Connection failed: {resp}")
-
-        await ws.send(json.dumps({"cmd": "ui_ready"}))
 
         # 2. Start exec session
         await ws.send(json.dumps({"cmd": "exec_start", "command": command}))
