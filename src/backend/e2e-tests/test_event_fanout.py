@@ -38,7 +38,7 @@ def server():
     # Start nginx as an LLM proxy so containers can reach the LLM.
     nginx_proc = None
     nginx_log = os.path.join(data_dir, "nginx.log")
-    if os.environ.get("LLM_BASE_URL"):
+    if os.environ.get("BARK_LLM_BASE_URL"):
         log_fd = open(nginx_log, "w")
         nginx_proc = subprocess.Popen(
             [os.path.join(project_root, "scripts", "nginx.sh")],

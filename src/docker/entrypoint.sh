@@ -33,11 +33,11 @@ cat >"$PI_AGENT_DIR/models.json" <<EOF
 {
   "providers": {
     "llm-proxy": {
-      "baseUrl": "$LLM_PROXY_URL",
+      "baseUrl": "$BARK_LLM_PROXY_URL",
       "api": "openai-completions",
       "apiKey": "proxy",
       "models": [
-        { "id": "$LLM_MODEL" }
+        { "id": "$BARK_LLM_MODEL" }
       ]
     }
   }
@@ -47,7 +47,7 @@ EOF
 # Merge runtime LLM config into build-time settings (which has "packages"
 # from pi install). The npm dir is symlinked above so Pi finds the packages
 # without reinstalling.
-jq --arg model "$LLM_MODEL" '. + {defaultProvider: "llm-proxy", defaultModel: $model}' \
+jq --arg model "$BARK_LLM_MODEL" '. + {defaultProvider: "llm-proxy", defaultModel: $model}' \
   /opt/bark/pi-agent/settings.json >"$PI_AGENT_DIR/settings.json"
 
 # Build system prompt file from static template + registered extension tools

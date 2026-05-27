@@ -254,10 +254,10 @@ class ContainerRegistry:
         env_vars = []
         nginx_port = util.resolve_env_secret("BARK_NGINX_PORT", "8995")
         proxy_url = f"http://host.docker.internal:{nginx_port}/llm-proxy"
-        llm_model = util.resolve_env_secret("LLM_MODEL", "")
-        env_vars.append(f"LLM_PROXY_URL={proxy_url}")
+        llm_model = util.resolve_env_secret("BARK_LLM_MODEL", "")
+        env_vars.append(f"BARK_LLM_PROXY_URL={proxy_url}")
         if llm_model:
-            env_vars.append(f"LLM_MODEL={llm_model}")
+            env_vars.append(f"BARK_LLM_MODEL={llm_model}")
         env_vars.append("PI_SKIP_VERSION_CHECK=1")
         logger.info(
             "Container LLM proxy: %s (model: %s)",

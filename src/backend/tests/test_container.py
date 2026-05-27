@@ -432,7 +432,7 @@ class TestStartContainer:
 
     async def test_llm_proxy_env_vars(self, workspace, monkeypatch):
         """Container gets proxy URL, not real API keys."""
-        monkeypatch.setenv("LLM_MODEL", "gemma4:31b")
+        monkeypatch.setenv("BARK_LLM_MODEL", "gemma4:31b")
         monkeypatch.setenv("BARK_NGINX_PORT", "8995")
         mock_docker = _mock_docker()
         mock_c = _mock_container("cid")
@@ -451,12 +451,12 @@ class TestStartContainer:
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         env = call_kwargs[1]["config"]["Env"]
         env_dict = dict(e.split("=", 1) for e in env)
-        assert env_dict["LLM_PROXY_URL"] == (
+        assert env_dict["BARK_LLM_PROXY_URL"] == (
             "http://host.docker.internal:8995/llm-proxy"
         )
-        assert env_dict["LLM_MODEL"] == "gemma4:31b"
+        assert env_dict["BARK_LLM_MODEL"] == "gemma4:31b"
         # API keys should NOT be in the container env
-        assert not any(e.startswith("LLM_API_KEY=") for e in env)
+        assert not any(e.startswith("BARK_LLM_API_KEY=") for e in env)
         assert not any(e.startswith("ANTHROPIC_API_KEY=") for e in env)
         # host.docker.internal must be resolvable
         host_config = call_kwargs[1]["config"]["HostConfig"]

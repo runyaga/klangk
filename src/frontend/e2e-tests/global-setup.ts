@@ -12,9 +12,9 @@ async function globalSetup() {
 
   // Warm up LLM before starting the server to force model loading.
   // Cold model loads on first request can take 30+ seconds.
-  const llmUrl = process.env.LLM_BASE_URL;
-  const llmModel = process.env.LLM_MODEL;
-  const llmKey = process.env.LLM_API_KEY;
+  const llmUrl = process.env.BARK_BARK_LLM_BASE_URL;
+  const llmModel = process.env.BARK_BARK_LLM_MODEL;
+  const llmKey = process.env.BARK_LLM_API_KEY;
   if (llmUrl && llmModel) {
     console.log("Warming up LLM...");
     const warmupStart = Date.now();
@@ -37,17 +37,17 @@ async function globalSetup() {
         );
       } else {
         throw new Error(
-          `LLM warmup failed: ${warmupResp.status} — check LLM_BASE_URL and LLM_MODEL are set correctly`,
+          `LLM warmup failed: ${warmupResp.status} — check BARK_LLM_BASE_URL and BARK_LLM_MODEL are set correctly`,
         );
       }
     } catch (e) {
       throw new Error(
-        `LLM warmup error: ${e} — check LLM_BASE_URL and LLM_MODEL are set correctly`,
+        `LLM warmup error: ${e} — check BARK_LLM_BASE_URL and BARK_LLM_MODEL are set correctly`,
       );
     }
   } else if (llmUrl) {
     throw new Error(
-      "LLM_BASE_URL is set but LLM_MODEL is not — add LLM_MODEL to .env",
+      "BARK_LLM_BASE_URL is set but BARK_LLM_MODEL is not — add BARK_LLM_MODEL to .env",
     );
   } else {
     // No LLM configured — skip warmup.
@@ -58,7 +58,7 @@ async function globalSetup() {
   mkdirSync(logDir, { recursive: true });
 
   // Start nginx as an LLM proxy so containers can reach the LLM.
-  // Containers are configured with LLM_PROXY_URL pointing at this nginx.
+  // Containers are configured with BARK_LLM_PROXY_URL pointing at this nginx.
   const nginxPort = "18995";
   if (llmUrl) {
     const nginxLogPath = join(

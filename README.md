@@ -23,9 +23,9 @@ cd bark
 # Create .env with your LLM provider credentials
 cat > .env << 'EOF'
 # LLM configuration (any OpenAI-compatible provider)
-LLM_API_KEY=your-api-key-here
-LLM_BASE_URL=https://ollama.com/v1          # or http://localhost:11434/v1 for self-hosted
-LLM_MODEL=gemma4:31b                        # any model available on your provider
+BARK_LLM_API_KEY=your-api-key-here
+BARK_LLM_BASE_URL=https://ollama.com/v1          # or http://localhost:11434/v1 for self-hosted
+BARK_LLM_MODEL=gemma4:31b                        # any model available on your provider
 
 # Bark configuration
 BARK_JWT_SECRET=change-this-to-a-random-secret
@@ -80,9 +80,9 @@ All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` 
 | `BARK_DATA_DIR`            | `$DEVENV_STATE/bark/data`    | Database, workspaces, Pi sessions                                  |
 | `BARK_PLUGINS_DIR`         | `$DEVENV_STATE/bark/plugins` | Fetched plugins (outside repo for `execIfModified`)                |
 | `SOLIPLEX_URL`             | (empty)                      | Soliplex base URL as seen by browser (empty = same origin)         |
-| `LLM_API_KEY`              |                              | LLM provider API key                                               |
-| `LLM_BASE_URL`             |                              | LLM API URL (any OpenAI-compatible provider)                       |
-| `LLM_MODEL`                |                              | LLM model name                                                     |
+| `BARK_LLM_API_KEY`         |                              | LLM provider API key                                               |
+| `BARK_LLM_BASE_URL`        |                              | LLM API URL (any OpenAI-compatible provider)                       |
+| `BARK_LLM_MODEL`           |                              | LLM model name                                                     |
 | `BARK_JWT_SECRET`          |                              | JWT signing secret                                                 |
 | `BARK_DEFAULT_USER`        |                              | Auto-seeded admin email on startup                                 |
 | `BARK_DEFAULT_PASSWORD`    |                              | Auto-seeded password on startup (omit to generate random)          |

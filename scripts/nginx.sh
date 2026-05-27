@@ -46,8 +46,8 @@ http {
       allow 10.0.0.0/8;
       allow 127.0.0.1;
       deny all;
-      proxy_pass ${LLM_BASE_URL}/;
-      proxy_set_header Authorization "Bearer ${LLM_API_KEY}";
+      proxy_pass ${BARK_LLM_BASE_URL}/;
+      proxy_set_header Authorization "Bearer ${BARK_LLM_API_KEY}";
       proxy_set_header Host \$proxy_host;
       proxy_http_version 1.1;
       proxy_set_header Connection "";

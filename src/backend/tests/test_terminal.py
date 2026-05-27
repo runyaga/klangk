@@ -36,9 +36,7 @@ def real_pipe():
 def mock_os(real_pipe):
     r, w = real_pipe
     with (
-        patch.object(
-            terminal, "openpty", return_value=(r, w)
-        ) as mopenpty,
+        patch.object(terminal, "openpty", return_value=(r, w)) as mopenpty,
         patch.object(terminal, "set_winsize") as m_winsize,
         patch.object(terminal, "fd_read", return_value=b"") as m_read,
         patch.object(terminal, "fd_write", return_value=0) as m_write,
@@ -94,7 +92,7 @@ class TestStart:
         loop.remove_reader(master_fd)
 
     async def test_start_unsets_sensitive_env_vars(self, mock_os, monkeypatch):
-        monkeypatch.setenv("LLM_API_KEY", "secret")
+        monkeypatch.setenv("BARK_LLM_API_KEY", "secret")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret2")
         proc = _mock_proc()
         master_fd = mock_os["master_fd"]
@@ -115,7 +113,7 @@ class TestStart:
         unset_keys = [
             env_args[i + 1] for i, a in enumerate(env_args) if a == "-u"
         ]
-        assert "LLM_API_KEY" in unset_keys
+        assert "BARK_LLM_API_KEY" in unset_keys
         assert "ANTHROPIC_API_KEY" in unset_keys
         assert "BARK_RESUME_SESSION" in unset_keys
 
