@@ -388,6 +388,9 @@ def main() -> None:  # pragma: no cover
     except httpx.ConnectError:
         _err.print("[red]Cannot connect to server[/red] — is it running?")
         raise SystemExit(1) from None
+    except httpx.HTTPStatusError as exc:
+        _err.print(f"[red]{exc}[/red]")
+        raise SystemExit(1) from None
     except websockets.ConnectionClosed:
         _err.print("\n[red]Server disconnected[/red]")
         raise SystemExit(1) from None
