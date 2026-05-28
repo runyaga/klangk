@@ -25,6 +25,8 @@ class Workspace:
     id: str
     name: str
     created_at: str
+    image: str | None = None
+    default_command: str | None = None
 
 
 def _get_terminal_size() -> tuple[int, int]:
@@ -92,7 +94,13 @@ class BarkClient:
         resp.raise_for_status()
         raw = resp.json()
         return [
-            Workspace(id=w["id"], name=w["name"], created_at=w["created_at"])
+            Workspace(
+                id=w["id"],
+                name=w["name"],
+                created_at=w["created_at"],
+                image=w.get("image"),
+                default_command=w.get("default_command"),
+            )
             for w in raw
         ]
 

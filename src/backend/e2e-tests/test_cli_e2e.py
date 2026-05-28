@@ -354,11 +354,11 @@ class TestDefaultCommand:
         try:
             # Set command before container starts
             result = _run(
-                ["bark", "set-command", "e2e-defcmd", "echo hello"],
+                ["bark", "edit", "e2e-defcmd", "--command", "echo hello"],
                 env=env,
             )
             assert result.returncode == 0
-            assert "Default command set to" in result.stdout
+            assert "Updated" in result.stdout
 
             # exec triggers container start; config mount has the command
             result = _run(
@@ -376,9 +376,11 @@ class TestDefaultCommand:
             assert result.stdout.strip() == "echo hello"
 
             # Clear
-            result = _run(["bark", "set-command", "e2e-defcmd"], env=env)
+            result = _run(
+                ["bark", "edit", "e2e-defcmd", "--command", ""], env=env
+            )
             assert result.returncode == 0
-            assert "cleared" in result.stdout
+            assert "Updated" in result.stdout
         finally:
             _run(["bark", "delete", "e2e-defcmd"], env=env)
 
@@ -389,7 +391,7 @@ class TestDefaultCommand:
         _run(["bark", "create", "e2e-defbash"], env=env)
         try:
             _run(
-                ["bark", "set-command", "e2e-defbash", "bash"],
+                ["bark", "edit", "e2e-defbash", "--command", "bash"],
                 env=env,
             )
             # Start the container first

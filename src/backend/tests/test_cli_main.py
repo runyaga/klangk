@@ -460,7 +460,121 @@ class TestMainCLI:
 
         client.resolve_workspace.assert_called_once_with("target-ws")
 
-    def test_set_command(self, logged_in_cfg, monkeypatch):
+    def test_edit_with_flags(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            image="bark",
+            default_command="bark-pi",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        with patch.object(main, "_client", return_value=client):
+            from typer.testing import CliRunner
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main.app,
+                ["edit", "my-ws", "--name", "renamed", "--command", "pi"],
+            )
+            assert result.exit_code == 0
+
+        call_args = client.put.call_args
+        body = call_args[1]["json"]
+        assert body["name"] == "renamed"
+        assert body["default_command"] == "pi"
+        assert "image" not in body  # not provided, not sent
+
+    def test_edit_clear_command(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            default_command="bark-pi",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        with patch.object(main, "_client", return_value=client):
+            from typer.testing import CliRunner
+
+            runner = CliRunner()
+            result = runner.invoke(
+                main.app, ["edit", "my-ws", "--command", ""]
+            )
+            assert result.exit_code == 0
+
+        call_args = client.put.call_args
+        assert call_args[1]["json"]["default_command"] is None
+
+    def test_edit_interactive(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            image="bark",
+            default_command="bark-pi",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # Simulate: keep name (Enter), keep image (Enter), change command
+        with patch.object(main, "_client", return_value=client):
+            with patch("builtins.input", side_effect=["", "", "pi"]):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        call_args = client.put.call_args
+        body = call_args[1]["json"]
+        assert "name" not in body  # kept current
+        assert "image" not in body  # kept current
+        assert body["default_command"] == "pi"
+
+    def test_edit_interactive_change_all(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            image="bark",
+            default_command="bark-pi",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["renamed", "bark-custom", "pi"],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["name"] == "renamed"
+        assert body["image"] == "bark-custom"
+        assert body["default_command"] == "pi"
+
+    def test_edit_with_image_flag(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 
         ws = Workspace(
@@ -476,15 +590,15 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(main.app, ["set-command", "my-ws", "pi"])
+            result = runner.invoke(
+                main.app, ["edit", "my-ws", "--image", "bark-custom"]
+            )
             assert result.exit_code == 0
 
-        client.put.assert_called_once()
-        call_args = client.put.call_args
-        assert call_args[0][0] == f"/workspaces/{ws.id}"
-        assert call_args[1]["json"] == {"default_command": "pi"}
+        body = client.put.call_args[1]["json"]
+        assert body["image"] == "bark-custom"
 
-    def test_set_command_clear(self, logged_in_cfg, monkeypatch):
+    def test_edit_interactive_no_changes(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 
         ws = Workspace(
@@ -494,19 +608,19 @@ class TestMainCLI:
         )
         client = MagicMock()
         client.resolve_workspace.return_value = ws
-        client.put.return_value = MagicMock(status_code=200)
 
         with patch.object(main, "_client", return_value=client):
-            from typer.testing import CliRunner
+            with patch("builtins.input", side_effect=["", "", ""]):
+                from typer.testing import CliRunner
 
-            runner = CliRunner()
-            result = runner.invoke(main.app, ["set-command", "my-ws"])
-            assert result.exit_code == 0
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+                assert "No changes" in result.stdout
 
-        call_args = client.put.call_args
-        assert call_args[1]["json"] == {"default_command": None}
+        client.put.assert_not_called()
 
-    def test_set_command_workspace_not_found(self, logged_in_cfg, monkeypatch):
+    def test_edit_workspace_not_found(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 
         client = MagicMock()
@@ -516,10 +630,12 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(main.app, ["set-command", "nope", "pi"])
+            result = runner.invoke(
+                main.app, ["edit", "nope", "--command", "pi"]
+            )
             assert result.exit_code == 1
 
-    def test_set_command_404_from_server(self, logged_in_cfg, monkeypatch):
+    def test_edit_404_from_server(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 
         ws = Workspace(
@@ -535,7 +651,9 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(main.app, ["set-command", "my-ws", "pi"])
+            result = runner.invoke(
+                main.app, ["edit", "my-ws", "--command", "pi"]
+            )
             assert result.exit_code == 1
 
     def test_exec_runs_command(self, logged_in_cfg, monkeypatch):

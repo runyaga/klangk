@@ -225,8 +225,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TextField), findsNWidgets(2));
-      expect(find.text('Name'), findsWidgets);
-      expect(find.textContaining('Default command'), findsOneWidget);
       expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     });
 

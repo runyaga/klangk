@@ -173,14 +173,36 @@ def delete(
     typer.echo(f"Deleted workspace {name}")
 
 
-@app.command("set-command")
-def set_command(
+_SENTINEL = object()
+
+
+def _prompt(label: str, current: str | None) -> str | _SENTINEL.__class__:
+    """Prompt for a value, showing the current default.
+
+    Returns the new value, or _SENTINEL if the user pressed Enter to keep.
+    Empty input (just whitespace) clears the value and returns "".
+    """
+    display = current or "(none)"
+    raw = input(f"{label} [{display}]: ")
+    if raw == "":
+        return _SENTINEL  # keep current
+    return raw.strip()
+
+
+@app.command()
+def edit(
     workspace: str = typer.Argument(..., help="Workspace name"),
-    command: str | None = typer.Argument(
-        None, help="Default command (omit to clear)"
+    name: str | None = typer.Option(None, "--name", help="New name"),
+    image: str | None = typer.Option(None, "--image", help="Container image"),
+    command: str | None = typer.Option(
+        None, "--command", "-c", help="Default shell command (use '' to clear)"
     ),
 ) -> None:
-    """Set or clear the default terminal command for a workspace."""
+    """Edit workspace settings.
+
+    Without flags, interactively prompts for each field.
+    Press Enter to keep the current value.
+    """
     _require_auth()
     client = _client()
     try:
@@ -188,18 +210,40 @@ def set_command(
     except WorkspaceNotFoundError:
         _err.print(f"[red]No workspace named[/red] '{workspace}'")
         raise typer.Exit(code=1) from None
-    resp = client.put(
-        f"/workspaces/{ws.id}",
-        json={"default_command": command},
-    )
+
+    if name is None and image is None and command is None:
+        # Interactive mode
+        new_name = _prompt("Name", ws.name)
+        new_image = _prompt("Container Image", ws.image)
+        new_command = _prompt("Default shell command", ws.default_command)
+
+        body: dict = {}
+        if new_name is not _SENTINEL:
+            body["name"] = new_name or ws.name  # don't allow empty name
+        if new_image is not _SENTINEL:
+            body["image"] = new_image or None
+        if new_command is not _SENTINEL:
+            body["default_command"] = new_command or None
+    else:
+        # Flags mode — only send provided fields
+        body = {}
+        if name is not None:
+            body["name"] = name
+        if image is not None:
+            body["image"] = image or None
+        if command is not None:
+            body["default_command"] = command or None
+
+    if not body:
+        typer.echo("No changes.")
+        return
+
+    resp = client.put(f"/workspaces/{ws.id}", json=body)
     if resp.status_code == 404:
         _err.print("[red]Workspace not found[/red]")
         raise typer.Exit(code=1)
     resp.raise_for_status()
-    if command:
-        typer.echo(f"Default command set to: {command}")
-    else:
-        typer.echo("Default command cleared")
+    typer.echo(f"Updated workspace {ws.name}")
 
 
 @app.command()
@@ -211,10 +255,10 @@ def shell(
         None,
         "--command",
         "-c",
-        help="Override the workspace default command (use 'bash' for a plain shell)",
+        help="Override the default shell command",
     ),
 ) -> None:
-    """Connect to a workspace and drop into a bash shell."""
+    """Connect to a workspace and execute the default shell command."""
     cfg = _cfg()
     if not cfg.auth.token:  # pragma: no cover
         _err.print(

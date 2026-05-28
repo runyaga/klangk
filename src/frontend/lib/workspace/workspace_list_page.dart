@@ -128,7 +128,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 TextField(
                   controller: cmdController,
                   decoration: InputDecoration(
-                    labelText: 'Default command (optional)',
+                    labelText: 'Default shell command (optional)',
                     labelStyle: labelStyle,
                     floatingLabelStyle: labelStyle,
                     floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -307,7 +307,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 TextField(
                   controller: cmdController,
                   decoration: InputDecoration(
-                    labelText: 'Default command (optional)',
+                    labelText: 'Default shell command (optional)',
                     labelStyle: labelStyle,
                     floatingLabelStyle: labelStyle,
                     floatingLabelBehavior: FloatingLabelBehavior.always,
