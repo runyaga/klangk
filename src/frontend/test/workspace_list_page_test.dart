@@ -632,8 +632,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark-pi',
-              'allowed': ['bark-pi', 'bark-custom'],
+              'default': 'bark',
+              'allowed': ['bark', 'bark-custom'],
             }),
             200,
           );
@@ -660,7 +660,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dropdown should show both images
-      expect(find.text('bark-pi'), findsOneWidget);
+      expect(find.text('bark'), findsOneWidget);
 
       // Select non-default image
       await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -1011,8 +1011,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark-pi',
-              'allowed': ['bark-pi', 'bark-custom'],
+              'default': 'bark',
+              'allowed': ['bark', 'bark-custom'],
             }),
             200,
           );
@@ -1060,8 +1060,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark-pi',
-              'allowed': ['bark-pi', 'bark-custom'],
+              'default': 'bark',
+              'allowed': ['bark', 'bark-custom'],
             }),
             200,
           );

@@ -3,7 +3,7 @@
 These tests start a real uvicorn server, run bark CLI commands as
 subprocesses, and verify behavior against real Docker containers.
 
-Requires: Docker running, bark-pi image built.
+Requires: Docker running, bark image built.
 
 Run with: devenv shell -- test-cli-e2e
 """

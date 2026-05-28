@@ -11,7 +11,7 @@ from . import util, model
 
 logger = logging.getLogger(__name__)
 
-IMAGE_NAME = util.resolve_env_secret("BARK_IMAGE_NAME", "bark-pi")
+IMAGE_NAME = util.resolve_env_secret("BARK_IMAGE_NAME", "bark")
 INSTANCE_ID = util.resolve_env_secret("BARK_INSTANCE_ID", "default")
 
 _allowed_images_env = util.resolve_env_secret("BARK_ALLOWED_IMAGES", "")

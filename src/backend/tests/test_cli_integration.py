@@ -368,8 +368,8 @@ class TestImagesCommand:
 
         mock_client = MagicMock()
         mock_client.list_images.return_value = {
-            "default": "bark-pi",
-            "allowed": ["bark-pi", "bark-rust"],
+            "default": "bark",
+            "allowed": ["bark", "bark-custom"],
         }
         monkeypatch.setattr(cli_main, "_client", lambda: mock_client)
         monkeypatch.setattr(cli_main, "_cfg", lambda: CLIConfig())
@@ -382,8 +382,8 @@ class TestImagesCommand:
         runner = CliRunner()
         result = runner.invoke(cli_main.app, ["images"])
         assert result.exit_code == 0
-        assert "bark-pi" in result.output
-        assert "bark-rust" in result.output
+        assert "bark" in result.output
+        assert "bark-custom" in result.output
 
 
 class TestWsExec:

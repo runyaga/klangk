@@ -7,7 +7,7 @@ without disrupting others.
 Each test creates its own workspace to avoid shared container
 state between tests.
 
-Requires: Docker running, bark-pi image built.
+Requires: Docker running, bark image built.
 
 Run with: devenv shell -- test-cli-e2e
 """

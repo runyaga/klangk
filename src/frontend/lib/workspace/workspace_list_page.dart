@@ -109,7 +109,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 DropdownButtonFormField<String>(
                   value: selectedImage,
                   decoration: InputDecoration(
-                    labelText: 'Image',
+                    labelText: 'Container Image',
                     labelStyle: labelStyle,
                     floatingLabelStyle: labelStyle,
                     floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -288,7 +288,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 DropdownButtonFormField<String>(
                   value: selectedImage,
                   decoration: InputDecoration(
-                    labelText: 'Image',
+                    labelText: 'Container Image',
                     labelStyle: labelStyle,
                     floatingLabelStyle: labelStyle,
                     floatingLabelBehavior: FloatingLabelBehavior.always,

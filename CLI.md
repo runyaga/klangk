@@ -125,7 +125,7 @@ email = "admin@example.com"
 ### Phase 4 (future): Custom Docker images
 
 - Allow specifying a Docker image per user and/or per workspace
-- Currently hardcoded to `bark-pi` image via `IMAGE_NAME` in `container_manager.py`
+- Currently hardcoded to `bark` image via `IMAGE_NAME` in `container.py`
 - Store image preference in workspace/user DB records
 - Enables different toolchains (e.g., Rust image, Go image, data science image)
 - CLI impact: add `--image` flag to `bark create`, no other commands change
