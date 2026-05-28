@@ -131,13 +131,33 @@ class TestStart:
 
         await s.stop()
 
+    async def test_start_exception_closes_docker(self):
+        stream = _mock_stream()
+        exec_obj = _mock_exec(stream)
+        exec_obj.resize = AsyncMock(side_effect=RuntimeError("resize fail"))
+        stream.read_out = AsyncMock(return_value=None)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            try:
+                await s.start()
+            except RuntimeError:
+                pass
+
+        docker.close.assert_awaited()
+
 
 class TestReadLoop:
     async def test_output_from_stream(self):
-        msg = MagicMock()
-        msg.data = b"hello world"
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        second_msg = MagicMock()
+        second_msg.data = b"hello world"
         stream = _mock_stream()
-        stream.read_out = AsyncMock(side_effect=[msg, None])
+        # First read consumed by start(), second by read_loop
+        stream.read_out = AsyncMock(side_effect=[first_msg, second_msg, None])
         exec_obj = _mock_exec(stream)
         container = _mock_container(exec_obj)
         docker = _mock_docker(container)
@@ -147,8 +167,11 @@ class TestReadLoop:
             await s.start()
 
         await asyncio.sleep(0.1)
-        data = s._output_queue.get_nowait()
-        assert data == "hello world"
+        # First msg queued by start(), second by read_loop
+        data1 = s._output_queue.get_nowait()
+        assert data1 == "prompt"
+        data2 = s._output_queue.get_nowait()
+        assert data2 == "hello world"
 
         await s.stop()
 
@@ -164,6 +187,29 @@ class TestReadLoop:
             await s.start()
 
         await asyncio.sleep(0.1)
+        data = s._output_queue.get_nowait()
+        assert data is None
+
+        await s.stop()
+
+    async def test_read_loop_handles_exception(self):
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(
+            side_effect=[first_msg, RuntimeError("connection lost")]
+        )
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        await asyncio.sleep(0.1)
+        # Should get prompt then None (from exception cleanup)
+        s._output_queue.get_nowait()  # prompt
         data = s._output_queue.get_nowait()
         assert data is None
 
@@ -187,6 +233,22 @@ class TestWrite:
 
         await s.stop()
 
+    async def test_write_exception_suppressed(self):
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(return_value=None)
+        stream.write_in = AsyncMock(side_effect=RuntimeError("broken"))
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Should not raise
+        await s.write("hello")
+        await s.stop()
+
     async def test_write_when_stopped(self):
         s = TerminalSession("cid")
         await s.write("hello")
@@ -207,6 +269,22 @@ class TestResize:
         await s.resize(200, 50)
         exec_obj.resize.assert_awaited_with(h=50, w=200)
 
+        await s.stop()
+
+    async def test_resize_exception_suppressed(self):
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(return_value=None)
+        exec_obj = _mock_exec(stream)
+        exec_obj.resize = AsyncMock(side_effect=[None, RuntimeError("broken")])
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Should not raise (second call raises)
+        await s.resize(200, 50)
         await s.stop()
 
     async def test_resize_when_stopped(self):
@@ -233,12 +311,79 @@ class TestStop:
         assert s.is_alive is False
         docker.close.assert_awaited()
 
+    async def test_stop_handles_close_exceptions(self):
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(return_value=None)
+        stream.close = AsyncMock(side_effect=RuntimeError("close fail"))
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+        docker.close = AsyncMock(side_effect=RuntimeError("docker close fail"))
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Should not raise despite exceptions
+        await s.stop()
+        assert s._stream is None
+        assert s._exec is None
+
     async def test_stop_when_not_started(self):
         s = TerminalSession("cid")
         await s.stop()
 
 
+class TestOutput:
+    async def test_output_yields_data(self):
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        second_msg = MagicMock()
+        second_msg.data = b"output"
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(side_effect=[first_msg, second_msg, None])
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        collected = []
+        async for data in s.output():
+            collected.append(data)
+
+        assert "prompt" in collected
+        assert "output" in collected
+        await s.stop()
+
+
 class TestIsAlive:
+    async def test_alive_while_running(self):
+        stream = _mock_stream()
+        # Never-ending stream — read_out blocks forever
+        event = asyncio.Event()
+
+        async def slow_read():
+            await event.wait()
+            return None
+
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        stream.read_out = AsyncMock(side_effect=[first_msg, slow_read()])
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        assert s.is_alive is True
+        event.set()
+        await s.stop()
+
     async def test_not_alive_after_stream_ends(self):
         stream = _mock_stream()
         stream.read_out = AsyncMock(return_value=None)

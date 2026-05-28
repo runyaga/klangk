@@ -571,6 +571,69 @@ class TestRunShell:
         assert any("terminal_input" in s and '"x"' in s for s in sent)
 
     @pytest.mark.asyncio
+    async def test_stdin_loop_batches_escape_sequences(self):
+        from bark_backend.cli.client import _run_shell
+
+        ws = AsyncMock()
+        ws.send = AsyncMock()
+        ws.recv = AsyncMock(
+            return_value=json.dumps(
+                {
+                    "type": "event",
+                    "event": {
+                        "type": "CUSTOM",
+                        "name": "container_stopped",
+                        "value": {},
+                    },
+                }
+            )
+        )
+
+        fake_buf = BytesIO(b"\x1b")
+        fake_buf.fileno = lambda: 99
+        call_count = 0
+
+        def fake_select(rlist, wlist, xlist, timeout=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ([99], [], [])  # initial select: ESC ready
+            if call_count == 2:
+                return ([99], [], [])  # ESC follow-up: [D ready
+            return ([], [], [])
+
+        read_count = 0
+
+        def fake_os_read(fd, n):
+            nonlocal read_count
+            read_count += 1
+            if fd == 99:
+                if read_count == 1:
+                    return b"\x1b"
+                if read_count == 2:
+                    return b"[D"
+            return b""
+
+        with (
+            patch(
+                "bark_backend.cli.client.select.select",
+                side_effect=fake_select,
+            ),
+            patch("bark_backend.cli.client.os.read", side_effect=fake_os_read),
+        ):
+            task = asyncio.create_task(_run_shell(ws, 80, 24, stdin=fake_buf))
+            await asyncio.sleep(0.5)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        sent = [c[0][0] for c in ws.send.call_args_list]
+        # ESC + [D should be sent as one message
+        assert any("terminal_input" in s and "\\u001b[D" in s for s in sent)
+
+    @pytest.mark.asyncio
     async def test_stdout_loop_writes_data(self):
         from bark_backend.cli.client import _run_shell
 
