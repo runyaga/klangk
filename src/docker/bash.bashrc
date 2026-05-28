@@ -29,7 +29,7 @@ alias grep='grep --color=auto'
 # Auto-start tmux for scrollback, mouse support, and PgUp/PgDn.
 # Skip if already inside tmux or if this is a non-interactive session.
 if [ -z "$TMUX" ] && [ -z "$BARK_NO_TMUX" ] && [[ $- == *i* ]] && [ -t 0 ]; then
-  exec tmux new-session -A -s main
+  exec tmux new-session
 fi
 
 # Determine which command to exec into (if any).
