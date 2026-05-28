@@ -48,7 +48,7 @@ Add to `pyproject.toml`:
 | `bark logout`                                              | Clear stored token                                                               |
 | `bark status [--plain]`                                    | Show connection info (server, user, login status)                                |
 | `bark list [--plain]`                                      | List workspaces                                                                  |
-| `bark create NAME`                                         | Create a workspace                                                               |
+| `bark create NAME [--mount SRC:DST]`                       | Create a workspace (with optional bind mounts or named volumes)                  |
 | `bark rm NAME`                                             | Delete a workspace                                                               |
 | `bark shell [WORKSPACE]`                                   | **Main command.** Connect to workspace, drop into bash inside the container.     |
 | `bark exec WORKSPACE COMMAND...`                           | Run a command in a container. Also usable as an rsync transport.                 |

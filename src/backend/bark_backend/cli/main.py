@@ -149,7 +149,7 @@ def create(
     mount: list[str] | None = typer.Option(
         None,
         "--mount",
-        help="Bind mount, repeatable (e.g. /home/me/src:/work/src or /data:/mnt/data:ro)",
+        help="Mount, repeatable (e.g. /home/me/src:/work/src, nix-vol:/nix)",
     ),
 ) -> None:
     """Create a new workspace."""
@@ -207,7 +207,7 @@ def edit(
     mount: list[str] | None = typer.Option(
         None,
         "--mount",
-        help="Bind mount, repeatable (e.g. /home/me/src:/work/src or /data:/mnt/data:ro)",
+        help="Mount, repeatable (e.g. /home/me/src:/work/src, nix-vol:/nix)",
     ),
 ) -> None:
     """Edit workspace settings.
@@ -436,6 +436,73 @@ def images() -> None:
     for img in data["allowed"]:
         prefix = "*" if img == data["default"] else " "
         console.print(f"  {prefix} {img}")
+
+
+vol_app = typer.Typer(
+    name="volumes",
+    help="Manage Docker volumes for workspaces.",
+    rich_markup_mode="rich",
+)
+app.add_typer(vol_app, name="volumes")
+
+
+@vol_app.command("list")
+def volumes_list(
+    plain: bool = typer.Option(False, "--plain", help="Plain text output"),
+) -> None:
+    """List bark-managed Docker volumes."""
+    _require_auth()
+    client = _client()
+    resp = client.get("/volumes")
+    client._check_auth(resp)
+    resp.raise_for_status()
+    volumes = resp.json()
+    if not volumes:
+        typer.echo("No volumes.")
+        return
+    if plain:
+        for v in volumes:
+            typer.echo(f"  {v['name']}")
+        return
+    console = Console()
+    table = Table(box=None, pad_edge=False)
+    table.add_column("Name", style="bold")
+    table.add_column("Created")
+    for v in volumes:
+        table.add_row(v["name"], v.get("created", "")[:19])
+    console.print(table)
+
+
+@vol_app.command("create")
+def volumes_create(
+    name: str = typer.Argument(..., help="Volume name"),
+) -> None:
+    """Create a named Docker volume."""
+    _require_auth()
+    client = _client()
+    resp = client.post("/volumes", json={"name": name})
+    client._check_auth(resp)
+    resp.raise_for_status()
+    typer.echo(f"Created volume {name}")
+
+
+@vol_app.command("rm")
+def volumes_rm(
+    name: str = typer.Argument(..., help="Volume name"),
+) -> None:
+    """Delete a named Docker volume."""
+    _require_auth()
+    client = _client()
+    resp = client.delete(f"/volumes/{name}")
+    client._check_auth(resp)
+    if resp.status_code == 404:
+        _err.print(f"[red]Volume not found:[/red] {name}")
+        raise typer.Exit(code=1)
+    if resp.status_code == 409:
+        _err.print(f"[red]Volume is in use:[/red] {name}")
+        raise typer.Exit(code=1)
+    resp.raise_for_status()
+    typer.echo(f"Deleted volume {name}")
 
 
 def main() -> None:  # pragma: no cover
