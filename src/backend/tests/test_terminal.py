@@ -38,7 +38,6 @@ def mock_os(real_pipe):
     with (
         patch.object(terminal, "openpty", return_value=(r, w)) as mopenpty,
         patch.object(terminal, "set_winsize") as m_winsize,
-        patch("tty.setraw") as m_setraw,
         patch.object(terminal, "fd_read", return_value=b"") as m_read,
         patch.object(terminal, "fd_write", return_value=0) as m_write,
         patch.object(terminal, "fd_close") as m_close,
@@ -46,7 +45,6 @@ def mock_os(real_pipe):
         yield {
             "openpty": mopenpty,
             "set_winsize": m_winsize,
-            "setraw": m_setraw,
             "fd_read": m_read,
             "fd_write": m_write,
             "fd_close": m_close,
@@ -83,9 +81,7 @@ class TestStart:
         assert s._proc is proc
 
         mock_os["openpty"].assert_called_once()
-        assert mock_os["set_winsize"].call_count == 2
-        mock_os["set_winsize"].assert_any_call(master_fd, 40, 120)
-        mock_os["set_winsize"].assert_any_call(slave_fd, 40, 120)
+        mock_os["set_winsize"].assert_called_once_with(master_fd, 40, 120)
         mock_os["fd_close"].assert_called_once_with(slave_fd)
         exec_args = m_exec.call_args[0]
         assert exec_args[0] == "docker"
