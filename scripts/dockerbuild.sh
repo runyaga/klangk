@@ -23,8 +23,11 @@ for d in "$BARK_PLUGINS_DIR"/*/; do
   fi
 done
 
-# Remove old containers before rebuilding so they get recreated from the new image
-docker ps -a --filter "label=bark.instance=${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+# Remove old containers before rebuilding so they get recreated from the new image.
+# Skip when running inside a container (developing bark in bark).
+if [ ! -f /.dockerenv ]; then
+  docker ps -a --filter "label=bark.instance=${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+fi
 
 # Build workspace image on top of the base
 docker build --platform linux/amd64 \

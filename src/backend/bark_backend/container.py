@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 
@@ -508,6 +509,11 @@ class ContainerRegistry:
         if self.cleanup_task:
             self.cleanup_task.cancel()
             self.cleanup_task = None
+        # Skip container cleanup when running inside a container
+        # (developing bark in bark — don't kill our own container).
+        if os.path.exists("/.dockerenv"):
+            logger.info("Running inside container, skipping container cleanup")
+            return
         tracked_ids = set(self._cid_to_wsid.keys())
         tasks = [self.stop_and_remove_container(cid) for cid in tracked_ids]
         try:

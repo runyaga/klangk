@@ -63,14 +63,18 @@
     };
     "bark:kill-containers" = {
       exec = ''
-        docker ps -a --filter "label=bark.instance=''${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+        if [ ! -f /.dockerenv ]; then
+          docker ps -a --filter "label=bark.instance=''${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+        fi
       '';
     };
     "bark:kill-port-holders" = {
       exec = ''
-        for port in $BARK_PORT $BARK_NGINX_PORT; do
-          fuser -k "$port/tcp" 2>/dev/null || true
-        done
+        if [ ! -f /.dockerenv ]; then
+          for port in $BARK_PORT $BARK_NGINX_PORT; do
+            fuser -k "$port/tcp" 2>/dev/null || true
+          done
+        fi
       '';
     };
   };
