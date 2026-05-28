@@ -17,8 +17,8 @@ COPY builtin-extensions/ /opt/bark/pi-agent/extensions/
 # Entrypoint, system prompt, bash defaults (change frequently during dev)
 COPY system-prompt.md /opt/bark/system-prompt.md
 COPY entrypoint.sh /opt/bark/entrypoint.sh
-COPY run-bark-pi.sh /usr/local/bin/bark-pi
-RUN chmod +x /opt/bark/entrypoint.sh /usr/local/bin/bark-pi
+COPY clanker.sh /usr/local/bin/clanker
+RUN chmod +x /opt/bark/entrypoint.sh /usr/local/bin/clanker
 COPY bash.bashrc /etc/bash.bashrc
 
 ENTRYPOINT ["/opt/bark/entrypoint.sh"]
