@@ -382,6 +382,15 @@ async def create_volume(
     _user: dict = Depends(auth.get_current_user),
 ):
     docker = await container.registry.get_docker()
+    try:
+        existing = await docker.volumes.get(body.name)
+        await existing.show()  # raises 404 if not found
+        raise HTTPException(
+            status_code=409, detail=f"Volume {body.name!r} already exists"
+        )
+    except container.aiodocker.exceptions.DockerError as e:
+        if e.status != 404:
+            raise
     vol = await docker.volumes.create(
         {
             "Name": body.name,
