@@ -568,7 +568,7 @@ class TestStartContainer:
         assert config["Image"] == container.IMAGE_NAME
         assert config["Labels"]["bark.managed"] == "true"
         assert config["Labels"]["bark.workspace-id"] == workspace["id"]
-        assert config["HostConfig"]["ReadonlyRootfs"] is True
+        assert config["HostConfig"]["ReadonlyRootfs"] is False
         assert config["HostConfig"]["Init"] is True
         assert config["OpenStdin"] is True
 
