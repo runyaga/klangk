@@ -225,8 +225,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(TextField), findsNWidgets(2));
-      expect(find.text('Name'), findsOneWidget);
-      expect(find.text('Default command'), findsOneWidget);
+      expect(find.text('Name'), findsWidgets);
+      expect(find.textContaining('Default command'), findsOneWidget);
+      expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     });
 
     testWidgets('cancel button closes create dialog', (tester) async {
@@ -620,6 +621,61 @@ void main() {
 
       expect(postCalled, isTrue);
       expect(find.text('Submitted'), findsOneWidget);
+    });
+
+    testWidgets('create dialog with image selection', (tester) async {
+      String? postedBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark-pi',
+              'allowed': ['bark-pi', 'bark-shell'],
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/workspaces' && request.method == 'POST') {
+          postedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'id': 'ws-img',
+              'name': 'ImgWS',
+              'container_id': null,
+              'created_at': '2026-05-28',
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // Dropdown should show both images
+      expect(find.text('bark-pi'), findsOneWidget);
+
+      // Select non-default image
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('bark-shell').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'ImgWS');
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(postedBody, isNotNull);
+      final body = jsonDecode(postedBody!) as Map<String, dynamic>;
+      expect(body['name'], 'ImgWS');
+      expect(body['image'], 'bark-shell');
     });
 
     testWidgets('create dialog sends default_command when provided',
