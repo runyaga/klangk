@@ -52,6 +52,7 @@ class TerminalSession:
         master_fd, slave_fd = openpty()
 
         set_winsize(master_fd, rows, cols)
+        set_winsize(slave_fd, rows, cols)
 
         self._master_fd = master_fd
         self._running = True

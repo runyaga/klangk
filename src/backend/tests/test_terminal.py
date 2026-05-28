@@ -81,7 +81,9 @@ class TestStart:
         assert s._proc is proc
 
         mock_os["openpty"].assert_called_once()
-        mock_os["set_winsize"].assert_called_once_with(master_fd, 40, 120)
+        assert mock_os["set_winsize"].call_count == 2
+        mock_os["set_winsize"].assert_any_call(master_fd, 40, 120)
+        mock_os["set_winsize"].assert_any_call(slave_fd, 40, 120)
         mock_os["fd_close"].assert_called_once_with(slave_fd)
         exec_args = m_exec.call_args[0]
         assert exec_args[0] == "docker"
