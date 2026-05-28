@@ -723,6 +723,68 @@ class TestMainCLI:
         body = client.put.call_args[1]["json"]
         assert body["mounts"] is None
 
+    def test_edit_interactive_invalid_mount_rejected(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=None,
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; try invalid mount "bad", then valid "/a:/b", skip add, (no remove)
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "bad", "/a:/b", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+                assert "Invalid mount" in result.stdout
+
+        body = client.put.call_args[1]["json"]
+        assert body["mounts"] == ["/a:/b"]
+
+    def test_create_invalid_mount_flag(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        monkeypatch.setattr(main, "_client", lambda: MagicMock())
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main.app, ["create", "ws", "--mount", "not-valid"]
+        )
+        assert result.exit_code == 1
+
+    def test_edit_invalid_mount_flag(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["edit", "my-ws", "--mount", "nope"])
+        assert result.exit_code == 1
+
     def test_edit_with_image_flag(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
 

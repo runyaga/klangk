@@ -9,6 +9,38 @@ import '../utils/page_title.dart';
 import '../widgets/app_bar_actions.dart';
 import '../widgets/bark_logo.dart';
 
+const _validMountOptions = {
+  'ro',
+  'rw',
+  'z',
+  'Z',
+  'nocopy',
+  'consistent',
+  'cached',
+  'delegated'
+};
+
+String? validateMountSpec(String spec) {
+  final parts = spec.split(':');
+  if (parts.length < 2 || parts.length > 3) {
+    return 'Expected source:dest or source:dest:options';
+  }
+  if (parts[0].isEmpty) {
+    return 'Source is empty';
+  }
+  if (!parts[1].startsWith('/')) {
+    return 'Container path must be absolute (start with /)';
+  }
+  if (parts.length == 3) {
+    for (final opt in parts[2].split(',')) {
+      if (opt.isNotEmpty && !_validMountOptions.contains(opt)) {
+        return 'Unknown option: $opt';
+      }
+    }
+  }
+  return null;
+}
+
 class WorkspaceListPage extends StatefulWidget {
   const WorkspaceListPage({super.key}); // coverage:ignore-line
 
@@ -80,11 +112,27 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         var selectedImage = defaultImage;
         final mounts = <String>[];
         String? errorMessage;
+        String? mountError;
         final primary = Theme.of(context).colorScheme.primary;
         final labelStyle = TextStyle(
           color: primary,
           fontWeight: FontWeight.bold,
         );
+
+        void tryAddMount(void Function(void Function()) setState) {
+          final v = mountController.text.trim();
+          if (v.isEmpty) return;
+          final err = validateMountSpec(v);
+          if (err != null) {
+            setState(() => mountError = err);
+            return;
+          }
+          setState(() {
+            mounts.add(v);
+            mountController.clear();
+            mountError = null;
+          });
+        }
 
         Future<void> submit(
             BuildContext ctx, void Function(void Function()) setState) async {
@@ -194,6 +242,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                             ],
                           ),
                         )),
+                    if (mountError != null) ...[
+                      Text(mountError!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12)),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       children: [
                         Expanded(
@@ -205,28 +260,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                               border: OutlineInputBorder(),
                             ),
                             style: const TextStyle(fontSize: 13),
-                            onSubmitted: (v) {
-                              if (v.trim().isNotEmpty) {
-                                setDialogState(() {
-                                  mounts.add(v.trim());
-                                  mountController.clear();
-                                });
-                              }
-                            },
+                            onSubmitted: (_) => tryAddMount(setDialogState),
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.add),
-                          onPressed: () {
-                            final v = mountController.text.trim();
-                            if (v.isNotEmpty) {
-                              setDialogState(() {
-                                mounts.add(v);
-                                mountController.clear();
-                              });
-                            }
-                          },
+                          onPressed: () => tryAddMount(setDialogState),
                         ),
                       ],
                     ),
@@ -321,6 +361,22 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           fontWeight: FontWeight.bold,
         );
         String? errorMessage;
+        String? mountError;
+
+        void tryAddMount(void Function(void Function()) setState) {
+          final v = mountController.text.trim();
+          if (v.isEmpty) return;
+          final err = validateMountSpec(v);
+          if (err != null) {
+            setState(() => mountError = err);
+            return;
+          }
+          setState(() {
+            mounts.add(v);
+            mountController.clear();
+            mountError = null;
+          });
+        }
 
         Future<void> submit(
             BuildContext ctx, void Function(void Function()) setState) async {
@@ -439,6 +495,16 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                             ],
                           ),
                         )),
+                    if (mountError != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(mountError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12)),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       children: [
                         Expanded(
@@ -450,28 +516,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                               border: OutlineInputBorder(),
                             ),
                             style: const TextStyle(fontSize: 13),
-                            onSubmitted: (v) {
-                              if (v.trim().isNotEmpty) {
-                                setDialogState(() {
-                                  mounts.add(v.trim());
-                                  mountController.clear();
-                                });
-                              }
-                            },
+                            onSubmitted: (_) => tryAddMount(setDialogState),
                           ),
                         ),
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.add),
-                          onPressed: () {
-                            final v = mountController.text.trim();
-                            if (v.isNotEmpty) {
-                              setDialogState(() {
-                                mounts.add(v);
-                                mountController.clear();
-                              });
-                            }
-                          },
+                          onPressed: () => tryAddMount(setDialogState),
                         ),
                       ],
                     ),

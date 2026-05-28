@@ -573,6 +573,53 @@ class TestStartContainer:
         assert config["OpenStdin"] is True
 
 
+class TestValidateMountSpec:
+    def test_valid_bind_mount(self):
+        assert container.validate_mount_spec("/host:/container") is None
+
+    def test_valid_volume_mount(self):
+        assert container.validate_mount_spec("vol-name:/data") is None
+
+    def test_valid_with_options(self):
+        assert container.validate_mount_spec("/host:/container:ro") is None
+
+    def test_valid_with_multiple_options(self):
+        assert (
+            container.validate_mount_spec("/host:/container:ro,nocopy") is None
+        )
+
+    def test_no_colon(self):
+        err = container.validate_mount_spec("nocolon")
+        assert err is not None
+        assert "expected" in err.lower()
+
+    def test_too_many_colons(self):
+        err = container.validate_mount_spec("a:b:c:d")
+        assert err is not None
+
+    def test_empty_source(self):
+        err = container.validate_mount_spec(":/container")
+        assert err is not None
+        assert "source is empty" in err.lower()
+
+    def test_relative_container_path(self):
+        err = container.validate_mount_spec("/host:relative")
+        assert err is not None
+        assert "absolute" in err.lower()
+
+    def test_unknown_option(self):
+        err = container.validate_mount_spec("/host:/container:bogus")
+        assert err is not None
+        assert "unknown option" in err.lower()
+
+    def test_validate_mounts_list(self):
+        assert container.validate_mounts(["/a:/b", "vol:/c"]) is None
+
+    def test_validate_mounts_list_with_error(self):
+        err = container.validate_mounts(["/a:/b", "bad"])
+        assert err is not None
+
+
 class TestExtraMountsVolumeCreation:
     async def test_auto_creates_named_volume(self, workspace):
         """Named volumes (no leading /) are auto-created with bark labels."""

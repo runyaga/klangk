@@ -21,6 +21,49 @@ ALLOWED_IMAGES: set[str] = {
 }
 ALLOWED_IMAGES.add(IMAGE_NAME)  # default image is always allowed
 
+_VALID_MOUNT_OPTIONS = {
+    "ro",
+    "rw",
+    "z",
+    "Z",
+    "nocopy",
+    "consistent",
+    "cached",
+    "delegated",
+}
+
+
+def validate_mount_spec(spec: str) -> str | None:
+    """Validate a Docker mount spec string.
+
+    Returns None if valid, or an error message string if invalid.
+    Valid forms: source:dest or source:dest:options
+    The container path (dest) must be absolute.
+    """
+    parts = spec.split(":")
+    if len(parts) < 2 or len(parts) > 3:
+        return f"Invalid mount {spec!r}: expected source:dest or source:dest:options"
+    source, dest = parts[0], parts[1]
+    if not source:
+        return f"Invalid mount {spec!r}: source is empty"
+    if not dest.startswith("/"):
+        return f"Invalid mount {spec!r}: container path must be absolute (start with /)"
+    if len(parts) == 3:
+        options = parts[2]
+        for opt in options.split(","):
+            if opt and opt not in _VALID_MOUNT_OPTIONS:
+                return f"Invalid mount {spec!r}: unknown option {opt!r}"
+    return None
+
+
+def validate_mounts(mounts: list[str]) -> str | None:
+    """Validate a list of mount specs. Returns first error or None."""
+    for spec in mounts:
+        error = validate_mount_spec(spec)
+        if error:
+            return error
+    return None
+
 
 def parse_idle_timeout() -> tuple[int, int]:
     default = 30 * 60

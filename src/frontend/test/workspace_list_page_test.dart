@@ -1527,5 +1527,102 @@ void main() {
       // Falls back to response.body since no 'detail' key
       expect(find.textContaining('something'), findsOneWidget);
     });
+
+    testWidgets('create dialog rejects invalid mount', (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // Try adding invalid mount (no colon)
+      await tester.enterText(find.byType(TextField).last, 'bad-mount');
+      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Expected'), findsOneWidget);
+      // Mount should NOT have been added
+      expect(find.text('bad-mount'), findsOneWidget); // still in text field
+
+      // Try adding mount with relative container path
+      await tester.enterText(find.byType(TextField).last, '/host:relative');
+      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('absolute'), findsOneWidget);
+
+      // Try adding mount with unknown option
+      await tester.enterText(
+          find.byType(TextField).last, '/host:/container:bogus');
+      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Unknown option'), findsOneWidget);
+
+      // Valid mount clears the error
+      await tester.enterText(find.byType(TextField).last, '/a:/b');
+      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Unknown option'), findsNothing);
+      expect(find.text('/a:/b'), findsOneWidget);
+    });
+
+    testWidgets('edit dialog rejects invalid mount', (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark']
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Try adding invalid mount via Enter key
+      await tester.enterText(find.byType(TextField).last, 'nope');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Expected'), findsOneWidget);
+
+      // Valid mount clears the error
+      await tester.enterText(find.byType(TextField).last, '/x:/y');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Expected'), findsNothing);
+      expect(find.text('/x:/y'), findsOneWidget);
+    });
   });
 }

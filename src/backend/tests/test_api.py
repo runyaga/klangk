@@ -573,6 +573,25 @@ class TestWorkspaceRoutes:
         assert resp.status_code == 400
         assert "not allowed" in resp.json()["detail"]
 
+    async def test_create_with_invalid_mount(self, client, user):
+        headers = await _auth_headers(client)
+        resp = await client.post(
+            "/workspaces",
+            headers=headers,
+            json={"name": "bad-mount", "mounts": ["not-valid"]},
+        )
+        assert resp.status_code == 400
+        assert "Invalid mount" in resp.json()["detail"]
+
+    async def test_create_with_valid_mount(self, client, user):
+        headers = await _auth_headers(client)
+        resp = await client.post(
+            "/workspaces",
+            headers=headers,
+            json={"name": "good-mount", "mounts": ["/tmp:/mnt/tmp"]},
+        )
+        assert resp.status_code == 200
+
     async def test_list_images(self, client, user):
         headers = await _auth_headers(client)
         resp = await client.get("/images", headers=headers)
@@ -696,6 +715,22 @@ class TestWorkspaceRoutes:
             headers=headers,
         )
         assert resp.status_code == 400
+
+    async def test_update_workspace_invalid_mount(self, client, user):
+        headers = await _auth_headers(client)
+        resp = await client.post(
+            "/workspaces",
+            json={"name": "mnt-upd"},
+            headers=headers,
+        )
+        ws_id = resp.json()["id"]
+        resp = await client.put(
+            f"/workspaces/{ws_id}",
+            json={"mounts": ["bad"]},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        assert "Invalid mount" in resp.json()["detail"]
 
 
 # --- Messages ---

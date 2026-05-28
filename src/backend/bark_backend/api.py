@@ -442,6 +442,10 @@ async def create_workspace(
             detail=f"Image {body.image!r} is not allowed. "
             f"Allowed: {sorted(container.ALLOWED_IMAGES)}",
         )
+    if body.mounts:
+        mount_err = container.validate_mounts(body.mounts)
+        if mount_err:
+            raise HTTPException(status_code=400, detail=mount_err)
     try:
         return await workspaces.create_workspace(
             user["id"],
@@ -480,6 +484,10 @@ async def update_workspace(
                 detail=f"Image {fields['image']!r} is not allowed. "
                 f"Allowed: {sorted(container.ALLOWED_IMAGES)}",
             )
+    if "mounts" in fields and fields["mounts"]:
+        mount_err = container.validate_mounts(fields["mounts"])
+        if mount_err:
+            raise HTTPException(status_code=400, detail=mount_err)
     if not fields:
         raise HTTPException(status_code=400, detail="No fields to update")
     updated = await model.update_workspace(workspace_id, user["id"], **fields)

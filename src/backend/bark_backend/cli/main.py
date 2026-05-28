@@ -21,6 +21,7 @@ from .client import (
     _ws_shell,
 )
 from .config import CLIConfig
+from ..container import validate_mount_spec
 
 app = typer.Typer(
     name="bark",
@@ -154,6 +155,12 @@ def create(
 ) -> None:
     """Create a new workspace."""
     _require_auth()
+    if isinstance(mount, list):
+        for m in mount:
+            err = validate_mount_spec(m)
+            if err:
+                _err.print(f"[red]{err}[/red]")
+                raise typer.Exit(code=1)
     try:
         ws = _client().create_workspace(
             name, image=image, mounts=mount or None
@@ -244,6 +251,10 @@ def edit(
                 "\nAdd mount (e.g. /host/path:/container/path, or Enter to skip): "
             ).strip()
             if add:
+                err = validate_mount_spec(add)
+                if err:
+                    typer.echo(err)
+                    continue
                 current_mounts.append(add)
                 mounts_changed = True
                 continue
@@ -285,7 +296,12 @@ def edit(
             body["image"] = image or None
         if command is not None:
             body["default_command"] = command or None
-        if mount is not None:
+        if isinstance(mount, list):
+            for m in mount:
+                err = validate_mount_spec(m)
+                if err:
+                    _err.print(f"[red]{err}[/red]")
+                    raise typer.Exit(code=1)
             body["mounts"] = mount or None
 
     if not body:
