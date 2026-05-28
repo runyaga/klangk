@@ -47,14 +47,14 @@ Add to `pyproject.toml`:
 | `bark login [EMAIL] [--server URL] [--password-file FILE]` | Authenticate. Reuses saved token if valid. `--password-file -` reads from stdin. |
 | `bark logout`                                              | Clear stored token                                                               |
 | `bark status [--plain]`                                    | Show connection info (server, user, login status)                                |
-| `bark ws list [--plain]`                                   | List workspaces                                                                  |
-| `bark ws create NAME`                                      | Create a workspace                                                               |
-| `bark ws delete NAME`                                      | Delete a workspace                                                               |
-| `bark ws shell [WORKSPACE]`                                | **Main command.** Connect to workspace, drop into bash inside the container.     |
-| `bark ws exec WORKSPACE COMMAND...`                        | Run a command in a container. Also usable as an rsync transport.                 |
-| `bark ws sync SRC DEST`                                    | Sync files to/from a container via rsync (wraps `bark ws exec`).                 |
+| `bark list [--plain]`                                      | List workspaces                                                                  |
+| `bark create NAME`                                         | Create a workspace                                                               |
+| `bark delete NAME`                                         | Delete a workspace                                                               |
+| `bark shell [WORKSPACE]`                                   | **Main command.** Connect to workspace, drop into bash inside the container.     |
+| `bark exec WORKSPACE COMMAND...`                           | Run a command in a container. Also usable as an rsync transport.                 |
+| `bark sync SRC DEST`                                       | Sync files to/from a container via rsync (wraps `bark exec`).                    |
 
-## `bark ws shell` — The Core Flow
+## `bark shell` — The Core Flow
 
 1. Resolve workspace by name via REST API (GET /workspaces, match by name)
 2. Open WebSocket to `ws://<server>/ws?token=<jwt>`
@@ -101,8 +101,8 @@ email = "admin@example.com"
 - `cli/` package: `__init__.py`, `config.py`, `auth.py`, `client.py`, `main.py`
 - typer dependency + `[project.scripts]` entry in `pyproject.toml`
 - `bark login [EMAIL]`, `bark logout`, `bark status [--plain]`
-- `bark ws list [--plain]`, `bark ws create`, `bark ws delete` (HTTP client via httpx)
-- `bark ws shell` — WebSocket terminal with raw mode, stdin/stdout forwarding, select-based interruptible stdin, SIGWINCH via polling
+- `bark list [--plain]`, `bark create`, `bark delete` (HTTP client via httpx)
+- `bark shell` — WebSocket terminal with raw mode, stdin/stdout forwarding, select-based interruptible stdin, SIGWINCH via polling
 - `--password-file` for non-interactive login (scripting)
 - Token reuse: `bark login` verifies saved token before prompting
 - Rich output: styled tables, colored error messages
@@ -111,7 +111,7 @@ email = "admin@example.com"
 ### Phase 2 (future): Host path mounting
 
 - Backend change: accept `hostPath` in `workspace_connect` (admin-only)
-- `--mount PATH` flag on `bark ws shell`
+- `--mount PATH` flag on `bark shell`
 - Local mount: path on same machine as Docker
 - Remote mount: path on server filesystem
 
@@ -128,13 +128,13 @@ email = "admin@example.com"
 - Currently hardcoded to `bark-pi` image via `IMAGE_NAME` in `container_manager.py`
 - Store image preference in workspace/user DB records
 - Enables different toolchains (e.g., Rust image, Go image, data science image)
-- CLI impact: add `--image` flag to `bark ws create`, no other commands change
+- CLI impact: add `--image` flag to `bark create`, no other commands change
 - Note: Phase 1 CLI commands are pure REST/WebSocket clients with no Docker or image references, so no refactoring needed
 
 ### Phase 5 (done): Exec, sync, and E2E tests
 
-- `bark ws exec WORKSPACE COMMAND...` — raw command execution in containers via WebSocket (`ExecSession` with piped stdin/stdout, no PTY)
-- `bark ws sync SRC DEST` — rsync wrapper using `bark ws exec` as the transport
+- `bark exec WORKSPACE COMMAND...` — raw command execution in containers via WebSocket (`ExecSession` with piped stdin/stdout, no PTY)
+- `bark sync SRC DEST` — rsync wrapper using `bark exec` as the transport
 - Uses `os.read(0)`/`os.write(1)` for unbuffered I/O (Python's buffered I/O breaks rsync pipe protocol)
 - `select()` with timeout in stdin_forward for prompt exit
 - Base64 encoding for binary-safe WebSocket transport
@@ -167,8 +167,8 @@ email = "admin@example.com"
 2. `devenv shell -- test-cli-e2e` — E2E tests pass against real server + Docker
 3. Manual smoke test:
    - `bark login admin@example.com` — authenticate
-   - `bark ws create cli-test` — creates a workspace
-   - `bark ws shell cli-test` — drops into bash inside container
-   - `bark ws exec cli-test ls /work` — runs a command
-   - `bark ws sync ~/project cli-test:/work/project` — syncs files
-   - `bark ws delete cli-test` — cleans up
+   - `bark create cli-test` — creates a workspace
+   - `bark shell cli-test` — drops into bash inside container
+   - `bark exec cli-test ls /work` — runs a command
+   - `bark sync ~/project cli-test:/work/project` — syncs files
+   - `bark delete cli-test` — cleans up

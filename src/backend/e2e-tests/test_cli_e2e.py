@@ -177,7 +177,7 @@ class TestLogin:
 class TestWorkspaceCRUD:
     def test_create_workspace(self, cli_config):
         result = _run(
-            ["bark", "ws", "create", "e2e-crud"],
+            ["bark", "create", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -185,7 +185,7 @@ class TestWorkspaceCRUD:
 
     def test_list_workspaces(self, cli_config):
         result = _run(
-            ["bark", "ws", "list", "--plain"],
+            ["bark", "list", "--plain"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -193,21 +193,21 @@ class TestWorkspaceCRUD:
 
     def test_create_duplicate_fails(self, cli_config):
         result = _run(
-            ["bark", "ws", "create", "e2e-crud"],
+            ["bark", "create", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode != 0
 
     def test_delete_nonexistent_fails(self, cli_config):
         result = _run(
-            ["bark", "ws", "delete", "nonexistent-ws"],
+            ["bark", "delete", "nonexistent-ws"],
             env=cli_config["env"],
         )
         assert result.returncode != 0
 
     def test_delete_workspace(self, cli_config):
         result = _run(
-            ["bark", "ws", "delete", "e2e-crud"],
+            ["bark", "delete", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -215,7 +215,7 @@ class TestWorkspaceCRUD:
 
     def test_list_after_delete(self, cli_config):
         result = _run(
-            ["bark", "ws", "list", "--plain"],
+            ["bark", "list", "--plain"],
             env=cli_config["env"],
         )
         assert "e2e-crud" not in result.stdout
@@ -224,13 +224,13 @@ class TestWorkspaceCRUD:
 class TestExec:
     @pytest.fixture(autouse=True, scope="class")
     def workspace(self, cli_config):
-        _run(["bark", "ws", "create", "e2e-exec"], env=cli_config["env"])
+        _run(["bark", "create", "e2e-exec"], env=cli_config["env"])
         yield
-        _run(["bark", "ws", "delete", "e2e-exec"], env=cli_config["env"])
+        _run(["bark", "delete", "e2e-exec"], env=cli_config["env"])
 
     def test_exec_echo(self, cli_config):
         result = _run(
-            ["bark", "ws", "exec", "e2e-exec", "echo", "hello from exec"],
+            ["bark", "exec", "e2e-exec", "echo", "hello from exec"],
             env=cli_config["env"],
             timeout=60,
         )
@@ -239,7 +239,7 @@ class TestExec:
 
     def test_exec_piped_stdin(self, cli_config):
         result = _run(
-            ["bark", "ws", "exec", "e2e-exec", "cat"],
+            ["bark", "exec", "e2e-exec", "cat"],
             input="piped data\n",
             env=cli_config["env"],
             timeout=60,
@@ -249,7 +249,7 @@ class TestExec:
 
     def test_exec_exit_code(self, cli_config):
         result = _run(
-            ["bark", "ws", "exec", "e2e-exec", "false"],
+            ["bark", "exec", "e2e-exec", "false"],
             env=cli_config["env"],
             timeout=60,
         )
@@ -259,9 +259,9 @@ class TestExec:
 class TestSync:
     @pytest.fixture(autouse=True, scope="class")
     def workspace(self, cli_config):
-        _run(["bark", "ws", "create", "e2e-sync"], env=cli_config["env"])
+        _run(["bark", "create", "e2e-sync"], env=cli_config["env"])
         yield
-        _run(["bark", "ws", "delete", "e2e-sync"], env=cli_config["env"])
+        _run(["bark", "delete", "e2e-sync"], env=cli_config["env"])
 
     def test_sync_to_container(self, cli_config, tmp_path):
         # Create local files
@@ -273,7 +273,6 @@ class TestSync:
         result = _run(
             [
                 "bark",
-                "ws",
                 "sync",
                 str(src) + "/",
                 "e2e-sync:/work/synced/",
@@ -287,7 +286,6 @@ class TestSync:
         verify = _run(
             [
                 "bark",
-                "ws",
                 "exec",
                 "e2e-sync",
                 "cat",
@@ -304,7 +302,6 @@ class TestSync:
         _run(
             [
                 "bark",
-                "ws",
                 "exec",
                 "e2e-sync",
                 "bash",
@@ -321,7 +318,6 @@ class TestSync:
         result = _run(
             [
                 "bark",
-                "ws",
                 "sync",
                 "e2e-sync:/work/remote-file.txt",
                 str(dest) + "/",
@@ -354,11 +350,11 @@ class TestDefaultCommand:
         """set-command → container gets BARK_DEFAULT_COMMAND → .bark-command."""
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "ws", "create", "e2e-defcmd"], env=env)
+        _run(["bark", "create", "e2e-defcmd"], env=env)
         try:
             # Set command before container starts
             result = _run(
-                ["bark", "ws", "set-command", "e2e-defcmd", "echo hello"],
+                ["bark", "set-command", "e2e-defcmd", "echo hello"],
                 env=env,
             )
             assert result.returncode == 0
@@ -368,7 +364,6 @@ class TestDefaultCommand:
             result = _run(
                 [
                     "bark",
-                    "ws",
                     "exec",
                     "e2e-defcmd",
                     "cat",
@@ -381,25 +376,25 @@ class TestDefaultCommand:
             assert result.stdout.strip() == "echo hello"
 
             # Clear
-            result = _run(["bark", "ws", "set-command", "e2e-defcmd"], env=env)
+            result = _run(["bark", "set-command", "e2e-defcmd"], env=env)
             assert result.returncode == 0
             assert "cleared" in result.stdout
         finally:
-            _run(["bark", "ws", "delete", "e2e-defcmd"], env=env)
+            _run(["bark", "delete", "e2e-defcmd"], env=env)
 
     def test_default_command_bash_no_infinite_loop(self, cli_config):
         """Setting default command to bash should not cause infinite recursion."""
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "ws", "create", "e2e-defbash"], env=env)
+        _run(["bark", "create", "e2e-defbash"], env=env)
         try:
             _run(
-                ["bark", "ws", "set-command", "e2e-defbash", "bash"],
+                ["bark", "set-command", "e2e-defbash", "bash"],
                 env=env,
             )
             # Start the container first
             _run(
-                ["bark", "ws", "exec", "e2e-defbash", "true"],
+                ["bark", "exec", "e2e-defbash", "true"],
                 env=env,
                 timeout=30,
             )
@@ -410,7 +405,6 @@ class TestDefaultCommand:
             result = _run(
                 [
                     "bark",
-                    "ws",
                     "exec",
                     "e2e-defbash",
                     "bash",
@@ -422,7 +416,7 @@ class TestDefaultCommand:
             )
             assert result.returncode == 0
         finally:
-            _run(["bark", "ws", "delete", "e2e-defbash"], env=env)
+            _run(["bark", "delete", "e2e-defbash"], env=env)
 
 
 class TestAuthError:
@@ -435,7 +429,7 @@ class TestAuthError:
         bark_config.mkdir(parents=True)
         env = {**os.environ, "HOME": str(config_dir)}
         result = _run(
-            ["bark", "ws", "list"],
+            ["bark", "list"],
             env=env,
         )
         assert result.returncode != 0

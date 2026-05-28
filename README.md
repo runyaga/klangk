@@ -59,12 +59,12 @@ Bark also provides a CLI for terminal-based access to the same containers:
 
 ```bash
 bark login admin@example.com        # authenticate (prompts for password)
-bark ws list                         # list workspaces
-bark ws create my-project            # create a workspace
-bark ws shell my-project             # drop into bash inside the container
-bark ws exec my-project ls /work     # run a command in the container
-bark ws sync ~/src my-project:/work  # sync files to/from the container
-bark ws delete my-project            # delete a workspace
+bark list                             # list workspaces
+bark create my-project                # create a workspace
+bark shell my-project                 # drop into bash inside the container
+bark exec my-project ls /work         # run a command in the container
+bark sync ~/src my-project:/work      # sync files to/from the container
+bark delete my-project                # delete a workspace
 ```
 
 The CLI connects to the running Bark backend over HTTP + WebSocket — it works locally and against remote servers. See [CLI.md](CLI.md) for the full CLI reference and roadmap.

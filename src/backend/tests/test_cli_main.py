@@ -476,9 +476,7 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(
-                main.app, ["ws", "set-command", "my-ws", "pi"]
-            )
+            result = runner.invoke(main.app, ["set-command", "my-ws", "pi"])
             assert result.exit_code == 0
 
         client.put.assert_called_once()
@@ -502,7 +500,7 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(main.app, ["ws", "set-command", "my-ws"])
+            result = runner.invoke(main.app, ["set-command", "my-ws"])
             assert result.exit_code == 0
 
         call_args = client.put.call_args
@@ -518,9 +516,7 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(
-                main.app, ["ws", "set-command", "nope", "pi"]
-            )
+            result = runner.invoke(main.app, ["set-command", "nope", "pi"])
             assert result.exit_code == 1
 
     def test_set_command_404_from_server(self, logged_in_cfg, monkeypatch):
@@ -539,9 +535,7 @@ class TestMainCLI:
             from typer.testing import CliRunner
 
             runner = CliRunner()
-            result = runner.invoke(
-                main.app, ["ws", "set-command", "my-ws", "pi"]
-            )
+            result = runner.invoke(main.app, ["set-command", "my-ws", "pi"])
             assert result.exit_code == 1
 
     def test_exec_runs_command(self, logged_in_cfg, monkeypatch):
@@ -607,7 +601,7 @@ class TestMainCLI:
         assert "-avz" in cmd
         assert "/tmp/foo" in cmd
         assert "ws:/work/foo" in cmd
-        assert "bark ws exec" in " ".join(cmd)
+        assert "bark exec" in " ".join(cmd)
 
     def test_sync_no_rsync(self, logged_in_cfg):
         from bark_backend.cli import main

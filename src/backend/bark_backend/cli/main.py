@@ -28,13 +28,6 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 
-ws_app = typer.Typer(
-    name="ws",
-    help="Manage workspaces.",
-    rich_markup_mode="rich",
-)
-app.add_typer(ws_app, name="ws")
-
 _cfg_cache: CLIConfig | None = None
 
 
@@ -122,7 +115,7 @@ def status(
     console.print(table)
 
 
-@ws_app.command("list")
+@app.command("list")
 def list_workspaces(
     plain: bool = typer.Option(False, "--plain", help="Plain text output"),
 ) -> None:
@@ -147,7 +140,7 @@ def list_workspaces(
     console.print(table)
 
 
-@ws_app.command()
+@app.command()
 def create(
     name: str = typer.Argument(..., help="Workspace name"),
     image: str | None = typer.Option(
@@ -166,7 +159,7 @@ def create(
     _out.print(f"Created workspace [bold]{name}[/bold] ({ws.id[:12]})")
 
 
-@ws_app.command()
+@app.command()
 def delete(
     name: str = typer.Argument(..., help="Workspace name"),
 ) -> None:
@@ -180,7 +173,7 @@ def delete(
     typer.echo(f"Deleted workspace {name}")
 
 
-@ws_app.command("set-command")
+@app.command("set-command")
 def set_command(
     workspace: str = typer.Argument(..., help="Workspace name"),
     command: str | None = typer.Argument(
@@ -209,7 +202,7 @@ def set_command(
         typer.echo("Default command cleared")
 
 
-@ws_app.command()
+@app.command()
 def shell(
     workspace: str | None = typer.Argument(
         None, help="Workspace name (or select interactively)"
@@ -235,7 +228,7 @@ def shell(
     else:
         workspaces = client.list_workspaces()
         if not workspaces:
-            typer.echo("No workspaces found — create one with bark ws create.")
+            typer.echo("No workspaces found — create one with bark create.")
             raise typer.Exit(code=1)
         if len(workspaces) == 1:
             ws = workspaces[0]
@@ -266,7 +259,7 @@ def shell(
     asyncio.run(_ws_shell(ws_url, token, ws.id))
 
 
-@ws_app.command(
+@app.command(
     "exec",
     context_settings={
         "allow_extra_args": True,
@@ -279,7 +272,7 @@ def exec_cmd(
 ) -> None:
     """Run a command in a workspace container.
 
-    Also usable as an rsync transport: rsync -avz -e "bark ws exec" src/ ws:/dest/
+    Also usable as an rsync transport: rsync -avz -e "bark exec" src/ ws:/dest/
     """
     cfg = _cfg()
     _require_auth()
@@ -308,7 +301,7 @@ def exec_cmd(
     raise typer.Exit(code=exit_code)
 
 
-@ws_app.command(
+@app.command(
     "sync",
     context_settings={
         "allow_extra_args": True,
@@ -328,9 +321,9 @@ def sync(
 
     Examples:
 
-        bark ws sync ~/project my-workspace:/work/project
+        bark sync ~/project my-workspace:/work/project
 
-        bark ws sync my-workspace:/work/output ~/output
+        bark sync my-workspace:/work/output ~/output
 
     Extra flags are passed to rsync (e.g. --delete, --exclude).
     """
@@ -353,7 +346,7 @@ def sync(
         rsync_bin,
         "-avz",
         "-e",
-        f"{bark_bin} ws exec",
+        f"{bark_bin} exec",
         *ctx.args,
         src,
         dest,
