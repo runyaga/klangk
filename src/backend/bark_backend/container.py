@@ -321,6 +321,7 @@ class ContainerRegistry:
                 "Binds": [
                     f"{host_path}:/work",
                     f"{home_path}:/home/bark",
+                    "/var/run/docker.sock:/var/run/docker.sock",
                 ]
                 + (
                     [f"{config_path}:/opt/bark/config:ro"]
