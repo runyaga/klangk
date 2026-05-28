@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     gosu \
     rsync \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (not in default Debian repos)
@@ -60,7 +61,5 @@ RUN ln -sf /bin/bash /bin/sh
 RUN mkdir -p /work && chown bark:bark /work
 WORKDIR /work
 
-# Prevent bark user from escalating to root
-RUN passwd -l root \
-    && chmod u-s /usr/bin/su /usr/bin/chsh /usr/bin/chfn /usr/bin/newgrp \
-    && rm -f /usr/bin/sudo 2>/dev/null || true
+# Allow bark user to sudo without a password (for installing packages, etc.)
+RUN echo "bark ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/bark
