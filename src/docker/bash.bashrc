@@ -5,6 +5,11 @@
 # Ignore Ctrl+C until setup is complete and any default command has started.
 trap '' INT
 
+# Source Nix profile if installed (adds nix, devenv to PATH)
+if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+  . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+
 # Wait for the entrypoint to finish setup before showing a prompt.
 # /tmp is a tmpfs, so .bark-ready is cleared on every container start.
 while [ ! -f /tmp/.bark-ready ]; do sleep 0.1; done
