@@ -179,8 +179,17 @@ def shell(
     workspace: str | None = typer.Argument(
         None, help="Workspace name (or select interactively)"
     ),
+    command: str | None = typer.Option(
+        None, "--command", "-c", help="Command to run after entering the shell"
+    ),
 ) -> None:
-    """Connect to a workspace and drop into a bash shell."""
+    """Connect to a workspace and drop into a bash shell.
+
+    Use --command/-c to run a command after entering:
+
+        bark ws shell my-project -c pi
+        bark ws shell my-project -c "python3 main.py"
+    """
     cfg = _cfg()
     if not cfg.auth.token:  # pragma: no cover
         _err.print(
@@ -227,8 +236,11 @@ def shell(
         ws_url = f"ws://{server_url}/ws"
 
     token = cfg.auth.token
+    initial_command = command
     _err.print(f"Connecting to [bold]{ws.name}[/bold]...")
-    asyncio.run(_ws_shell(ws_url, token, ws.id))
+    asyncio.run(
+        _ws_shell(ws_url, token, ws.id, initial_command=initial_command)
+    )
 
 
 @ws_app.command(

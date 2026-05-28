@@ -392,7 +392,7 @@ class TestMainCLI:
         client.list_workspaces.return_value = [ws]
         client.resolve_workspace.return_value = ws
 
-        async def fake_shell(*args):
+        async def fake_shell(*args, **kwargs):
             pass
 
         with patch.object(main, "_client", return_value=client):
@@ -428,7 +428,7 @@ class TestMainCLI:
         client = MagicMock()
         client.list_workspaces.return_value = [ws1, ws2]
 
-        async def fake_shell(*args):
+        async def fake_shell(*args, **kwargs):
             pass
 
         with patch.object(main, "_client", return_value=client):
@@ -448,7 +448,7 @@ class TestMainCLI:
         client = MagicMock()
         client.resolve_workspace.return_value = ws
 
-        async def fake_shell(*args):
+        async def fake_shell(*args, **kwargs):
             pass
 
         with patch.object(main, "_client", return_value=client):
@@ -458,6 +458,39 @@ class TestMainCLI:
                     main.shell("target-ws")
 
         client.resolve_workspace.assert_called_once_with("target-ws")
+
+    def test_shell_with_initial_command(
+        self, logged_in_cfg, monkeypatch, reset_env
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="target" + "0" * 52,
+            name="target-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+
+        captured_kwargs = {}
+
+        async def fake_shell(*args, **kwargs):
+            captured_kwargs.update(kwargs)
+
+        with patch.object(main, "_client", return_value=client):
+            with patch.object(main, "_ws_shell", fake_shell):
+                os.environ["TERM"] = "xterm-256color"
+                with patch("termios.tcgetattr", return_value=None):
+                    from typer.testing import CliRunner
+
+                    runner = CliRunner()
+                    result = runner.invoke(
+                        main.app,
+                        ["ws", "shell", "target-ws", "-c", "pi"],
+                    )
+                    assert result.exit_code == 0
+
+        assert captured_kwargs.get("initial_command") == "pi"
 
     def test_exec_runs_command(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
