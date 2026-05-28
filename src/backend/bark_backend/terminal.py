@@ -87,7 +87,7 @@ class TerminalSession:
         exec_cmd = [
             "docker",
             "exec",
-            "-it",
+            "-i",
             "-u",
             "bark",
             "-w",
