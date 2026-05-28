@@ -302,11 +302,12 @@ class ContainerRegistry:
         env_vars.append(f"BARK_HOSTING_BASE_PATH={hosting_base_path}")
 
         # Ensure named volumes in extra_mounts exist with bark labels.
-        # Bind mounts (starting with /) are passed through as-is.
+        # Named volumes don't contain / or start with .
+        # Everything else is a bind mount, passed through as-is.
         if extra_mounts:
             for mount_spec in extra_mounts:
                 source = mount_spec.split(":")[0]
-                if not source.startswith("/"):
+                if "/" not in source and not source.startswith("."):
                     # Named volume — ensure it exists with bark labels
                     try:
                         vol = await docker.volumes.get(source)

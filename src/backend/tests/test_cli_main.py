@@ -796,3 +796,129 @@ class TestMainCLI:
                 with pytest.raises(typer.Exit) as exc_info:
                     main.sync(ctx, src="/tmp/foo", dest="ws:/work/foo")
         assert exc_info.value.exit_code == 23
+
+
+class TestVolumes:
+    def test_volumes_ls(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.get.return_value = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value=[
+                    {"name": "vol-1", "created": "2026-01-01T00:00:00Z"},
+                ]
+            ),
+        )
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "ls"])
+        assert result.exit_code == 0
+        assert "vol-1" in result.stdout
+
+    def test_volumes_ls_empty(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.get.return_value = MagicMock(
+            status_code=200,
+            json=MagicMock(return_value=[]),
+        )
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "ls"])
+        assert result.exit_code == 0
+        assert "No volumes" in result.stdout
+
+    def test_volumes_ls_plain(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.get.return_value = MagicMock(
+            status_code=200,
+            json=MagicMock(
+                return_value=[{"name": "vol-1", "created": "2026-01-01"}]
+            ),
+        )
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "ls", "--plain"])
+        assert result.exit_code == 0
+        assert "vol-1" in result.stdout
+
+    def test_volumes_create(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.post.return_value = MagicMock(status_code=200)
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "create", "new-vol"])
+        assert result.exit_code == 0
+        assert "Created" in result.stdout
+
+    def test_volumes_create_duplicate(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.post.return_value = MagicMock(status_code=409)
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "create", "dup-vol"])
+        assert result.exit_code == 1
+
+    def test_volumes_rm(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.delete.return_value = MagicMock(status_code=200)
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "rm", "old-vol"])
+        assert result.exit_code == 0
+        assert "Deleted" in result.stdout
+
+    def test_volumes_rm_not_found(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.delete.return_value = MagicMock(status_code=404)
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "rm", "nope"])
+        assert result.exit_code == 1
+
+    def test_volumes_rm_in_use(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        client = MagicMock()
+        client.delete.return_value = MagicMock(status_code=409)
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(main.app, ["volumes", "rm", "busy"])
+        assert result.exit_code == 1

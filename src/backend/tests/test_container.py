@@ -573,6 +573,197 @@ class TestStartContainer:
         assert config["OpenStdin"] is True
 
 
+class TestExtraMountsVolumeCreation:
+    async def test_auto_creates_named_volume(self, workspace):
+        """Named volumes (no leading /) are auto-created with bark labels."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(return_value={"Name": "nix-store"})
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                404, {"message": "not found"}
+            )
+        )
+        mock_docker.volumes.create = AsyncMock(return_value=mock_vol)
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["nix-store:/nix"],
+            )
+        mock_docker.volumes.create.assert_awaited_once()
+        create_args = mock_docker.volumes.create.call_args[0][0]
+        assert create_args["Name"] == "nix-store"
+        assert create_args["Labels"]["bark.managed"] == "true"
+        assert create_args["Labels"]["bark.instance"] == container.INSTANCE_ID
+
+    async def test_existing_volume_not_recreated(self, workspace):
+        """Existing volumes are used as-is, not recreated."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(return_value={"Name": "existing"})
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        mock_docker.volumes.create = AsyncMock()
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["existing:/data"],
+            )
+        mock_docker.volumes.create.assert_not_awaited()
+
+    async def test_bind_mount_not_treated_as_volume(self, workspace):
+        """Bind mounts (starting with /) are not treated as volumes."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_docker.volumes.get = AsyncMock()
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["/home/me/src:/work/src"],
+            )
+        mock_docker.volumes.get.assert_not_awaited()
+
+    async def test_mount_with_multiple_colons(self, workspace):
+        """Mount spec with options (host:container:ro) — source starts with /."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_docker.volumes.get = AsyncMock()
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["/data/shared:/mnt/data:ro"],
+            )
+        # Bind mount, not a volume — volumes.get should not be called
+        mock_docker.volumes.get.assert_not_awaited()
+
+    async def test_volume_mount_with_options(self, workspace):
+        """Named volume with options (vol:container:ro) — auto-creates."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(return_value={"Name": "my-vol"})
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                404, {"message": "not found"}
+            )
+        )
+        mock_docker.volumes.create = AsyncMock(return_value=mock_vol)
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["my-vol:/data:ro"],
+            )
+        mock_docker.volumes.create.assert_awaited_once()
+
+    async def test_mount_source_with_slash_is_bind(self, workspace):
+        """A mount source containing slashes is a bind mount, not a volume."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_docker.volumes.get = AsyncMock()
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["./relative/path:/work/rel"],
+            )
+        mock_docker.volumes.get.assert_not_awaited()
+
+    async def test_volume_auto_create_docker_error(self, workspace):
+        """Non-404 Docker error during volume check is re-raised."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                500, {"message": "internal error"}
+            )
+        )
+
+        with (
+            patch.object(
+                container.registry, "get_docker", return_value=mock_docker
+            ),
+            pytest.raises(container.aiodocker.exceptions.DockerError),
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["bad-vol:/data"],
+            )
+
+    async def test_mount_source_with_special_characters(self, workspace):
+        """Mount source with special/binary-like chars is a bind mount."""
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+        mock_docker.volumes.get = AsyncMock()
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_mounts=["/path/with spaces\x00and\x01binary:/work/bad"],
+            )
+        # Has leading /, so treated as bind mount
+        mock_docker.volumes.get.assert_not_awaited()
+
+
 class TestAttachContainer:
     async def test_attach(self):
         mock_docker = _mock_docker()
@@ -721,6 +912,14 @@ class TestShutdown:
         container.registry.states.clear()
         container.registry.cleanup_task = None
         container.registry.docker = None
+
+    async def test_shutdown_skips_in_docker(self):
+        """When running inside a container, shutdown skips cleanup."""
+        container.registry.track_activity("cid", "ws")
+        with patch("os.path.exists", return_value=True):
+            await container.registry.shutdown()
+        # Container should still be tracked (not cleaned up)
+        assert "ws" in container.registry.states
 
     async def test_shutdown_stops_tracked(self):
         mock_docker = _mock_docker()

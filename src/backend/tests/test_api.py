@@ -4,7 +4,7 @@ import io
 import zipfile
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI, HTTPException
 from httpx import AsyncClient, ASGITransport
@@ -743,6 +743,206 @@ class TestBrowserBridge:
             assert "No browser client" in resp.json()["detail"]
         finally:
             container.registry.revoke_bridge_token("ws-nosub")
+
+
+# --- Volume routes ---
+
+
+class TestVolumeRoutes:
+    async def test_list_volumes(self, client, user):
+        headers = await _auth_headers(client)
+        with patch.object(
+            container.registry,
+            "get_docker",
+            return_value=MagicMock(
+                volumes=MagicMock(
+                    list=AsyncMock(
+                        return_value={
+                            "Volumes": [
+                                {
+                                    "Name": "test-vol",
+                                    "CreatedAt": "2026-01-01T00:00:00Z",
+                                    "Labels": {
+                                        "bark.instance": container.INSTANCE_ID
+                                    },
+                                }
+                            ]
+                        }
+                    )
+                )
+            ),
+        ):
+            resp = await client.get("/volumes", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["name"] == "test-vol"
+
+    async def test_create_volume(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(
+            return_value={"Name": "new-vol", "CreatedAt": "2026-01-01"}
+        )
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                404, {"message": "not found"}
+            )
+        )
+        mock_docker.volumes.create = AsyncMock(return_value=mock_vol)
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.post(
+                "/volumes",
+                json={"name": "new-vol"},
+                headers=headers,
+            )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "new-vol"
+
+    async def test_create_duplicate_volume(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(return_value={"Name": "dup-vol"})
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.post(
+                "/volumes",
+                json={"name": "dup-vol"},
+                headers=headers,
+            )
+        assert resp.status_code == 409
+
+    async def test_delete_volume(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(
+            return_value={
+                "Labels": {
+                    "bark.managed": "true",
+                    "bark.instance": container.INSTANCE_ID,
+                }
+            }
+        )
+        mock_vol.delete = AsyncMock()
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.delete("/volumes/test-vol", headers=headers)
+        assert resp.status_code == 200
+
+    async def test_delete_volume_not_found(self, client, user):
+        headers = await _auth_headers(client)
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                404, {"message": "not found"}
+            )
+        )
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.delete("/volumes/nope", headers=headers)
+        assert resp.status_code == 404
+
+    async def test_delete_volume_wrong_instance(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(
+            return_value={"Labels": {"bark.instance": "other-instance"}}
+        )
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.delete("/volumes/foreign", headers=headers)
+        assert resp.status_code == 404
+
+    async def test_create_volume_docker_error(self, client, user):
+        headers = await _auth_headers(client)
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                500, {"message": "internal error"}
+            )
+        )
+        with (
+            patch.object(
+                container.registry, "get_docker", return_value=mock_docker
+            ),
+            pytest.raises(container.aiodocker.exceptions.DockerError),
+        ):
+            await client.post(
+                "/volumes",
+                json={"name": "err-vol"},
+                headers=headers,
+            )
+
+    async def test_delete_volume_docker_error(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(
+            return_value={
+                "Labels": {
+                    "bark.managed": "true",
+                    "bark.instance": container.INSTANCE_ID,
+                }
+            }
+        )
+        mock_vol.delete = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                500, {"message": "internal error"}
+            )
+        )
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        with (
+            patch.object(
+                container.registry, "get_docker", return_value=mock_docker
+            ),
+            pytest.raises(container.aiodocker.exceptions.DockerError),
+        ):
+            await client.delete("/volumes/err-vol", headers=headers)
+
+    async def test_delete_volume_in_use(self, client, user):
+        headers = await _auth_headers(client)
+        mock_vol = MagicMock()
+        mock_vol.show = AsyncMock(
+            return_value={
+                "Labels": {
+                    "bark.managed": "true",
+                    "bark.instance": container.INSTANCE_ID,
+                }
+            }
+        )
+        mock_vol.delete = AsyncMock(
+            side_effect=container.aiodocker.exceptions.DockerError(
+                409, {"message": "in use"}
+            )
+        )
+        mock_docker = MagicMock()
+        mock_docker.volumes = MagicMock()
+        mock_docker.volumes.get = AsyncMock(return_value=mock_vol)
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            resp = await client.delete("/volumes/busy", headers=headers)
+        assert resp.status_code == 409
 
 
 # --- File routes ---
