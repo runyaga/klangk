@@ -421,6 +421,140 @@ class TestDefaultCommand:
             _run(["bark", "rm", "e2e-defbash"], env=env)
 
 
+class TestMounts:
+    def _login(self, cli_config):
+        env = cli_config["env"]
+        _run(
+            [
+                "bark",
+                "login",
+                "test@example.com",
+                "--server",
+                cli_config["server_url"],
+                "--password-file",
+                "-",
+            ],
+            input="testpass\n",
+            env=env,
+        )
+
+    def test_create_with_mount_flag(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        try:
+            result = _run(
+                [
+                    "bark",
+                    "create",
+                    "e2e-mount",
+                    "--mount",
+                    "/tmp:/mnt/tmp",
+                ],
+                env=env,
+            )
+            assert result.returncode == 0
+            assert "e2e-mount" in result.stdout
+        finally:
+            _run(["bark", "rm", "e2e-mount"], env=env)
+
+    def test_edit_with_mount_flags(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        _run(["bark", "create", "e2e-mount-edit"], env=env)
+        try:
+            result = _run(
+                [
+                    "bark",
+                    "edit",
+                    "e2e-mount-edit",
+                    "--mount",
+                    "/tmp:/mnt/a",
+                    "--mount",
+                    "/tmp:/mnt/b",
+                ],
+                env=env,
+            )
+            assert result.returncode == 0
+            assert "Updated" in result.stdout
+        finally:
+            _run(["bark", "rm", "e2e-mount-edit"], env=env)
+
+    def test_edit_interactive_add_mount(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        _run(["bark", "create", "e2e-mount-int"], env=env)
+        try:
+            # Interactive: keep name, keep image, keep command,
+            # add mount "/tmp:/mnt/test", skip add, skip remove
+            result = _run(
+                ["bark", "edit", "e2e-mount-int"],
+                input="\n\n\n/tmp:/mnt/test\n\n\n",
+                env=env,
+            )
+            assert result.returncode == 0
+            assert "Updated" in result.stdout
+        finally:
+            _run(["bark", "rm", "e2e-mount-int"], env=env)
+
+
+class TestVolumes:
+    def _login(self, cli_config):
+        env = cli_config["env"]
+        _run(
+            [
+                "bark",
+                "login",
+                "test@example.com",
+                "--server",
+                cli_config["server_url"],
+                "--password-file",
+                "-",
+            ],
+            input="testpass\n",
+            env=env,
+        )
+
+    def test_volumes_lifecycle(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+
+        # Create
+        result = _run(["bark", "volumes", "create", "e2e-vol"], env=env)
+        assert result.returncode == 0
+        assert "Created" in result.stdout
+
+        # List
+        result = _run(["bark", "volumes", "ls", "--plain"], env=env)
+        assert result.returncode == 0
+        assert "e2e-vol" in result.stdout
+
+        # Create duplicate fails
+        result = _run(["bark", "volumes", "create", "e2e-vol"], env=env)
+        assert result.returncode != 0
+
+        # Remove
+        result = _run(["bark", "volumes", "rm", "e2e-vol"], env=env)
+        assert result.returncode == 0
+        assert "Deleted" in result.stdout
+
+        # List after delete
+        result = _run(["bark", "volumes", "ls", "--plain"], env=env)
+        assert "e2e-vol" not in result.stdout
+
+    def test_volumes_rm_nonexistent(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        result = _run(["bark", "volumes", "rm", "no-such-vol"], env=env)
+        assert result.returncode != 0
+
+    def test_volumes_empty_list(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        result = _run(["bark", "volumes", "ls"], env=env)
+        assert result.returncode == 0
+        # May show "No volumes." or an empty table
+
+
 class TestAuthError:
     def test_command_without_login_shows_clean_error(self, server, tmp_path):
         """Commands that need auth should show a clean error, not a traceback."""

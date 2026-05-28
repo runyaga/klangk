@@ -529,9 +529,9 @@ class TestMainCLI:
         client.resolve_workspace.return_value = ws
         client.put.return_value = MagicMock(status_code=200)
 
-        # Simulate: keep name (Enter), keep image (Enter), change command
+        # keep name, keep image, change command, skip add mount, (no mounts to remove)
         with patch.object(main, "_client", return_value=client):
-            with patch("builtins.input", side_effect=["", "", "pi"]):
+            with patch("builtins.input", side_effect=["", "", "pi", ""]):
                 from typer.testing import CliRunner
 
                 runner = CliRunner()
@@ -558,10 +558,11 @@ class TestMainCLI:
         client.resolve_workspace.return_value = ws
         client.put.return_value = MagicMock(status_code=200)
 
+        # change name, image, command; skip add mount, (no mounts to remove)
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["renamed", "bark-custom", "pi"],
+                side_effect=["renamed", "bark-custom", "pi", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -573,6 +574,154 @@ class TestMainCLI:
         assert body["name"] == "renamed"
         assert body["image"] == "bark-custom"
         assert body["default_command"] == "pi"
+
+    def test_edit_interactive_add_mount(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=None,
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep name/image/command; add a mount, then skip add, (now has mount) skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "/host:/container", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["mounts"] == ["/host:/container"]
+
+    def test_edit_interactive_remove_mount(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=["/a:/b", "/c:/d"],
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep name/image/command; skip add, remove mount 1; skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "1", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["mounts"] == ["/c:/d"]
+
+    def test_edit_interactive_add_and_remove_mount(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=["/old:/old"],
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; add /new:/new (loops back), skip add, remove 1 (/old:/old),
+        # skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "/new:/new", "", "1", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["mounts"] == ["/new:/new"]
+
+    def test_edit_interactive_invalid_remove_number(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=["/a:/b"],
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; skip add, bad number "99" (loops), skip add, "abc" (loops),
+        # skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "99", "", "abc", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        # No mount changes (bad input was rejected), so mounts not in body
+        client.put.assert_not_called()  # only "no changes" path
+
+    def test_edit_interactive_remove_all_mounts(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            mounts=["/a:/b"],
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; skip add, remove 1; skip add (no mounts left, so no remove prompt)
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "1", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["mounts"] is None
 
     def test_edit_with_image_flag(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
@@ -644,8 +793,9 @@ class TestMainCLI:
         client = MagicMock()
         client.resolve_workspace.return_value = ws
 
+        # keep name, image, command; skip add mount (no mounts, no remove prompt)
         with patch.object(main, "_client", return_value=client):
-            with patch("builtins.input", side_effect=["", "", ""]):
+            with patch("builtins.input", side_effect=["", "", "", ""]):
                 from typer.testing import CliRunner
 
                 runner = CliRunner()

@@ -71,76 +71,168 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
 
     if (!mounted) return;
 
-    final result = await showDialog<Map<String, String>>(
+    final created = await showDialog<bool>(
       context: context,
       builder: (context) {
         final nameController = TextEditingController();
         final cmdController = TextEditingController();
+        final mountController = TextEditingController();
         var selectedImage = defaultImage;
+        final mounts = <String>[];
+        String? errorMessage;
         final primary = Theme.of(context).colorScheme.primary;
         final labelStyle = TextStyle(
           color: primary,
           fontWeight: FontWeight.bold,
         );
+
+        Future<void> submit(
+            BuildContext ctx, void Function(void Function()) setState) async {
+          final name = nameController.text.trim();
+          if (name.isEmpty) return;
+          final command = cmdController.text.trim();
+          final body = <String, dynamic>{'name': name};
+          if (command.isNotEmpty) body['default_command'] = command;
+          if (selectedImage != defaultImage) body['image'] = selectedImage;
+          if (mounts.isNotEmpty) body['mounts'] = List<String>.from(mounts);
+
+          try {
+            final response = await _auth.authPost(
+              '/workspaces',
+              body: jsonEncode(body),
+            );
+            if (response.statusCode == 200) {
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            } else {
+              final error = jsonDecode(response.body);
+              setState(() {
+                errorMessage =
+                    error['detail'] as String? ?? 'Failed to create workspace';
+              });
+            }
+          } catch (e) {
+            setState(() => errorMessage = 'Error: $e');
+          }
+        }
+
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: Text('New Workspace', style: TextStyle(color: primary)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
-                  autofocus: true,
-                  onSubmitted: (_) => Navigator.pop(context, {
-                    'name': nameController.text.trim(),
-                    'command': cmdController.text.trim(),
-                    'image': selectedImage,
-                  }),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (errorMessage != null) ...[
+                      Text(errorMessage!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
+                      const SizedBox(height: 12),
+                    ],
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        labelText: 'Name',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                      autofocus: true,
+                      onSubmitted: (_) => submit(context, setDialogState),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedImage,
+                      decoration: InputDecoration(
+                        labelText: 'Container Image',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: allowedImages
+                          .map((img) => DropdownMenuItem(
+                                value: img,
+                                child: Text(img),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setDialogState(
+                          () => selectedImage = v ?? defaultImage),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: cmdController,
+                      decoration: InputDecoration(
+                        labelText: 'Default shell command (optional)',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => submit(context, setDialogState),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Mounts', style: labelStyle),
+                    const SizedBox(height: 8),
+                    ...mounts.asMap().entries.map((e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child: Text(e.value,
+                                      style: const TextStyle(fontSize: 13))),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () => setDialogState(
+                                    () => mounts.removeAt(e.key)),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        )),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: mountController,
+                            decoration: const InputDecoration(
+                              hintText: '/host/path:/container/path',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onSubmitted: (v) {
+                              if (v.trim().isNotEmpty) {
+                                setDialogState(() {
+                                  mounts.add(v.trim());
+                                  mountController.clear();
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () {
+                            final v = mountController.text.trim();
+                            if (v.isNotEmpty) {
+                              setDialogState(() {
+                                mounts.add(v);
+                                mountController.clear();
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedImage,
-                  decoration: InputDecoration(
-                    labelText: 'Container Image',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: allowedImages
-                      .map((img) => DropdownMenuItem(
-                            value: img,
-                            child: Text(img),
-                          ))
-                      .toList(),
-                  onChanged: (v) =>
-                      setDialogState(() => selectedImage = v ?? defaultImage),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: cmdController,
-                  decoration: InputDecoration(
-                    labelText: 'Default shell command (optional)',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => Navigator.pop(context, {
-                    'name': nameController.text.trim(),
-                    'command': cmdController.text.trim(),
-                    'image': selectedImage,
-                  }),
-                ),
-              ],
+              ),
             ),
             actions: [
               TextButton(
@@ -148,11 +240,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(context, {
-                  'name': nameController.text.trim(),
-                  'command': cmdController.text.trim(),
-                  'image': selectedImage,
-                }),
+                onPressed: () => submit(context, setDialogState),
                 child: const Text('Create'),
               ),
             ],
@@ -161,46 +249,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
       },
     );
 
-    if (result == null || result['name']!.isEmpty) return;
-
-    final name = result['name']!;
-    final command = result['command']!;
-    final image = result['image']!;
-    final body = <String, dynamic>{'name': name};
-    if (command.isNotEmpty) {
-      body['default_command'] = command;
-    }
-    if (image != defaultImage) {
-      body['image'] = image;
-    }
-
-    try {
-      final response = await _auth.authPost(
-        '/workspaces',
-        body: jsonEncode(body),
-      );
-      if (response.statusCode == 200) {
-        await _loadWorkspaces();
-      } else {
-        final error = jsonDecode(response.body);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                duration: const Duration(days: 1),
-                showCloseIcon: true,
-                content: Text(error['detail'] ?? 'Failed to create workspace')),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              duration: const Duration(days: 1),
-              showCloseIcon: true,
-              content: Text('Error: $e')),
-        );
-      }
+    if (created == true) {
+      await _loadWorkspaces();
     }
   }
 
@@ -254,10 +304,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         TextEditingController(text: ws['name'] as String? ?? '');
     final cmdController =
         TextEditingController(text: ws['default_command'] as String? ?? '');
+    final mountController = TextEditingController();
     var selectedImage = ws['image'] as String? ?? defaultImage;
     if (!allowedImages.contains(selectedImage)) {
       selectedImage = defaultImage;
     }
+    final mounts = List<String>.from(
+        (ws['mounts'] as List?)?.cast<String>() ?? <String>[]);
 
     final saved = await showDialog<bool>(
       context: context,
@@ -267,55 +320,164 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           color: primary,
           fontWeight: FontWeight.bold,
         );
+        String? errorMessage;
+
+        Future<void> submit(
+            BuildContext ctx, void Function(void Function()) setState) async {
+          final name = nameController.text.trim();
+          if (name.isEmpty) return;
+          final command = cmdController.text.trim();
+
+          try {
+            final response = await _auth.authPut(
+              '/workspaces/${ws['id']}',
+              body: jsonEncode({
+                'name': name,
+                'image': selectedImage,
+                'default_command': command.isEmpty ? null : command,
+                'mounts': mounts.isNotEmpty ? mounts : null,
+              }),
+            );
+            if (response.statusCode == 200) {
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            } else {
+              String detail;
+              try {
+                detail = (jsonDecode(response.body)
+                        as Map<String, dynamic>)['detail'] as String? ??
+                    response.body;
+              } catch (_) {
+                detail = response.body;
+              }
+              setState(() => errorMessage = 'Failed to update: $detail');
+            }
+          } catch (e) {
+            setState(() => errorMessage = 'Error: $e');
+          }
+        }
+
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             title: Text('Edit Workspace', style: TextStyle(color: primary)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (errorMessage != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(errorMessage!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Name',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedImage,
+                      decoration: InputDecoration(
+                        labelText: 'Container Image',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                      items: allowedImages
+                          .map((img) => DropdownMenuItem(
+                                value: img,
+                                child: Text(img),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setDialogState(
+                          () => selectedImage = v ?? defaultImage),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: cmdController,
+                      decoration: InputDecoration(
+                        labelText: 'Default shell command (optional)',
+                        labelStyle: labelStyle,
+                        floatingLabelStyle: labelStyle,
+                        floatingLabelBehavior: FloatingLabelBehavior.always,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) => submit(context, setDialogState),
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Mounts', style: labelStyle),
+                    ),
+                    const SizedBox(height: 8),
+                    ...mounts.asMap().entries.map((e) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child: Text(e.value,
+                                      style: const TextStyle(fontSize: 13))),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () => setDialogState(
+                                    () => mounts.removeAt(e.key)),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        )),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: mountController,
+                            decoration: const InputDecoration(
+                              hintText: '/host/path:/container/path',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onSubmitted: (v) {
+                              if (v.trim().isNotEmpty) {
+                                setDialogState(() {
+                                  mounts.add(v.trim());
+                                  mountController.clear();
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () {
+                            final v = mountController.text.trim();
+                            if (v.isNotEmpty) {
+                              setDialogState(() {
+                                mounts.add(v);
+                                mountController.clear();
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedImage,
-                  decoration: InputDecoration(
-                    labelText: 'Container Image',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: allowedImages
-                      .map((img) => DropdownMenuItem(
-                            value: img,
-                            child: Text(img),
-                          ))
-                      .toList(),
-                  onChanged: (v) =>
-                      setDialogState(() => selectedImage = v ?? defaultImage),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: cmdController,
-                  decoration: InputDecoration(
-                    labelText: 'Default shell command (optional)',
-                    labelStyle: labelStyle,
-                    floatingLabelStyle: labelStyle,
-                    floatingLabelBehavior: FloatingLabelBehavior.always,
-                    border: const OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => Navigator.pop(context, true),
-                ),
-              ],
+              ),
             ),
             actions: [
               TextButton(
@@ -323,7 +485,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: () => Navigator.pop(context, true),
+                onPressed: () => submit(context, setDialogState),
                 child: const Text('Save'),
               ),
             ],
@@ -332,44 +494,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
       },
     );
 
-    if (saved != true) return;
-
-    final name = nameController.text.trim();
-    final command = cmdController.text.trim();
-    if (name.isEmpty) return;
-
-    try {
-      final response = await _auth.authPut(
-        '/workspaces/${ws['id']}',
-        body: jsonEncode({
-          'name': name,
-          'image': selectedImage,
-          'default_command': command.isEmpty ? null : command,
-        }),
-      );
-      if (response.statusCode == 200) {
-        await _loadWorkspaces();
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              duration: const Duration(days: 1),
-              showCloseIcon: true,
-              content: Text('Failed to update: ${response.body}'),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            duration: const Duration(days: 1),
-            showCloseIcon: true,
-            content: Text('Error: $e'),
-          ),
-        );
-      }
+    if (saved == true) {
+      await _loadWorkspaces();
     }
   }
 

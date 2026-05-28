@@ -224,7 +224,7 @@ void main() {
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNWidgets(2));
+      expect(find.byType(TextField), findsNWidgets(3));
       expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     });
 
@@ -404,8 +404,7 @@ void main() {
       expect(find.text('New WS'), findsOneWidget);
     });
 
-    testWidgets('create dialog shows error snackbar on failure',
-        (tester) async {
+    testWidgets('create dialog shows inline error on failure', (tester) async {
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces' && request.method == 'GET') {
           return http.Response(jsonEncode([]), 200);
@@ -706,7 +705,7 @@ void main() {
 
       // Enter name and command
       await tester.enterText(find.byType(TextField).first, 'CmdWS');
-      await tester.enterText(find.byType(TextField).last, 'bark-pi');
+      await tester.enterText(find.byType(TextField).at(1), 'bark-pi');
       await tester.tap(find.text('Create'));
       await tester.pumpAndSettle();
 
@@ -759,14 +758,14 @@ void main() {
 
       // Enter name, then focus command field and submit via Enter
       await tester.enterText(find.byType(TextField).first, 'CmdSubmit');
-      await tester.enterText(find.byType(TextField).last, 'pi');
+      await tester.enterText(find.byType(TextField).at(1), 'pi');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect(postCalled, isTrue);
     });
 
-    testWidgets('create workspace exception shows error snackbar',
+    testWidgets('create workspace exception shows inline error',
         (tester) async {
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces' && request.method == 'GET') {
@@ -1028,7 +1027,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).last, 'pi');
+      await tester.enterText(find.byType(TextField).at(1), 'pi');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
@@ -1121,7 +1120,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).last, 'pi');
+      await tester.enterText(find.byType(TextField).at(1), 'pi');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
@@ -1164,7 +1163,7 @@ void main() {
       expect(putCalled, isFalse);
     });
 
-    testWidgets('edit dialog error shows snackbar', (tester) async {
+    testWidgets('edit dialog error shows inline error', (tester) async {
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces' && request.method == 'GET') {
           return http.Response(
@@ -1192,14 +1191,14 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).last, 'pi');
+      await tester.enterText(find.byType(TextField).at(1), 'pi');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Failed to update'), findsOneWidget);
     });
 
-    testWidgets('edit dialog exception shows snackbar', (tester) async {
+    testWidgets('edit dialog exception shows inline error', (tester) async {
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces' && request.method == 'GET') {
           return http.Response(
@@ -1227,11 +1226,306 @@ void main() {
       await tester.tap(find.byIcon(Icons.settings_outlined));
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).last, 'pi');
+      await tester.enterText(find.byType(TextField).at(1), 'pi');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Error:'), findsOneWidget);
+    });
+
+    testWidgets('create workspace with mounts', (tester) async {
+      String? postedBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        if (request.url.path == '/workspaces' && request.method == 'POST') {
+          postedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'id': 'ws-mnt',
+              'name': 'MountWS',
+              'container_id': null,
+              'created_at': '2026-05-28',
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // Enter workspace name
+      await tester.enterText(find.byType(TextField).first, 'MountWS');
+
+      // Add a mount via the mount text field (last TextField) + add button
+      await tester.enterText(
+          find.byType(TextField).last, '/host/src:/work/src');
+      // Tap the add (+) button next to the mount input
+      // The FAB also has an add icon, so find the one inside the dialog
+      final addIcons = find.byIcon(Icons.add);
+      // The last add icon is in the dialog mount row
+      await tester.tap(addIcons.last);
+      await tester.pumpAndSettle();
+
+      // Mount should appear in the list
+      expect(find.text('/host/src:/work/src'), findsOneWidget);
+
+      // Add a second mount
+      await tester.enterText(find.byType(TextField).last, 'nix-vol:/nix');
+      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.pumpAndSettle();
+      expect(find.text('nix-vol:/nix'), findsOneWidget);
+
+      // Remove the first mount via its X button
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pumpAndSettle();
+      expect(find.text('/host/src:/work/src'), findsNothing);
+
+      // Submit
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(postedBody, isNotNull);
+      final body = jsonDecode(postedBody!) as Map<String, dynamic>;
+      expect(body['name'], 'MountWS');
+      expect(body['mounts'], ['nix-vol:/nix']);
+    });
+
+    testWidgets('edit workspace mounts', (tester) async {
+      String? putBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'mounts': ['/old:/old'],
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark'],
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/workspaces/ws-1' && request.method == 'PUT') {
+          putBody = request.body;
+          return http.Response('{"status":"updated"}', 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Existing mount should be visible
+      expect(find.text('/old:/old'), findsOneWidget);
+
+      // Add a new mount via the + button inside the dialog
+      await tester.enterText(find.byType(TextField).last, '/new:/new');
+      final addButtons = find.byIcon(Icons.add);
+      await tester.tap(addButtons.last);
+      await tester.pumpAndSettle();
+      expect(find.text('/new:/new'), findsOneWidget);
+
+      // Remove the old mount (first X button)
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pumpAndSettle();
+      expect(find.text('/old:/old'), findsNothing);
+
+      // Save
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(putBody, isNotNull);
+      final body = jsonDecode(putBody!) as Map<String, dynamic>;
+      expect(body['mounts'], ['/new:/new']);
+    });
+
+    testWidgets('create dialog adds mount via Enter key', (tester) async {
+      String? postedBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        if (request.url.path == '/workspaces' && request.method == 'POST') {
+          postedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'id': 'ws-ent',
+              'name': 'EnterWS',
+              'container_id': null,
+              'created_at': '2026-05-28',
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'EnterWS');
+
+      // Add mount via Enter key on the mount text field
+      await tester.enterText(find.byType(TextField).last, '/a:/b');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('/a:/b'), findsOneWidget);
+
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(postedBody, isNotNull);
+      final body = jsonDecode(postedBody!) as Map<String, dynamic>;
+      expect(body['mounts'], ['/a:/b']);
+    });
+
+    testWidgets('edit dialog adds mount via Enter key', (tester) async {
+      String? putBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark']
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/workspaces/ws-1' && request.method == 'PUT') {
+          putBody = request.body;
+          return http.Response('{"status":"updated"}', 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Add mount via Enter key
+      await tester.enterText(find.byType(TextField).last, '/x:/y');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('/x:/y'), findsOneWidget);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(putBody, isNotNull);
+      final body = jsonDecode(putBody!) as Map<String, dynamic>;
+      expect(body['mounts'], ['/x:/y']);
+    });
+
+    testWidgets('edit dialog shows error for non-JSON response',
+        (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.method == 'PUT') {
+          return http.Response('plain text error', 500);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('plain text error'), findsOneWidget);
+    });
+
+    testWidgets('edit dialog shows body when JSON has no detail key',
+        (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.method == 'PUT') {
+          return http.Response(jsonEncode({'error': 'something'}), 400);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      // Falls back to response.body since no 'detail' key
+      expect(find.textContaining('something'), findsOneWidget);
     });
   });
 }

@@ -229,6 +229,44 @@ def edit(
         new_image = _prompt("Container Image", ws.image)
         new_command = _prompt("Default shell command", ws.default_command)
 
+        # Interactive mount editing loop
+        current_mounts = list(ws.mounts or [])
+        mounts_changed = False
+        while True:
+            if current_mounts:
+                typer.echo("\nCurrent mounts:")
+                for i, m in enumerate(current_mounts, 1):
+                    typer.echo(f"  {i}. {m}")
+            else:
+                typer.echo("\nNo mounts configured.")
+
+            add = input(
+                "\nAdd mount (e.g. /host/path:/container/path, or Enter to skip): "
+            ).strip()
+            if add:
+                current_mounts.append(add)
+                mounts_changed = True
+                continue
+
+            if current_mounts:
+                rm = input("Remove mount number (or Enter to skip): ").strip()
+                if rm:
+                    try:
+                        idx = int(rm) - 1
+                        if 0 <= idx < len(current_mounts):
+                            removed = current_mounts.pop(idx)
+                            typer.echo(f"Removed: {removed}")
+                            mounts_changed = True
+                            continue
+                        else:
+                            typer.echo("Invalid number.")
+                            continue
+                    except ValueError:
+                        typer.echo("Invalid number.")
+                        continue
+
+            break  # both add and remove were skipped
+
         body: dict = {}
         if new_name is not _SENTINEL:
             body["name"] = new_name or ws.name  # don't allow empty name
@@ -236,6 +274,8 @@ def edit(
             body["image"] = new_image or None
         if new_command is not _SENTINEL:
             body["default_command"] = new_command or None
+        if mounts_changed:
+            body["mounts"] = current_mounts or None
     else:
         # Flags mode — only send provided fields
         body = {}

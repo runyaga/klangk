@@ -27,6 +27,7 @@ class Workspace:
     created_at: str
     image: str | None = None
     default_command: str | None = None
+    mounts: list[str] | None = None
 
 
 def _get_terminal_size() -> tuple[int, int]:
@@ -100,6 +101,7 @@ class BarkClient:
                 created_at=w["created_at"],
                 image=w.get("image"),
                 default_command=w.get("default_command"),
+                mounts=w.get("mounts"),
             )
             for w in raw
         ]
