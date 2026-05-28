@@ -51,7 +51,7 @@ RUN ln -sf /usr/bin/fdfind /usr/bin/fd
 # Install both old and new Pi package names: pi-otel-telemetry still
 # depends on @mariozechner/*, while newer extensions use @earendil-works/*.
 # Install @earendil-works last so its `pi` binary wins.
-RUN npm install -g @mariozechner/pi-coding-agent @earendil-works/pi-coding-agent
+RUN npm install -g @mariozechner/pi-coding-agent @earendil-works/pi-coding-agent @anthropic-ai/claude-code
 
 # Create bark user with host UID/GID (passed as build args)
 ARG BARK_UID=1000
