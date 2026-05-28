@@ -20,19 +20,9 @@ Bark gives each user their own isolated coding environment (a "workspace") using
 git clone git@github.com:mcdonc/bark.git
 cd bark
 
-# Create .env with your LLM provider credentials
-cat > .env << 'EOF'
-# LLM configuration (any OpenAI-compatible provider)
-BARK_LLM_API_KEY=your-api-key-here
-BARK_LLM_BASE_URL=https://ollama.com/v1          # or http://localhost:11434/v1 for self-hosted
-BARK_LLM_MODEL=gemma4:31b                        # any model available on your provider
-
-# Bark configuration
-BARK_JWT_SECRET=change-this-to-a-random-secret
-BARK_DEFAULT_USER=admin@example.com
-# BARK_DEFAULT_PASSWORD=admin  # omit to generate a random password on first run
-
-EOF
+# Create .env from the example (edit with your credentials)
+cp -n .env.example .env   # -n: don't overwrite if .env already exists
+$EDITOR .env              # set BARK_LLM_API_KEY, BARK_JWT_SECRET, etc.
 
 # Install Nix and devenv (if not already installed)
 ./bootstrap
