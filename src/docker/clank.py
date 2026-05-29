@@ -19,7 +19,6 @@ def build_pi_args():
     """Build the Pi command line arguments."""
     args = [
         "pi",
-        "--no-context-files",
         "--session-dir",
         str(SESSION_DIR),
         "--append-system-prompt",
