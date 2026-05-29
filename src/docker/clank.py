@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch Pi with session resume. Intended as a workspace default command.
+"""Launch Pi
 
 Sets up Pi agent config, merges settings.json (preserving user-installed
 packages), builds system prompt, and execs Pi with appropriate flags.

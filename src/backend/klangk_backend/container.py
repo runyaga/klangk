@@ -12,6 +12,21 @@ from . import util, model
 
 logger = logging.getLogger(__name__)
 
+
+def _container_dns_config() -> dict:
+    """Return Docker DNS config from KLANGK_DNS_SERVERS env var.
+
+    Set KLANGK_DNS_SERVERS to a comma-separated list of DNS server IPs
+    (e.g., "100.100.100.100,8.8.8.8" for Tailscale MagicDNS + Google).
+    Returns an empty dict if not configured.
+    """
+    raw = util.resolve_env_secret("KLANGK_DNS_SERVERS", "")
+    servers = [s.strip() for s in raw.split(",") if s.strip()]
+    if servers:
+        return {"Dns": servers}
+    return {}
+
+
 IMAGE_NAME = util.resolve_env_secret("KLANGK_IMAGE_NAME", "klangk")
 INSTANCE_ID = util.resolve_env_secret("KLANGK_INSTANCE_ID", "default")
 
@@ -409,6 +424,7 @@ class ContainerRegistry:
                 },
                 "PortBindings": port_bindings,
                 "ExtraHosts": ["host.docker.internal:host-gateway"],
+                **_container_dns_config(),
             },
             "ExposedPorts": exposed_ports,
             "Env": env_vars,

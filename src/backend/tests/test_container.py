@@ -196,6 +196,28 @@ class TestPortAllocation:
         assert ports == []
 
 
+class TestDnsConfig:
+    def test_no_env_returns_empty(self, monkeypatch):
+        monkeypatch.delenv("KLANGK_DNS_SERVERS", raising=False)
+        assert container._container_dns_config() == {}
+
+    def test_single_server(self, monkeypatch):
+        monkeypatch.setenv("KLANGK_DNS_SERVERS", "100.100.100.100")
+        assert container._container_dns_config() == {
+            "Dns": ["100.100.100.100"]
+        }
+
+    def test_multiple_servers(self, monkeypatch):
+        monkeypatch.setenv("KLANGK_DNS_SERVERS", "100.100.100.100, 8.8.8.8")
+        assert container._container_dns_config() == {
+            "Dns": ["100.100.100.100", "8.8.8.8"]
+        }
+
+    def test_empty_string(self, monkeypatch):
+        monkeypatch.setenv("KLANGK_DNS_SERVERS", "")
+        assert container._container_dns_config() == {}
+
+
 class TestConstants:
     def test_port_range_start(self):
         assert container.PORT_RANGE_START == 9000
