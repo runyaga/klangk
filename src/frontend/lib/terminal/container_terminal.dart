@@ -11,8 +11,8 @@ const _theme = TerminalTheme(
   cursor: Color(0xFF5B8C5A),
   selection: Color(0x405B8C5A),
   foreground: Color(0xFFC5C8C6),
-  background: Color(0xFF1D1F21),
-  black: Color(0xFF1D1F21),
+  background: Color(0xFF0D1117),
+  black: Color(0xFF0D1117),
   red: Color(0xFFCC6666),
   green: Color(0xFFB5BD68),
   yellow: Color(0xFFF0C674),
@@ -30,7 +30,7 @@ const _theme = TerminalTheme(
   brightWhite: Color(0xFFEAEAEA),
   searchHitBackground: Color(0xFFE7C547),
   searchHitBackgroundCurrent: Color(0xFFD54E53),
-  searchHitForeground: Color(0xFF1D1F21),
+  searchHitForeground: Color(0xFF0D1117),
 );
 
 class ContainerTerminal extends StatefulWidget {
