@@ -80,6 +80,33 @@ def setup_bin():
             link.symlink_to(target)
 
 
+def merge_models_json():
+    """Merge the llm-proxy provider into models.json without overwriting.
+
+    Preserves any providers the user or Pi may have added.
+    """
+    import json
+
+    proxy_url = os.environ.get("KLANGK_LLM_PROXY_URL", "")
+    model = os.environ.get("KLANGK_LLM_MODEL", "")
+    models_path = AGENT_DIR / "models.json"
+
+    if models_path.exists():
+        models = json.loads(models_path.read_text())
+    else:
+        models = {}
+
+    providers = models.setdefault("providers", {})
+    providers["llm-proxy"] = {
+        "baseUrl": proxy_url,
+        "api": "openai-completions",
+        "apiKey": "proxy",
+        "models": [{"id": model}],
+    }
+
+    models_path.write_text(json.dumps(models, indent=2))
+
+
 def build_system_prompt():
     """Build system prompt from template + image extension tool descriptions."""
     prompt = SYSTEM_PROMPT_SRC.read_text()
@@ -140,6 +167,7 @@ def main():
     setup_dirs()
     sync_image_files()
     setup_bin()
+    merge_models_json()
     prompt_path = build_system_prompt()
     args = build_pi_args(prompt_path)
 
