@@ -16,11 +16,7 @@ SKILLS_DIR = Path("/opt/klangk/skills")
 
 def build_pi_args():
     """Build the Pi command line arguments."""
-    args = [
-        "pi",
-        "--append-system-prompt",
-        str(AGENT_DIR / "system-prompt.md"),
-    ]
+    args = ["pi"]
 
     # Skills from KLANGK_SKILLS env var
     skills = os.environ.get("KLANGK_SKILLS", "")
