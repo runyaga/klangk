@@ -572,6 +572,28 @@ class TestStartContainer:
         assert config["HostConfig"]["Init"] is True
         assert config["OpenStdin"] is True
 
+    async def test_create_container_with_extra_env(self, workspace):
+        mock_docker = _mock_docker()
+        mock_c = _mock_container("new-cid")
+        mock_docker.containers.create_or_replace = AsyncMock(
+            return_value=mock_c
+        )
+
+        with patch.object(
+            container.registry, "get_docker", return_value=mock_docker
+        ):
+            await container.registry.start_container(
+                workspace["id"],
+                "/tmp/ws",
+                "/tmp/home",
+                extra_env={"BARK_SKILLS": "stats,rdkit", "FOO": "bar"},
+            )
+        call_kwargs = mock_docker.containers.create_or_replace.call_args
+        env_list = call_kwargs[1]["config"]["Env"]
+        env_dict = dict(e.split("=", 1) for e in env_list)
+        assert env_dict["BARK_SKILLS"] == "stats,rdkit"
+        assert env_dict["FOO"] == "bar"
+
 
 class TestValidateMountSpec:
     def test_valid_bind_mount(self):

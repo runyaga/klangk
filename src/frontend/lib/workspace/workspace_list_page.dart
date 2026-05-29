@@ -109,10 +109,13 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         final nameController = TextEditingController();
         final cmdController = TextEditingController();
         final mountController = TextEditingController();
+        final envController = TextEditingController();
         var selectedImage = defaultImage;
         final mounts = <String>[];
+        final envVars = <String, String>{};
         String? errorMessage;
         String? mountError;
+        String? envError;
         final primary = Theme.of(context).colorScheme.primary;
         final labelStyle = TextStyle(
           color: primary,
@@ -134,6 +137,26 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           });
         }
 
+        void tryAddEnv(void Function(void Function()) setState) {
+          final v = envController.text.trim();
+          if (v.isEmpty) return;
+          if (!v.contains('=')) {
+            setState(() => envError = 'Expected KEY=VALUE format');
+            return;
+          }
+          final key = v.substring(0, v.indexOf('='));
+          final value = v.substring(v.indexOf('=') + 1);
+          if (key.isEmpty) {
+            setState(() => envError = 'Key cannot be empty');
+            return;
+          }
+          setState(() {
+            envVars[key] = value;
+            envController.clear();
+            envError = null;
+          });
+        }
+
         Future<void> submit(
             BuildContext ctx, void Function(void Function()) setState) async {
           final name = nameController.text.trim();
@@ -143,6 +166,8 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
           if (command.isNotEmpty) body['default_command'] = command;
           if (selectedImage != defaultImage) body['image'] = selectedImage;
           if (mounts.isNotEmpty) body['mounts'] = List<String>.from(mounts);
+          if (envVars.isNotEmpty)
+            body['env'] = Map<String, String>.from(envVars);
 
           try {
             final response = await _auth.authPost(
@@ -270,6 +295,60 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    Text('Environment Variables', style: labelStyle),
+                    const SizedBox(height: 8),
+                    ...envVars.entries
+                        .toList()
+                        .asMap()
+                        .entries
+                        .map((e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                      child: Text(
+                                          '${e.value.key}=${e.value.value}',
+                                          style:
+                                              const TextStyle(fontSize: 13))),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => setDialogState(
+                                        () => envVars.remove(e.value.key)),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                            )),
+                    if (envError != null) ...[
+                      Text(envError!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12)),
+                      const SizedBox(height: 4),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: envController,
+                            decoration: const InputDecoration(
+                              hintText: 'KEY=VALUE',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onSubmitted: (_) => tryAddEnv(setDialogState),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () => tryAddEnv(setDialogState),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -345,12 +424,15 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
     final cmdController =
         TextEditingController(text: ws['default_command'] as String? ?? '');
     final mountController = TextEditingController();
+    final envController = TextEditingController();
     var selectedImage = ws['image'] as String? ?? defaultImage;
     if (!allowedImages.contains(selectedImage)) {
       selectedImage = defaultImage;
     }
     final mounts = List<String>.from(
         (ws['mounts'] as List?)?.cast<String>() ?? <String>[]);
+    final envVars = Map<String, String>.from(
+        (ws['env'] as Map?)?.cast<String, String>() ?? <String, String>{});
 
     final saved = await showDialog<bool>(
       context: context,
@@ -362,6 +444,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
         );
         String? errorMessage;
         String? mountError;
+        String? envError;
 
         void tryAddMount(void Function(void Function()) setState) {
           final v = mountController.text.trim();
@@ -375,6 +458,26 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
             mounts.add(v);
             mountController.clear();
             mountError = null;
+          });
+        }
+
+        void tryAddEnv(void Function(void Function()) setState) {
+          final v = envController.text.trim();
+          if (v.isEmpty) return;
+          if (!v.contains('=')) {
+            setState(() => envError = 'Expected KEY=VALUE format');
+            return;
+          }
+          final key = v.substring(0, v.indexOf('='));
+          final value = v.substring(v.indexOf('=') + 1);
+          if (key.isEmpty) {
+            setState(() => envError = 'Key cannot be empty');
+            return;
+          }
+          setState(() {
+            envVars[key] = value;
+            envController.clear();
+            envError = null;
           });
         }
 
@@ -392,6 +495,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                 'image': selectedImage,
                 'default_command': command.isEmpty ? null : command,
                 'mounts': mounts.isNotEmpty ? mounts : null,
+                'env': envVars.isNotEmpty ? envVars : null,
               }),
             );
             if (response.statusCode == 200) {
@@ -523,6 +627,66 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
                         IconButton(
                           icon: const Icon(Icons.add),
                           onPressed: () => tryAddMount(setDialogState),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Environment Variables', style: labelStyle),
+                    ),
+                    const SizedBox(height: 8),
+                    ...envVars.entries
+                        .toList()
+                        .asMap()
+                        .entries
+                        .map((e) => Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                      child: Text(
+                                          '${e.value.key}=${e.value.value}',
+                                          style:
+                                              const TextStyle(fontSize: 13))),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () => setDialogState(
+                                        () => envVars.remove(e.value.key)),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                            )),
+                    if (envError != null) ...[
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(envError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12)),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: envController,
+                            decoration: const InputDecoration(
+                              hintText: 'KEY=VALUE',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            onSubmitted: (_) => tryAddEnv(setDialogState),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: () => tryAddEnv(setDialogState),
                         ),
                       ],
                     ),

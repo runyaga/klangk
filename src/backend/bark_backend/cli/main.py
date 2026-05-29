@@ -152,6 +152,11 @@ def create(
         "--mount",
         help="Mount, repeatable (e.g. /home/me/src:/work/src, nix-vol:/nix)",
     ),
+    env: list[str] | None = typer.Option(
+        None,
+        "--env",
+        help="Environment variable, repeatable (e.g. KEY=VALUE)",
+    ),
 ) -> None:
     """Create a new workspace."""
     _require_auth()
@@ -161,9 +166,10 @@ def create(
             if err:
                 _err.print(f"[red]{err}[/red]")
                 raise typer.Exit(code=1)
+    env_dict = _parse_env_list(env) if isinstance(env, list) else None
     try:
         ws = _client().create_workspace(
-            name, image=image, mounts=mount or None
+            name, image=image, mounts=mount or None, env=env_dict
         )
     except httpx.HTTPStatusError as exc:
         detail = exc.response.json().get("detail", exc.response.text)
@@ -188,6 +194,20 @@ def rm(
 
 
 _SENTINEL = object()
+
+
+def _parse_env_list(env_list: list[str]) -> dict[str, str]:
+    """Parse ['KEY=VALUE', ...] into a dict."""
+    result = {}
+    for item in env_list:
+        if "=" not in item:
+            _err.print(
+                f"[red]Invalid env var (expected KEY=VALUE):[/red] {item}"
+            )
+            raise typer.Exit(code=1)
+        key, _, value = item.partition("=")
+        result[key] = value
+    return result
 
 
 def _prompt(label: str, current: str | None) -> str | _SENTINEL.__class__:
@@ -216,6 +236,11 @@ def edit(
         "--mount",
         help="Mount, repeatable (e.g. /home/me/src:/work/src, nix-vol:/nix)",
     ),
+    env: list[str] | None = typer.Option(
+        None,
+        "--env",
+        help="Environment variable, repeatable (e.g. KEY=VALUE)",
+    ),
 ) -> None:
     """Edit workspace settings.
 
@@ -230,7 +255,14 @@ def edit(
         _err.print(f"[red]No workspace named[/red] '{workspace}'")
         raise typer.Exit(code=1) from None
 
-    if name is None and image is None and command is None and mount is None:
+    has_flags = (
+        name is not None
+        or image is not None
+        or command is not None
+        or isinstance(mount, list)
+        or isinstance(env, list)
+    )
+    if not has_flags:
         # Interactive mode
         new_name = _prompt("Name", ws.name)
         new_image = _prompt("Container Image", ws.image)
@@ -278,6 +310,53 @@ def edit(
 
             break  # both add and remove were skipped
 
+        # Interactive env var editing loop
+        current_env = dict(ws.env or {})
+        env_changed = False
+        while True:
+            if current_env:
+                typer.echo("\nCurrent environment variables:")
+                env_items = list(current_env.items())
+                for i, (k, v) in enumerate(env_items, 1):
+                    typer.echo(f"  {i}. {k}={v}")
+            else:
+                typer.echo("\nNo environment variables configured.")
+
+            add = input(
+                "\nAdd env var (e.g. KEY=VALUE, or Enter to skip): "
+            ).strip()
+            if add:
+                if "=" not in add:
+                    typer.echo("Invalid format, expected KEY=VALUE.")
+                    continue
+                key, _, value = add.partition("=")
+                current_env[key] = value
+                env_changed = True
+                continue
+
+            if current_env:
+                rm = input(
+                    "Remove env var number (or Enter to skip): "
+                ).strip()
+                if rm:
+                    try:
+                        idx = int(rm) - 1
+                        env_items = list(current_env.items())
+                        if 0 <= idx < len(env_items):
+                            removed_key = env_items[idx][0]
+                            del current_env[removed_key]
+                            typer.echo(f"Removed: {removed_key}")
+                            env_changed = True
+                            continue
+                        else:
+                            typer.echo("Invalid number.")
+                            continue
+                    except ValueError:
+                        typer.echo("Invalid number.")
+                        continue
+
+            break  # both add and remove were skipped
+
         body: dict = {}
         if new_name is not _SENTINEL:
             body["name"] = new_name or ws.name  # don't allow empty name
@@ -287,6 +366,8 @@ def edit(
             body["default_command"] = new_command or None
         if mounts_changed:
             body["mounts"] = current_mounts or None
+        if env_changed:
+            body["env"] = current_env or None
     else:
         # Flags mode — only send provided fields
         body = {}
@@ -303,6 +384,8 @@ def edit(
                     _err.print(f"[red]{err}[/red]")
                     raise typer.Exit(code=1)
             body["mounts"] = mount or None
+        if isinstance(env, list):
+            body["env"] = _parse_env_list(env) or None
 
     if not body:
         typer.echo("No changes.")

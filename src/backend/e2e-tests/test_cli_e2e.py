@@ -485,16 +485,76 @@ class TestMounts:
         _run(["bark", "create", "e2e-mount-int"], env=env)
         try:
             # Interactive: keep name, keep image, keep command,
-            # add mount "/tmp:/mnt/test", skip add, skip remove
+            # add mount "/tmp:/mnt/test", skip add, skip remove,
+            # skip add env
             result = _run(
                 ["bark", "edit", "e2e-mount-int"],
-                input="\n\n\n/tmp:/mnt/test\n\n\n",
+                input="\n\n\n/tmp:/mnt/test\n\n\n\n",
                 env=env,
             )
             assert result.returncode == 0
             assert "Updated" in result.stdout
         finally:
             _run(["bark", "rm", "e2e-mount-int"], env=env)
+
+
+class TestEnvVars:
+    def _login(self, cli_config):
+        env = cli_config["env"]
+        _run(
+            [
+                "bark",
+                "login",
+                "test@example.com",
+                "--server",
+                cli_config["server_url"],
+                "--password-file",
+                "-",
+            ],
+            input="testpass\n",
+            env=env,
+        )
+
+    def test_create_with_env_flag(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        try:
+            result = _run(
+                [
+                    "bark",
+                    "create",
+                    "e2e-env",
+                    "--env",
+                    "FOO=bar",
+                    "--env",
+                    "BARK_SKILLS=test",
+                ],
+                env=env,
+            )
+            assert result.returncode == 0
+            assert "e2e-env" in result.stdout
+        finally:
+            _run(["bark", "rm", "e2e-env"], env=env)
+
+    def test_edit_with_env_flag(self, cli_config):
+        env = cli_config["env"]
+        self._login(cli_config)
+        _run(["bark", "create", "e2e-env-edit"], env=env)
+        try:
+            result = _run(
+                [
+                    "bark",
+                    "edit",
+                    "e2e-env-edit",
+                    "--env",
+                    "X=1",
+                ],
+                env=env,
+            )
+            assert result.returncode == 0
+            assert "Updated" in result.stdout
+        finally:
+            _run(["bark", "rm", "e2e-env-edit"], env=env)
 
 
 class TestVolumes:

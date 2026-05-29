@@ -219,6 +219,7 @@ async def start_workspace_container(
         image=workspace.get("image"),
         config_path=cfg_path,
         extra_mounts=workspace.get("mounts"),
+        extra_env=workspace.get("env"),
     )
     state["container_status"] = container_status
     state["workspace_id"] = workspace_id

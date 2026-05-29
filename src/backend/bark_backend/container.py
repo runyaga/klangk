@@ -245,6 +245,7 @@ class ContainerRegistry:
         image: str | None = None,
         config_path: str | None = None,
         extra_mounts: list[str] | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> tuple[str, str]:
         """Start (or restart) a Pi container for a workspace.
 
@@ -343,6 +344,10 @@ class ContainerRegistry:
         env_vars.append(f"BARK_HOSTING_HOSTNAME={hosting_hostname}")
         env_vars.append(f"BARK_HOSTING_PROTO={hosting_proto}")
         env_vars.append(f"BARK_HOSTING_BASE_PATH={hosting_base_path}")
+
+        if extra_env:
+            for k, v in extra_env.items():
+                env_vars.append(f"{k}={v}")
 
         # Ensure named volumes in extra_mounts exist with bark labels.
         # Named volumes don't contain / or start with .

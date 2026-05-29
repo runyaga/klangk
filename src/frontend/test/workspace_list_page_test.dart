@@ -224,7 +224,7 @@ void main() {
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
 
-      expect(find.byType(TextField), findsNWidgets(3));
+      expect(find.byType(TextField), findsNWidgets(4));
       expect(find.byType(DropdownButtonFormField<String>), findsOneWidget);
     });
 
@@ -1265,20 +1265,20 @@ void main() {
 
       // Add a mount via the mount text field (last TextField) + add button
       await tester.enterText(
-          find.byType(TextField).last, '/host/src:/work/src');
+          find.byType(TextField).at(2), '/host/src:/work/src');
       // Tap the add (+) button next to the mount input
       // The FAB also has an add icon, so find the one inside the dialog
       final addIcons = find.byIcon(Icons.add);
-      // The last add icon is in the dialog mount row
-      await tester.tap(addIcons.last);
+      // The mount add icon is at index 1 (after FAB at 0, before env at 2)
+      await tester.tap(addIcons.at(1));
       await tester.pumpAndSettle();
 
       // Mount should appear in the list
       expect(find.text('/host/src:/work/src'), findsOneWidget);
 
       // Add a second mount
-      await tester.enterText(find.byType(TextField).last, 'nix-vol:/nix');
-      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.enterText(find.byType(TextField).at(2), 'nix-vol:/nix');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
       expect(find.text('nix-vol:/nix'), findsOneWidget);
 
@@ -1341,9 +1341,8 @@ void main() {
       expect(find.text('/old:/old'), findsOneWidget);
 
       // Add a new mount via the + button inside the dialog
-      await tester.enterText(find.byType(TextField).last, '/new:/new');
-      final addButtons = find.byIcon(Icons.add);
-      await tester.tap(addButtons.last);
+      await tester.enterText(find.byType(TextField).at(2), '/new:/new');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
       expect(find.text('/new:/new'), findsOneWidget);
 
@@ -1391,7 +1390,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'EnterWS');
 
       // Add mount via Enter key on the mount text field
-      await tester.enterText(find.byType(TextField).last, '/a:/b');
+      await tester.enterText(find.byType(TextField).at(2), '/a:/b');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(find.text('/a:/b'), findsOneWidget);
@@ -1444,7 +1443,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Add mount via Enter key
-      await tester.enterText(find.byType(TextField).last, '/x:/y');
+      await tester.enterText(find.byType(TextField).at(2), '/x:/y');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(find.text('/x:/y'), findsOneWidget);
@@ -1543,8 +1542,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Try adding invalid mount (no colon)
-      await tester.enterText(find.byType(TextField).last, 'bad-mount');
-      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.enterText(find.byType(TextField).at(2), 'bad-mount');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Expected'), findsOneWidget);
@@ -1552,23 +1551,23 @@ void main() {
       expect(find.text('bad-mount'), findsOneWidget); // still in text field
 
       // Try adding mount with relative container path
-      await tester.enterText(find.byType(TextField).last, '/host:relative');
-      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.enterText(find.byType(TextField).at(2), '/host:relative');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('absolute'), findsOneWidget);
 
       // Try adding mount with unknown option
       await tester.enterText(
-          find.byType(TextField).last, '/host:/container:bogus');
-      await tester.tap(find.byIcon(Icons.add).last);
+          find.byType(TextField).at(2), '/host:/container:bogus');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Unknown option'), findsOneWidget);
 
       // Valid mount clears the error
-      await tester.enterText(find.byType(TextField).last, '/a:/b');
-      await tester.tap(find.byIcon(Icons.add).last);
+      await tester.enterText(find.byType(TextField).at(2), '/a:/b');
+      await tester.tap(find.byIcon(Icons.add).at(1));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Unknown option'), findsNothing);
@@ -1610,19 +1609,280 @@ void main() {
       await tester.pumpAndSettle();
 
       // Try adding invalid mount via Enter key
-      await tester.enterText(find.byType(TextField).last, 'nope');
+      await tester.enterText(find.byType(TextField).at(2), 'nope');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Expected'), findsOneWidget);
 
       // Valid mount clears the error
-      await tester.enterText(find.byType(TextField).last, '/x:/y');
+      await tester.enterText(find.byType(TextField).at(2), '/x:/y');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Expected'), findsNothing);
       expect(find.text('/x:/y'), findsOneWidget);
+    });
+
+    testWidgets('create workspace with env vars', (tester) async {
+      String? postedBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        if (request.url.path == '/workspaces' && request.method == 'POST') {
+          postedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'id': 'ws-env',
+              'name': 'EnvWS',
+              'container_id': null,
+              'created_at': '2026-05-28',
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'EnvWS');
+
+      // Add env var via the + button (env add is at index 2: FAB=0, mount=1, env=2)
+      await tester.enterText(find.byType(TextField).at(3), 'FOO=bar');
+      await tester.tap(find.byIcon(Icons.add).at(2));
+      await tester.pumpAndSettle();
+      expect(find.text('FOO=bar'), findsOneWidget);
+
+      // Add a second env var via Enter key
+      await tester.enterText(find.byType(TextField).at(3), 'X=1');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('X=1'), findsOneWidget);
+
+      // Remove the first env var via X button
+      // close icons: mount has none, env has 2 (FOO=bar, X=1)
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pumpAndSettle();
+      expect(find.text('FOO=bar'), findsNothing);
+
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(postedBody, isNotNull);
+      final body = jsonDecode(postedBody!) as Map<String, dynamic>;
+      expect(body['name'], 'EnvWS');
+      expect(body['env'], {'X': '1'});
+    });
+
+    testWidgets('edit workspace env vars', (tester) async {
+      String? putBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'env': {'OLD': 'val'},
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark']
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/workspaces/ws-1' && request.method == 'PUT') {
+          putBody = request.body;
+          return http.Response('{"status":"updated"}', 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Existing env var should be visible
+      expect(find.text('OLD=val'), findsOneWidget);
+
+      // Add a new env var via Enter key
+      await tester.enterText(find.byType(TextField).at(3), 'NEW=123');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('NEW=123'), findsOneWidget);
+
+      // Remove the old env var (first X in env section)
+      await tester.tap(find.byIcon(Icons.close).first);
+      await tester.pumpAndSettle();
+      expect(find.text('OLD=val'), findsNothing);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(putBody, isNotNull);
+      final body = jsonDecode(putBody!) as Map<String, dynamic>;
+      expect(body['env'], {'NEW': '123'});
+    });
+
+    testWidgets('create dialog rejects invalid env var', (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(jsonEncode([]), 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      // Try adding env var without = sign
+      await tester.enterText(find.byType(TextField).at(3), 'NOEQ');
+      await tester.tap(find.byIcon(Icons.add).at(2));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Expected KEY=VALUE'), findsOneWidget);
+
+      // Try adding env var with empty key
+      await tester.enterText(find.byType(TextField).at(3), '=value');
+      await tester.tap(find.byIcon(Icons.add).at(2));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Key cannot be empty'), findsOneWidget);
+
+      // Valid env var clears error
+      await tester.enterText(find.byType(TextField).at(3), 'A=1');
+      await tester.tap(find.byIcon(Icons.add).at(2));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Key cannot'), findsNothing);
+      expect(find.text('A=1'), findsOneWidget);
+    });
+
+    testWidgets('edit dialog adds env via button and rejects empty key',
+        (tester) async {
+      String? putBody;
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark']
+            }),
+            200,
+          );
+        }
+        if (request.url.path == '/workspaces/ws-1' && request.method == 'PUT') {
+          putBody = request.body;
+          return http.Response('{"status":"updated"}', 200);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Try empty key
+      await tester.enterText(find.byType(TextField).at(3), '=val');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Key cannot be empty'), findsOneWidget);
+
+      // Add valid env via + button
+      await tester.enterText(find.byType(TextField).at(3), 'OK=1');
+      // The env + button is at index 2 (FAB=0, mount+=1, env+=2)
+      await tester.tap(find.byIcon(Icons.add).at(2));
+      await tester.pumpAndSettle();
+      expect(find.text('OK=1'), findsOneWidget);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(putBody, isNotNull);
+      final body = jsonDecode(putBody!) as Map<String, dynamic>;
+      expect(body['env'], {'OK': '1'});
+    });
+
+    testWidgets('edit dialog rejects invalid env var', (tester) async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        if (request.url.path == '/workspaces' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode([
+              {
+                'id': 'ws-1',
+                'name': 'My WS',
+                'container_id': null,
+                'default_command': null,
+                'created_at': '2026-05-28',
+              },
+            ]),
+            200,
+          );
+        }
+        if (request.url.path == '/images' && request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'default': 'bark',
+              'allowed': ['bark']
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      await tester.pumpWidget(buildPage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+
+      // Try adding invalid env via Enter key
+      await tester.enterText(find.byType(TextField).at(3), 'BAD');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Expected KEY=VALUE'), findsOneWidget);
+
+      // Valid env clears error
+      await tester.enterText(find.byType(TextField).at(3), 'OK=yes');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Expected KEY=VALUE'), findsNothing);
+      expect(find.text('OK=yes'), findsOneWidget);
     });
   });
 }

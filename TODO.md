@@ -17,7 +17,7 @@
 
 ## Backend
 
-- **Associate skills with a workspace**: Allow users to associate a set of skills (Pi extensions, tools, or capabilities) with a workspace so that when the workspace starts, those skills are automatically available. This could be a list of skill identifiers stored on the workspace model, similar to how mounts are stored.
+- **Duplicate a workspace**: Add ability to duplicate an existing workspace, copying its configuration (image, default command, mounts, env vars) but with a new name. Useful for creating variations of an existing setup.
 - **WorkspaceSessions singleton class in wshandler.py**: Extract `_sessions`, `_pending_browser_requests`, `get_session`, `get_or_create_session`, `remove_session` into a `Sessions` class for better encapsulation and testability. Create a singleton of it to replace `_sessions` global.
 - **Connections singleton class in wshandler.py**: Create a `Connections` class with a `handle_websocket` method that owns the `_connections` dict. Instantiate as a module-level singleton. Eliminates the `_connections` global and makes the WebSocket handler testable as an instance rather than module-level functions.
 - **Increase default terminal font size**: The terminal text is too small at the default 14px. Consider 16px or make it configurable.

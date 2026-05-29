@@ -344,6 +344,7 @@ class CreateWorkspaceRequest(BaseModel):
     image: str | None = None
     default_command: str | None = None
     mounts: list[str] | None = None
+    env: dict[str, str] | None = None
 
 
 @router.get("/images")
@@ -453,6 +454,7 @@ async def create_workspace(
             image=body.image,
             default_command=body.default_command,
             mounts=body.mounts,
+            env=body.env,
         )
     except sqlite3.IntegrityError:
         raise HTTPException(
@@ -468,6 +470,7 @@ class UpdateWorkspaceRequest(BaseModel):
     image: str | None = None
     default_command: str | None = None
     mounts: list[str] | None = None
+    env: dict[str, str] | None = None
 
 
 @router.put("/workspaces/{workspace_id}")

@@ -28,6 +28,7 @@ class Workspace:
     image: str | None = None
     default_command: str | None = None
     mounts: list[str] | None = None
+    env: dict[str, str] | None = None
 
 
 def _get_terminal_size() -> tuple[int, int]:
@@ -102,6 +103,7 @@ class BarkClient:
                 image=w.get("image"),
                 default_command=w.get("default_command"),
                 mounts=w.get("mounts"),
+                env=w.get("env"),
             )
             for w in raw
         ]
@@ -111,12 +113,15 @@ class BarkClient:
         name: str,
         image: str | None = None,
         mounts: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> Workspace:
         body: dict = {"name": name}
         if image:
             body["image"] = image
         if mounts:
             body["mounts"] = mounts
+        if env:
+            body["env"] = env
         resp = self.post("/workspaces", json=body)
         self._check_auth(resp)
         resp.raise_for_status()

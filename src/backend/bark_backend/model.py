@@ -54,6 +54,7 @@ async def init_db() -> None:
                 image TEXT,  -- custom Docker image; NULL means use default
                 default_command TEXT,  -- auto-run in terminal on connect
                 mounts TEXT,  -- JSON array of host:container mount specs
+                env TEXT,  -- JSON dict of custom environment variables
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(user_id, name)
             )
@@ -303,17 +304,19 @@ async def create_workspace(
     image: str | None = None,
     default_command: str | None = None,
     mounts: list[str] | None = None,
+    env: dict[str, str] | None = None,
 ) -> dict:
     db = await get_db()
     try:
         workspace_id = str(uuid.uuid4())
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         mounts_json = json.dumps(mounts) if mounts else None
+        env_json = json.dumps(env) if env else None
         await db.execute(
             "INSERT INTO workspaces"
             " (id, user_id, name, image, default_command, mounts,"
-            " created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " env, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 workspace_id,
                 user_id,
@@ -321,6 +324,7 @@ async def create_workspace(
                 image,
                 default_command,
                 mounts_json,
+                env_json,
                 created_at,
             ),
         )
@@ -334,6 +338,7 @@ async def create_workspace(
             "image": image,
             "default_command": default_command,
             "mounts": mounts,
+            "env": env,
             "num_ports": container.DEFAULT_PORTS_PER_WORKSPACE,
             "created_at": created_at,
         }
@@ -346,7 +351,7 @@ async def list_workspaces(user_id: str) -> list[dict]:
     try:
         cursor = await db.execute(
             "SELECT id, name, container_id, image, default_command,"
-            " mounts, created_at FROM workspaces"
+            " mounts, env, created_at FROM workspaces"
             " WHERE user_id = ? ORDER BY created_at",
             (user_id,),
         )
@@ -359,6 +364,7 @@ async def list_workspaces(user_id: str) -> list[dict]:
                 "image": row["image"],
                 "default_command": row["default_command"],
                 "mounts": json.loads(row["mounts"]) if row["mounts"] else None,
+                "env": json.loads(row["env"]) if row["env"] else None,
                 "created_at": row["created_at"],
             }
             for row in rows
@@ -372,7 +378,7 @@ async def get_workspace(workspace_id: str, user_id: str) -> dict | None:
     try:
         cursor = await db.execute(
             "SELECT id, user_id, name, container_id, num_ports, image,"
-            " default_command, mounts"
+            " default_command, mounts, env"
             " FROM workspaces WHERE id = ? AND user_id = ?",
             (workspace_id, user_id),
         )
@@ -388,6 +394,7 @@ async def get_workspace(workspace_id: str, user_id: str) -> dict | None:
             "image": row["image"],
             "default_command": row["default_command"],
             "mounts": json.loads(row["mounts"]) if row["mounts"] else None,
+            "env": json.loads(row["env"]) if row["env"] else None,
         }
     finally:
         await db.close()
@@ -517,12 +524,12 @@ async def update_workspace(
     **fields: str | None,
 ) -> bool:
     """Update workspace fields. Only provided fields are changed."""
-    allowed = {"name", "image", "default_command", "mounts"}
+    allowed = {"name", "image", "default_command", "mounts", "env"}
     to_set = {}
     for k, v in fields.items():
         if k not in allowed:
             continue
-        if k == "mounts":
+        if k in ("mounts", "env"):
             to_set[k] = json.dumps(v) if v is not None else None
         else:
             to_set[k] = v

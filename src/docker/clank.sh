@@ -65,6 +65,23 @@ fi
 PI_ARGS="--no-context-files --session-dir $SESSION_DIR"
 PI_ARGS="$PI_ARGS --append-system-prompt $SYSTEM_PROMPT_FILE"
 
+# Add enabled skills via Pi's native --skill flag.
+# BARK_SKILLS is a comma-separated list of skill directory names.
+# Skills are expected at /opt/bark/skills/<name>/ (user-mounted).
+SKILLS_DIR="/opt/bark/skills"
+if [ -n "$BARK_SKILLS" ] && [ -d "$SKILLS_DIR" ]; then
+  OLD_IFS="$IFS"
+  IFS=','
+  for skill_name in $BARK_SKILLS; do
+    skill_name=$(echo "$skill_name" | tr -d ' ')
+    [ -z "$skill_name" ] && continue
+    if [ -d "$SKILLS_DIR/$skill_name" ]; then
+      PI_ARGS="$PI_ARGS --skill $SKILLS_DIR/$skill_name"
+    fi
+  done
+  IFS="$OLD_IFS"
+fi
+
 # Find the most recent session file to resume
 LATEST=$(find "$SESSION_DIR" -name '*.jsonl' 2>/dev/null | sort | tail -1)
 if [ -n "$LATEST" ]; then

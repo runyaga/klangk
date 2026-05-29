@@ -529,9 +529,9 @@ class TestMainCLI:
         client.resolve_workspace.return_value = ws
         client.put.return_value = MagicMock(status_code=200)
 
-        # keep name, keep image, change command, skip add mount, (no mounts to remove)
+        # keep name, keep image, change command, skip add mount, skip add env
         with patch.object(main, "_client", return_value=client):
-            with patch("builtins.input", side_effect=["", "", "pi", ""]):
+            with patch("builtins.input", side_effect=["", "", "pi", "", ""]):
                 from typer.testing import CliRunner
 
                 runner = CliRunner()
@@ -562,7 +562,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["renamed", "bark-custom", "pi", ""],
+                side_effect=["renamed", "bark-custom", "pi", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -592,7 +592,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "/host:/container", "", ""],
+                side_effect=["", "", "", "/host:/container", "", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -620,7 +620,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "", "1", "", ""],
+                side_effect=["", "", "", "", "1", "", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -651,7 +651,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "/new:/new", "", "1", "", ""],
+                side_effect=["", "", "", "/new:/new", "", "1", "", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -682,7 +682,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "", "99", "", "abc", "", ""],
+                side_effect=["", "", "", "", "99", "", "abc", "", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -712,7 +712,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "", "1", ""],
+                side_effect=["", "", "", "", "1", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -742,7 +742,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["", "", "", "bad", "/a:/b", "", ""],
+                side_effect=["", "", "", "bad", "/a:/b", "", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -857,7 +857,7 @@ class TestMainCLI:
 
         # keep name, image, command; skip add mount (no mounts, no remove prompt)
         with patch.object(main, "_client", return_value=client):
-            with patch("builtins.input", side_effect=["", "", "", ""]):
+            with patch("builtins.input", side_effect=["", "", "", "", ""]):
                 from typer.testing import CliRunner
 
                 runner = CliRunner()
@@ -866,6 +866,176 @@ class TestMainCLI:
                 assert "No changes" in result.stdout
 
         client.put.assert_not_called()
+
+    def test_edit_interactive_add_env(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; skip mounts; add env FOO=bar, skip add env
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "FOO=bar", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["env"] == {"FOO": "bar"}
+
+    def test_edit_interactive_invalid_env_rejected(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; skip mounts; try "bad" (no =), then "A=1", skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "bad", "A=1", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+                assert "KEY=VALUE" in result.stdout
+
+        body = client.put.call_args[1]["json"]
+        assert body["env"] == {"A": "1"}
+
+    def test_create_with_env_flag(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="new-id", name="ws", created_at="2025-01-01T00:00:00Z"
+        )
+        client = MagicMock()
+        client.create_workspace.return_value = ws
+        monkeypatch.setattr(main, "_client", lambda: client)
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main.app, ["create", "ws", "--env", "FOO=bar", "--env", "X=1"]
+        )
+        assert result.exit_code == 0
+        client.create_workspace.assert_called_once_with(
+            "ws", image=None, mounts=None, env={"FOO": "bar", "X": "1"}
+        )
+
+    def test_create_with_invalid_env_flag(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        monkeypatch.setattr(main, "_client", lambda: MagicMock())
+
+        from typer.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(
+            main.app, ["create", "ws", "--env", "NOEQUALSSIGN"]
+        )
+        assert result.exit_code == 1
+
+    def test_edit_interactive_remove_env(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            env={"FOO": "bar", "X": "1"},
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        # keep all; skip mounts; skip add env, remove env 1; skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "", "1", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["env"] == {"X": "1"}
+
+    def test_edit_interactive_invalid_env_remove_number(
+        self, logged_in_cfg, monkeypatch
+    ):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+            env={"A": "1"},
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+
+        # keep all; skip mounts; skip add env, bad number "99" (loops),
+        # skip add env, "abc" (loops), skip add, skip remove
+        with patch.object(main, "_client", return_value=client):
+            with patch(
+                "builtins.input",
+                side_effect=["", "", "", "", "", "99", "", "abc", "", ""],
+            ):
+                from typer.testing import CliRunner
+
+                runner = CliRunner()
+                result = runner.invoke(main.app, ["edit", "my-ws"])
+                assert result.exit_code == 0
+
+        client.put.assert_not_called()
+
+    def test_edit_with_env_flag(self, logged_in_cfg, monkeypatch):
+        from bark_backend.cli import main
+
+        ws = Workspace(
+            id="ws1" + "0" * 52,
+            name="my-ws",
+            created_at="2025-01-01T00:00:00Z",
+        )
+        client = MagicMock()
+        client.resolve_workspace.return_value = ws
+        client.put.return_value = MagicMock(status_code=200)
+
+        with patch.object(main, "_client", return_value=client):
+            from typer.testing import CliRunner
+
+            runner = CliRunner()
+            result = runner.invoke(main.app, ["edit", "my-ws", "--env", "A=1"])
+            assert result.exit_code == 0
+
+        body = client.put.call_args[1]["json"]
+        assert body["env"] == {"A": "1"}
 
     def test_edit_workspace_not_found(self, logged_in_cfg, monkeypatch):
         from bark_backend.cli import main
