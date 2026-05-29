@@ -17,11 +17,7 @@ SYSTEM_PROMPT_SRC = Path("/opt/klangk/system-prompt.md")
 
 
 def setup_dirs():
-    """Create agent directories and clean up stale symlinks."""
-    for name in ("extensions", "npm"):
-        p = AGENT_DIR / name
-        if p.is_symlink():
-            p.unlink()
+    """Create agent directories."""
     (AGENT_DIR / "bin").mkdir(parents=True, exist_ok=True)
     (AGENT_DIR / "npm").mkdir(parents=True, exist_ok=True)
     (AGENT_DIR / "extensions").mkdir(parents=True, exist_ok=True)
