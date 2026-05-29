@@ -207,10 +207,8 @@ class _WorkspacePageState extends State<WorkspacePage> {
 
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
         title: AppBarTitle(
-            title: _workspaceName.isNotEmpty ? _workspaceName : 'Workspace',
-            backRoute: '/workspaces'),
+            title: _workspaceName.isNotEmpty ? _workspaceName : 'Workspace'),
         actions: const [
           AppBarActions(),
         ],
