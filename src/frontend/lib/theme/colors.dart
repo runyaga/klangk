@@ -31,6 +31,6 @@ class KColors {
   static const accentAmber = Color(0xFFD29922); // warnings, admin
 
   // ── Logo gradient ────────────────────────────────────────────────────
-  static const logoGradientStart = Color(0xFFF5C518);
-  static const logoGradientEnd = Color(0xFFD4A80E);
+  static const logoGradientStart = Color(0xFF238636);
+  static const logoGradientEnd = Color(0xFF1A6B2A);
 }
