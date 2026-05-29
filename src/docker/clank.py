@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch Pi
+"""Launch Pi.  Takes args that Pi would tale.
 
 Sets up Pi agent config, merges settings.json (preserving user-installed
 packages), builds system prompt, and execs Pi with appropriate flags.
