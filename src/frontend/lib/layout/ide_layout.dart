@@ -165,28 +165,32 @@ class _SkeuoTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: roundedCorners,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          color: isSelected ? KColors.bgCanvas : KColors.bgAppBar,
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: KColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+      child: Padding(
+        padding: EdgeInsets.only(top: isSelected ? 0 : 6),
+        child: ClipRRect(
+          borderRadius: roundedCorners,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            color: isSelected ? KColors.bgCanvas : KColors.bgAppBar,
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 14,
                   color: KColors.textSecondary,
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        isSelected ? FontWeight.w700 : FontWeight.normal,
+                    color: KColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
