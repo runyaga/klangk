@@ -15,7 +15,7 @@ fi
 # Set up Pi agent config as the klangk user (extensions, settings, models,
 # system prompt, Claude Code skills). Runs before the readiness signal so
 # terminal sessions find everything in place.
-su -c "python3 /usr/local/bin/setup_pi" klangk
+su -c "python3 /usr/local/bin/setup_clankers" klangk
 
 # Signal that setup is complete. Terminal sessions (docker exec) source
 # /etc/bash.bashrc which waits for this file before showing a prompt.

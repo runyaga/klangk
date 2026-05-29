@@ -19,8 +19,8 @@ COPY builtin-extensions/ /opt/klangk/pi-agent/extensions/
 # Entrypoint, system prompt, bash defaults (change frequently during dev)
 COPY system-prompt.md /opt/klangk/system-prompt.md
 COPY entrypoint.sh /opt/klangk/entrypoint.sh
-COPY setup_pi.py /usr/local/bin/setup_pi
-RUN chmod +x /opt/klangk/entrypoint.sh /usr/local/bin/setup_pi
+COPY setup_clankers.py /usr/local/bin/setup_clankers
+RUN chmod +x /opt/klangk/entrypoint.sh /usr/local/bin/setup_clankers
 COPY bash.bashrc /etc/bash.bashrc
 COPY tmux.conf /etc/tmux.conf
 
