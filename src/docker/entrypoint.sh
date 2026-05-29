@@ -4,9 +4,6 @@ set -e
 
 chown klangk:klangk /home/klangk /home/klangk/work
 
-# Mark all directories as safe for git (bind mounts may have different ownership)
-su -c "git config --global --add safe.directory '*'" klangk
-
 # Allow klangk user to access the Docker socket (if mounted)
 if [ -S /var/run/docker.sock ]; then
   chmod 666 /var/run/docker.sock
