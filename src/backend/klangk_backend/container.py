@@ -404,7 +404,7 @@ class ContainerRegistry:
                 + (extra_mounts or []),
                 "Tmpfs": {
                     "/tmp": "rw,exec,nosuid,size=2g",
-                    "/run": "rw,noexec,nosuid,size=16m",
+                    "/run": "rw,noexec,nosuid,size=256m",
                     "/var/log": "rw,noexec,nosuid,size=256m",
                 },
                 "PortBindings": port_bindings,
