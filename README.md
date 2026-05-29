@@ -34,7 +34,7 @@ $EDITOR .env
 
 # Start the app (builds Docker image and Flutter web on first run)
 # Make sure Docker is running before this step
-devenv processes up
+devenv processes up --no-tui
 ```
 
 Open [http://localhost:8995](http://localhost:8995) and log in with `admin@example.com` (or whatever you set `KLANGK_DEFAULT_USER` to). If you set `KLANGK_DEFAULT_PASSWORD` in `.env`, use that password. Otherwise, check the server log output for the generated password. The default user has the admin role and can manage other users at `/admin/users`.
