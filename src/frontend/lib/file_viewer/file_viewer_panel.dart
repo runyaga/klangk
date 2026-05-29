@@ -325,7 +325,7 @@ class FileViewerPanelState extends State<FileViewerPanel> {
         children: [
           // Path bar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.fromLTRB(8, 2, 8, 4),
             decoration: BoxDecoration(
               color: KColors.bgCanvas,
             ),
