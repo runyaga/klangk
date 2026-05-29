@@ -45,7 +45,7 @@ class AppBarTitle extends StatelessWidget {
             fontSize: 15,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.3,
-            color: KColors.textSecondary,
+            color: KColors.textPrimary,
           ),
         ),
       ],

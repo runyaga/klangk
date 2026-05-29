@@ -58,6 +58,7 @@
 ## Docker
 
 - **Use `pi install` for plugins in Docker build**: Replace the staging/copy approach in `dockerbuild.sh` with `pi install` for each plugin. Plugins now have `package.json` with a `"pi"` section, so `pi install /path/to/plugin` should work during the Docker build. This would eliminate the `$KLANGK_PLUGINS_DIR/.docker/` staging directory, the named build contexts (`plugin-extensions`, `plugin-tools`), and the manual extension/tools file copying. Challenge: plugins live in subdirectories of the klangk repo, so installing from npm/GitHub requires either publishing to npm, splitting into separate repos, or using local paths during the build.
+- **Re-add `@demigodmode/pi-web-agent` to Dockerfile**: The `web_explore` tool (web search/browsing for the LLM) was removed from the Docker image in an earlier commit. Re-add `pi install npm:@demigodmode/pi-web-agent` to the Dockerfile so workspaces have web search capability. The system prompt already references `web_explore` with "if available."
 - **Lock npm extension versions**: The `pi install npm:pi-subagents` commands in the Dockerfile install whatever `latest` resolves to at build time, with no lock file. Pin to specific versions (e.g., `pi install npm:pi-subagents@0.25.0`) or find a way to lock versions so builds are reproducible.
 
 ## CI
