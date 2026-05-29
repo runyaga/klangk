@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'auth_service.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 
 class VerifyPage extends StatefulWidget {
   final String token;
@@ -74,7 +74,7 @@ class _VerifyPageState extends State<VerifyPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const BarkLogo(height: 80),
+                const KlangkLogo(height: 80),
                 const SizedBox(height: 8),
                 Text(
                   'Email Verification',

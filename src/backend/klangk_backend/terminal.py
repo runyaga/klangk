@@ -38,7 +38,7 @@ class TerminalSession:
         # Build environment for the exec
         env = ["TERM=xterm-256color"]
         if command_override is not None:
-            env.append(f"BARK_CMD_OVERRIDE={command_override}")
+            env.append(f"KLANGK_CMD_OVERRIDE={command_override}")
 
         # Build the command: env -u KEY ... /bin/bash
         # Strip sensitive env vars from the terminal session.
@@ -46,7 +46,7 @@ class TerminalSession:
         for key in os.environ:
             if key.startswith(
                 (
-                    "BARK_LLM_API_KEY",
+                    "KLANGK_LLM_API_KEY",
                     "ANTHROPIC_",
                     "OPENAI_",
                     "GOOGLE_",
@@ -73,7 +73,7 @@ class TerminalSession:
                 stdin=True,
                 stdout=True,
                 stderr=True,
-                user="bark",
+                user="klangk",
                 workdir="/work",
                 environment=env,
             )

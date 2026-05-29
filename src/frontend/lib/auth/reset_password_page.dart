@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'auth_service.dart';
 import '../utils/page_title.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 
 class ResetPasswordPage extends StatefulWidget {
   final String token;
@@ -88,7 +88,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const BarkLogo(height: 80),
+                  const KlangkLogo(height: 80),
                   const SizedBox(height: 24),
                   Text('Missing reset token.',
                       style: TextStyle(
@@ -117,7 +117,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const BarkLogo(height: 80),
+                  const KlangkLogo(height: 80),
                   const SizedBox(height: 24),
                   Text(
                     'Reset Password',

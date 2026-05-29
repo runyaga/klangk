@@ -5,18 +5,18 @@ set -e
 
 git config --global --add safe.directory /work 2>/dev/null
 
-PI_AGENT_DIR="/home/bark/.pi/agent"
+PI_AGENT_DIR="/home/klangk/.pi/agent"
 export PI_CODING_AGENT_DIR="$PI_AGENT_DIR"
-SESSION_DIR="/home/bark/.pi/sessions"
+SESSION_DIR="/home/klangk/.pi/sessions"
 
-# Set up Pi agent config (from build-time /opt/bark).
-# /home/bark is a persistent bind mount, so clean the agent dir first to
+# Set up Pi agent config (from build-time /opt/klangk).
+# /home/klangk is a persistent bind mount, so clean the agent dir first to
 # avoid stale files from previous container starts.
 rm -rf "$PI_AGENT_DIR"
 mkdir -p "$PI_AGENT_DIR/bin"
 # Symlink extensions and npm packages from the read-only image.
-ln -sf /opt/bark/pi-agent/extensions "$PI_AGENT_DIR/extensions"
-ln -sf /opt/bark/pi-agent/npm "$PI_AGENT_DIR/npm"
+ln -sf /opt/klangk/pi-agent/extensions "$PI_AGENT_DIR/extensions"
+ln -sf /opt/klangk/pi-agent/npm "$PI_AGENT_DIR/npm"
 
 # Symlink system fd/rg into Pi's bin dir so it doesn't re-download them
 ln -sf /usr/bin/fd "$PI_AGENT_DIR/bin/fd"
@@ -28,11 +28,11 @@ cat >"$PI_AGENT_DIR/models.json" <<EOF
 {
   "providers": {
     "llm-proxy": {
-      "baseUrl": "$BARK_LLM_PROXY_URL",
+      "baseUrl": "$KLANGK_LLM_PROXY_URL",
       "api": "openai-completions",
       "apiKey": "proxy",
       "models": [
-        { "id": "$BARK_LLM_MODEL" }
+        { "id": "$KLANGK_LLM_MODEL" }
       ]
     }
   }
@@ -42,12 +42,12 @@ EOF
 # Merge runtime LLM config into build-time settings (which has "packages"
 # from pi install). The npm dir is symlinked above so Pi finds the packages
 # without reinstalling.
-jq --arg model "$BARK_LLM_MODEL" '. + {defaultProvider: "llm-proxy", defaultModel: $model}' \
-  /opt/bark/pi-agent/settings.json >"$PI_AGENT_DIR/settings.json"
+jq --arg model "$KLANGK_LLM_MODEL" '. + {defaultProvider: "llm-proxy", defaultModel: $model}' \
+  /opt/klangk/pi-agent/settings.json >"$PI_AGENT_DIR/settings.json"
 
 # Build system prompt file from static template + registered extension tools
 SYSTEM_PROMPT_FILE="$PI_AGENT_DIR/system-prompt.md"
-cp /opt/bark/system-prompt.md "$SYSTEM_PROMPT_FILE"
+cp /opt/klangk/system-prompt.md "$SYSTEM_PROMPT_FILE"
 
 if [ -d "$PI_AGENT_DIR/extensions" ] && [ "$(ls "$PI_AGENT_DIR/extensions"/*.ts 2>/dev/null)" ]; then
   echo "" >>"$SYSTEM_PROMPT_FILE"
@@ -66,13 +66,13 @@ PI_ARGS="--no-context-files --session-dir $SESSION_DIR"
 PI_ARGS="$PI_ARGS --append-system-prompt $SYSTEM_PROMPT_FILE"
 
 # Add enabled skills via Pi's native --skill flag.
-# BARK_SKILLS is a comma-separated list of skill directory names.
-# Skills are expected at /opt/bark/skills/<name>/ (user-mounted).
-SKILLS_DIR="/opt/bark/skills"
-if [ -n "$BARK_SKILLS" ] && [ -d "$SKILLS_DIR" ]; then
+# KLANGK_SKILLS is a comma-separated list of skill directory names.
+# Skills are expected at /opt/klangk/skills/<name>/ (user-mounted).
+SKILLS_DIR="/opt/klangk/skills"
+if [ -n "$KLANGK_SKILLS" ] && [ -d "$SKILLS_DIR" ]; then
   OLD_IFS="$IFS"
   IFS=','
-  for skill_name in $BARK_SKILLS; do
+  for skill_name in $KLANGK_SKILLS; do
     skill_name=$(echo "$skill_name" | tr -d ' ')
     [ -z "$skill_name" ] && continue
     if [ -d "$SKILLS_DIR/$skill_name" ]; then

@@ -4,7 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-from bark_backend.dockerexec import ExecSession
+from klangk_backend.dockerexec import ExecSession
 
 
 def _mock_proc(stdout_data=b"", returncode=None):

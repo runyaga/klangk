@@ -7,7 +7,7 @@ import '../ws/ws_client.dart';
 ///
 /// Built-in actions (fetch) are handled directly. All other actions
 /// are dispatched to the [ToolPluginRegistry] which holds handlers
-/// registered by Bark plugins.
+/// registered by Klangk plugins.
 class BrowserDelegate {
   final WsClient _client;
   final http.Client _httpClient;

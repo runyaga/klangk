@@ -1,9 +1,9 @@
 import { Type } from "@sinclair/typebox";
 
 export default function (pi: any) {
-  // Parse BARK_PORT_MAPPINGS: "8000:9000,8001:9001,8002:9002,..."
+  // Parse KLANGK_PORT_MAPPINGS: "8000:9000,8001:9001,8002:9002,..."
   const portMap: Map<number, number> = new Map();
-  const mappingsStr = process.env.BARK_PORT_MAPPINGS || "";
+  const mappingsStr = process.env.KLANGK_PORT_MAPPINGS || "";
   for (const pair of mappingsStr.split(",")) {
     const [container, host] = pair.split(":").map(Number);
     if (!isNaN(container) && !isNaN(host)) {
@@ -42,10 +42,10 @@ export default function (pi: any) {
           details: {},
         };
       }
-      const proto = process.env.BARK_HOSTING_PROTO || "http";
-      const hostname = process.env.BARK_HOSTING_HOSTNAME || "localhost";
-      const basePath = process.env.BARK_HOSTING_BASE_PATH || "";
-      const workspaceId = process.env.BARK_WORKSPACE_ID || "";
+      const proto = process.env.KLANGK_HOSTING_PROTO || "http";
+      const hostname = process.env.KLANGK_HOSTING_HOSTNAME || "localhost";
+      const basePath = process.env.KLANGK_HOSTING_BASE_PATH || "";
+      const workspaceId = process.env.KLANGK_WORKSPACE_ID || "";
       const url = `${proto}://${hostname}${basePath}/hosted/${workspaceId}/${externalPort}/`;
       return {
         content: [

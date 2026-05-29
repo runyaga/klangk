@@ -41,19 +41,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      BARK_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-      BARK_LLM_BASE_URL: https://ollama.com/v1
-      BARK_LLM_MODEL: gemma4:31b
-      BARK_JWT_SECRET: e2e-test-secret
-      BARK_DEFAULT_USER: admin@plope.com
-      BARK_DEFAULT_PASSWORD: admin
-      BARK_TEST_MODE: "1"
+      KLANGK_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      KLANGK_LLM_BASE_URL: https://ollama.com/v1
+      KLANGK_LLM_MODEL: gemma4:31b
+      KLANGK_JWT_SECRET: e2e-test-secret
+      KLANGK_DEFAULT_USER: admin@plope.com
+      KLANGK_DEFAULT_PASSWORD: admin
+      KLANGK_TEST_MODE: "1"
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/devenv-setup
         with:
-          build-tasks: bark:docker-build bark:flutter-build
+          build-tasks: klangk:docker-build klangk:flutter-build
 
       - name: Run E2E tests
         run: |

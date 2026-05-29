@@ -1,5 +1,5 @@
 /// Tests for the container-stopped overlay logic.
-/// WorkspacePage can't be tested directly (depends on bark_plugins which
+/// WorkspacePage can't be tested directly (depends on klangk_plugins which
 /// uses dart:js_interop). Instead we extract and test the overlay widget
 /// and the event→state logic separately.
 import 'package:flutter/material.dart';

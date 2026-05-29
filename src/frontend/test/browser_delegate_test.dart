@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:bark_frontend/ws/ws_client.dart';
-import 'package:bark_frontend/browser/browser_delegate.dart';
+import 'package:klangk_frontend/ws/ws_client.dart';
+import 'package:klangk_frontend/browser/browser_delegate.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -102,8 +102,8 @@ void main() {
       registry = ToolPluginRegistry();
       testPlugin = _TestPlugin();
       registry.register(testPlugin);
-      delegate = BrowserDelegate(client,
-          httpClient: mockHttp, registry: registry);
+      delegate =
+          BrowserDelegate(client, httpClient: mockHttp, registry: registry);
       delegate.start();
     });
 
@@ -237,8 +237,8 @@ void main() {
         return http.Response('post-result', 201);
       });
       delegate.stop();
-      delegate = BrowserDelegate(client,
-          httpClient: postClient, registry: registry);
+      delegate =
+          BrowserDelegate(client, httpClient: postClient, registry: registry);
       delegate.start();
 
       channel.serverSend({
@@ -266,8 +266,8 @@ void main() {
         requests.add(request);
         return http.Response('ok', 200);
       });
-      delegate = BrowserDelegate(client,
-          httpClient: headerClient, registry: registry);
+      delegate =
+          BrowserDelegate(client, httpClient: headerClient, registry: registry);
       delegate.start();
 
       channel.serverSend({
@@ -315,8 +315,8 @@ void main() {
       final errorClient = MockClient((request) async {
         throw Exception('network error');
       });
-      delegate = BrowserDelegate(client,
-          httpClient: errorClient, registry: registry);
+      delegate =
+          BrowserDelegate(client, httpClient: errorClient, registry: registry);
       delegate.start();
 
       channel.serverSend({

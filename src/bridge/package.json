@@ -1,7 +1,7 @@
 {
-  "name": "@bark/bridge",
+  "name": "@klangk/bridge",
   "version": "0.1.0",
-  "description": "Browser-delegated tool calls for Bark Pi extensions",
+  "description": "Browser-delegated tool calls for Klangk Pi extensions",
   "main": "index.js",
   "types": "index.d.ts",
   "license": "MIT",

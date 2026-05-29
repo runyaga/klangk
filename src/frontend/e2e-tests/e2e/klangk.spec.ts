@@ -18,7 +18,7 @@ import {
   tryLogin,
 } from "./helpers";
 
-test.describe("Bark E2E", () => {
+test.describe("Klangk E2E", () => {
   test("index.html has cache-busted flutter_bootstrap.js", async ({
     request,
   }) => {
@@ -64,7 +64,7 @@ test.describe("Bark E2E", () => {
 
     try {
       const title = await page.title();
-      expect(title).toMatch(/^Bark - /);
+      expect(title).toMatch(/^Klangk - /);
       expect(title).not.toMatch(/Workspaces/i);
     } finally {
       await cleanup();
@@ -693,7 +693,7 @@ test.describe("Bark E2E", () => {
     const userId = payload.sub;
 
     // Write a file to the host home directory before starting the container
-    const dataDir = process.env.BARK_E2E_DATA_DIR!;
+    const dataDir = process.env.KLANGK_E2E_DATA_DIR!;
     const homePath = `${dataDir}/workspaces/${userId}/home/${workspaceId}`;
     const { mkdirSync, writeFileSync } = await import("fs");
     mkdirSync(homePath, { recursive: true });
@@ -750,7 +750,7 @@ test.describe("Bark E2E", () => {
     // Check if test mode is enabled
     const getResp = await request.get(`${API_BASE}/api/test/idle-timeout`);
     if (!getResp.ok()) {
-      test.skip(true, "BARK_TEST_MODE not enabled");
+      test.skip(true, "KLANGK_TEST_MODE not enabled");
       return;
     }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@bark/beep",
+  "name": "@klangk/beep",
   "version": "1.0.0",
   "description": "Play beep sounds to get the user's attention",
   "pi": {

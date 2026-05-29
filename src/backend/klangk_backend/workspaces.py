@@ -9,7 +9,9 @@ from .util import resolve_env_secret
 logger = logging.getLogger(__name__)
 
 _data_dir = Path(
-    resolve_env_secret("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
+    resolve_env_secret(
+        "KLANGK_DATA_DIR", str(Path.home() / ".klangk" / "data")
+    )
 )
 WORKSPACES_ROOT = _data_dir / "workspaces"
 
@@ -18,7 +20,7 @@ async def archive_user_data(user_id: str, email: str) -> Path | None:
     """Archive a user's workspace data to a tar.xz file before deletion.
 
     Returns the archive path, or None if the user had no data directory.
-    The archive is saved to $BARK_DATA_DIR/workspaces/{user_id}-{email}.tar.xz
+    The archive is saved to $KLANGK_DATA_DIR/workspaces/{user_id}-{email}.tar.xz
     """
     user_dir = WORKSPACES_ROOT / user_id
     if not user_dir.exists():

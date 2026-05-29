@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_service.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 import '../widgets/app_bar_actions.dart';
 
 class AdminUsersPage extends StatefulWidget {
@@ -160,7 +160,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                BarkLogo(height: 36),
+                KlangkLogo(height: 36),
                 SizedBox(width: 12),
                 Text('User Management', style: TextStyle(fontSize: 16)),
               ],

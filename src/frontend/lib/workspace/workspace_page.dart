@@ -6,9 +6,9 @@ import 'package:provider/provider.dart';
 import '../ws/ws_client.dart';
 import '../auth/auth_service.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
-import 'package:bark_plugins/bark_plugins.dart';
+import 'package:klangk_plugins/klangk_plugins.dart';
 import '../utils/page_title.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 import '../widgets/app_bar_actions.dart';
 import '../file_viewer/file_viewer_panel.dart';
 import '../layout/ide_layout.dart';
@@ -216,7 +216,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const BarkLogo(height: 36),
+                const KlangkLogo(height: 36),
                 if (_workspaceName.isNotEmpty) ...[
                   const SizedBox(width: 12),
                   Text(_workspaceName, style: const TextStyle(fontSize: 16)),

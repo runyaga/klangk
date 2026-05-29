@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_frontend/ws/ws_client.dart';
-import 'package:bark_frontend/auth/auth_service.dart';
+import 'package:klangk_frontend/ws/ws_client.dart';
+import 'package:klangk_frontend/auth/auth_service.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -171,7 +171,7 @@ void main() {
     });
 
     test('connect success via testChannelFactory', () async {
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'test-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'test-token'});
       final channel = _FakeWebSocketChannel();
       WsClient.testChannelFactory = (_) => channel;
 
@@ -189,7 +189,7 @@ void main() {
     });
 
     test('connect failure emits error', () async {
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'test-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'test-token'});
       final failChannel = _FakeWebSocketChannel();
       failChannel.failReady = true;
       WsClient.testChannelFactory = (_) => failChannel;

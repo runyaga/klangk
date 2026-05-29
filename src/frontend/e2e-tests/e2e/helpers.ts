@@ -5,7 +5,7 @@ import { execSync } from "child_process";
 // tests are fully isolated — logout in one test can't kill another test's
 // containers, and parallel execution is safe because no state is shared.
 
-export const BACKEND_PORT = process.env.BARK_E2E_PORT || "18997";
+export const BACKEND_PORT = process.env.KLANGK_E2E_PORT || "18997";
 export const API_BASE = `http://localhost:${BACKEND_PORT}`;
 export const TEST_PASSWORD = "testpass";
 
@@ -260,7 +260,7 @@ export async function createAndOpenWorkspace(
 
 export function dockerContainersForWorkspace(workspaceId: string): string[] {
   const output = execSync(
-    `docker ps --filter "label=bark.workspace-id=${workspaceId}" --format "{{.ID}}"`,
+    `docker ps --filter "label=klangk.workspace-id=${workspaceId}" --format "{{.ID}}"`,
     { encoding: "utf-8" },
   );
   return output.trim().split("\n").filter(Boolean);

@@ -13,10 +13,10 @@ from .util import resolve_env_secret
 
 # --- Rate limiting constants ---
 LOGIN_LOCKOUT_WINDOW = int(
-    resolve_env_secret("BARK_LOGIN_LOCKOUT_WINDOW", "300")
+    resolve_env_secret("KLANGK_LOGIN_LOCKOUT_WINDOW", "300")
 )
 LOGIN_LOCKOUT_DURATION = int(
-    resolve_env_secret("BARK_LOGIN_LOCKOUT_DURATION", "900")
+    resolve_env_secret("KLANGK_LOGIN_LOCKOUT_DURATION", "900")
 )
 
 
@@ -54,16 +54,18 @@ def _should_lockout(attempt_info: dict | None) -> bool:
 
 
 SECRET_KEY = resolve_env_secret(
-    "BARK_JWT_SECRET", "bark-dev-secret-change-in-production"
+    "KLANGK_JWT_SECRET", "klangk-dev-secret-change-in-production"
 )
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
-MIN_PASSWORD_LENGTH = int(resolve_env_secret("BARK_MIN_PASSWORD_LENGTH", "4"))
+MIN_PASSWORD_LENGTH = int(
+    resolve_env_secret("KLANGK_MIN_PASSWORD_LENGTH", "4")
+)
 
-# Set BARK_LOGIN_LOCKOUT_FAILURES=0 to disable login lockout.
+# Set KLANGK_LOGIN_LOCKOUT_FAILURES=0 to disable login lockout.
 LOGIN_LOCKOUT_FAILURES = int(
-    resolve_env_secret("BARK_LOGIN_LOCKOUT_FAILURES", "0")
+    resolve_env_secret("KLANGK_LOGIN_LOCKOUT_FAILURES", "0")
 )
 
 security = HTTPBearer(auto_error=False)

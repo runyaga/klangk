@@ -5,12 +5,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "${DEVENV_ROOT:-$SCRIPT_DIR/..}"
 
-IMAGE="ghcr.io/mcdonc/bark/bark-base:latest"
+IMAGE="ghcr.io/mcdonc/klangk/klangk-base:latest"
 
 echo "==> Building base image"
 docker build --platform linux/amd64 \
-  --build-arg BARK_UID="$(id -u)" \
-  --build-arg BARK_GID="$(id -g)" \
+  --build-arg KLANGK_UID="$(id -u)" \
+  --build-arg KLANGK_GID="$(id -g)" \
   -f src/docker/Dockerfile.base \
   -t "$IMAGE" "$@" src/docker/
 

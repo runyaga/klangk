@@ -1,5 +1,5 @@
 {
-  "name": "bark-e2e-tests",
+  "name": "klangk-e2e-tests",
   "private": true,
   "scripts": {
     "test": "npx playwright test",

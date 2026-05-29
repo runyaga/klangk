@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_frontend/ws/ws_client.dart';
-import 'package:bark_frontend/terminal/container_terminal.dart';
+import 'package:klangk_frontend/ws/ws_client.dart';
+import 'package:klangk_frontend/terminal/container_terminal.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 class _MockWsClient extends WsClient {

@@ -7,7 +7,7 @@ import '../auth/auth_service.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 import '../utils/page_title.dart';
 import '../widgets/app_bar_actions.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 
 const _validMountOptions = {
   'ro',
@@ -97,7 +97,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
 
   Future<void> _createWorkspace() async {
     final imageData = await _fetchImages();
-    final defaultImage = imageData?['default'] as String? ?? 'bark-pi';
+    final defaultImage = imageData?['default'] as String? ?? 'klangk-pi';
     final allowedImages =
         (imageData?['allowed'] as List?)?.cast<String>() ?? [defaultImage];
 
@@ -481,7 +481,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
 
   Future<void> _editWorkspace(Map<String, dynamic> ws) async {
     final imageData = await _fetchImages();
-    final defaultImage = imageData?['default'] as String? ?? 'bark-pi';
+    final defaultImage = imageData?['default'] as String? ?? 'klangk-pi';
     final allowedImages =
         (imageData?['allowed'] as List?)?.cast<String>() ?? [defaultImage];
 
@@ -793,7 +793,7 @@ class _WorkspaceListPageState extends State<WorkspaceListPage> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                BarkLogo(height: 36),
+                KlangkLogo(height: 36),
                 SizedBox(width: 12),
                 Text('Workspaces', style: TextStyle(fontSize: 16)),
               ],

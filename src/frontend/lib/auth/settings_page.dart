@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'auth_service.dart';
 import '../utils/page_title.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 import '../widgets/app_bar_actions.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -149,7 +149,7 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const BarkLogo(height: 36),
+            const KlangkLogo(height: 36),
             const SizedBox(width: 12),
             const Text('Settings', style: TextStyle(fontSize: 16)),
           ],

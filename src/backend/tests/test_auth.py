@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from jose import jwt
 
-from bark_backend import auth, model
+from klangk_backend import auth, model
 
 
 class TestPasswordHashing:
@@ -157,16 +157,16 @@ class TestLogin:
 class TestLoginRateLimit:
     """ "Tests for login brute-force protection.
 
-    These require BARK_LOGIN_LOCKOUT_FAILURES > 0 (default is 0 = disabled),
+    These require KLANGK_LOGIN_LOCKOUT_FAILURES > 0 (default is 0 = disabled),
     so the class setup/teardown temporarily sets it to 5 and reloads
     the auth module.
     """
 
     def setup_method(self):
-        self._prev = os.environ.get("BARK_LOGIN_LOCKOUT_FAILURES")
-        os.environ["BARK_LOGIN_LOCKOUT_FAILURES"] = "5"
+        self._prev = os.environ.get("KLANGK_LOGIN_LOCKOUT_FAILURES")
+        os.environ["KLANGK_LOGIN_LOCKOUT_FAILURES"] = "5"
         import importlib
-        import bark_backend.auth as a
+        import klangk_backend.auth as a
 
         importlib.reload(a)
         globals()["auth"] = a
@@ -174,11 +174,11 @@ class TestLoginRateLimit:
 
     def teardown_method(self):
         if self._prev is None:
-            os.environ.pop("BARK_LOGIN_LOCKOUT_FAILURES", None)
+            os.environ.pop("KLANGK_LOGIN_LOCKOUT_FAILURES", None)
         else:
-            os.environ["BARK_LOGIN_LOCKOUT_FAILURES"] = self._prev
+            os.environ["KLANGK_LOGIN_LOCKOUT_FAILURES"] = self._prev
         import importlib
-        import bark_backend.auth as a
+        import klangk_backend.auth as a
 
         importlib.reload(a)
         globals()["auth"] = a

@@ -1,23 +1,23 @@
 /**
- * @bark/bridge — Browser-delegated tool calls for Bark Pi extensions.
+ * @klangk/bridge — Browser-delegated tool calls for Klangk Pi extensions.
  *
- * Routes requests through the Bark backend to the user's browser,
+ * Routes requests through the Klangk backend to the user's browser,
  * which executes them with its session credentials (cookies, OAuth tokens, etc.).
  */
 
 function getConfig() {
-  const bridgeUrl = process.env.BARK_BRIDGE_URL;
-  const token = process.env.BARK_BRIDGE_TOKEN;
+  const bridgeUrl = process.env.KLANGK_BRIDGE_URL;
+  const token = process.env.KLANGK_BRIDGE_TOKEN;
   if (!bridgeUrl) {
     throw new Error(
-      "@bark/bridge: BARK_BRIDGE_URL is not set. " +
-        "Are you running inside a Bark container?",
+      "@klangk/bridge: KLANGK_BRIDGE_URL is not set. " +
+        "Are you running inside a Klangk container?",
     );
   }
   if (!token) {
     throw new Error(
-      "@bark/bridge: BARK_BRIDGE_TOKEN is not set. " +
-        "Are you running inside a Bark container?",
+      "@klangk/bridge: KLANGK_BRIDGE_TOKEN is not set. " +
+        "Are you running inside a Klangk container?",
     );
   }
   return {
@@ -60,7 +60,7 @@ async function browserFetch(url, options = {}) {
       text = `(status ${resp.status})`;
     }
     throw new Error(
-      `@bark/bridge: fetch request failed (${resp.status}): ${text}`,
+      `@klangk/bridge: fetch request failed (${resp.status}): ${text}`,
     );
   }
 
@@ -98,7 +98,7 @@ async function browserAction(action, payload = {}) {
       text = `(status ${resp.status})`;
     }
     throw new Error(
-      `@bark/bridge: action '${action}' failed (${resp.status}): ${text}`,
+      `@klangk/bridge: action '${action}' failed (${resp.status}): ${text}`,
     );
   }
 
@@ -110,8 +110,8 @@ async function browserAction(action, payload = {}) {
  * @returns {Promise<boolean>}
  */
 async function isBridgeAvailable() {
-  const bridgeUrl = process.env.BARK_BRIDGE_URL;
-  const token = process.env.BARK_BRIDGE_TOKEN;
+  const bridgeUrl = process.env.KLANGK_BRIDGE_URL;
+  const token = process.env.KLANGK_BRIDGE_TOKEN;
   if (!bridgeUrl || !token) return false;
   try {
     const resp = await fetch(`${bridgeUrl}/health`, {

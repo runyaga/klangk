@@ -1,5 +1,5 @@
 {
-  "name": "@bark/word-count",
+  "name": "@klangk/word-count",
   "version": "1.0.0",
   "description": "Fast file analysis with line, word, and character counts",
   "pi": {

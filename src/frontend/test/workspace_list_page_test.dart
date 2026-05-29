@@ -7,8 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:bark_frontend/auth/auth_service.dart';
-import 'package:bark_frontend/workspace/workspace_list_page.dart';
+import 'package:klangk_frontend/auth/auth_service.dart';
+import 'package:klangk_frontend/workspace/workspace_list_page.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 void main() {
@@ -62,11 +62,11 @@ void main() {
       expect(find.byIcon(Icons.logout), findsOneWidget);
     });
 
-    testWidgets('shows Bark logo', (tester) async {
+    testWidgets('shows Klangk logo', (tester) async {
       await tester.pumpWidget(buildPage());
       await tester.pump();
 
-      expect(find.text('Bark'), findsOneWidget);
+      expect(find.text('Klangk'), findsOneWidget);
       expect(find.byIcon(Icons.pets), findsOneWidget);
     });
 
@@ -340,7 +340,7 @@ void main() {
         'email': 'alice@example.com',
         'roles': ['user'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces') {
           return http.Response(jsonEncode([]), 200);
@@ -535,7 +535,7 @@ void main() {
         'email': 'admin@example.com',
         'roles': ['admin'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces') {
           return http.Response(jsonEncode([]), 200);
@@ -556,7 +556,7 @@ void main() {
         'email': 'user@example.com',
         'roles': ['user'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces') {
           return http.Response(jsonEncode([]), 200);
@@ -629,8 +629,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark', 'bark-custom'],
+              'default': 'klangk',
+              'allowed': ['klangk', 'klangk-custom'],
             }),
             200,
           );
@@ -657,12 +657,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // Dropdown should show both images
-      expect(find.text('bark'), findsOneWidget);
+      expect(find.text('klangk'), findsOneWidget);
 
       // Select non-default image
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('bark-custom').last);
+      await tester.tap(find.text('klangk-custom').last);
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField).first, 'ImgWS');
@@ -672,7 +672,7 @@ void main() {
       expect(postedBody, isNotNull);
       final body = jsonDecode(postedBody!) as Map<String, dynamic>;
       expect(body['name'], 'ImgWS');
-      expect(body['image'], 'bark-custom');
+      expect(body['image'], 'klangk-custom');
     });
 
     testWidgets('create dialog sends default_command when provided',
@@ -705,14 +705,14 @@ void main() {
 
       // Enter name and command
       await tester.enterText(find.byType(TextField).first, 'CmdWS');
-      await tester.enterText(find.byType(TextField).at(1), 'bark-pi');
+      await tester.enterText(find.byType(TextField).at(1), 'klangk-pi');
       await tester.tap(find.text('Create'));
       await tester.pumpAndSettle();
 
       expect(postedBody, isNotNull);
       final body = jsonDecode(postedBody!) as Map<String, dynamic>;
       expect(body['name'], 'CmdWS');
-      expect(body['default_command'], 'bark-pi');
+      expect(body['default_command'], 'klangk-pi');
     });
 
     testWidgets('create dialog submit via command field onSubmitted',
@@ -915,7 +915,7 @@ void main() {
         'email': 'admin@example.com',
         'roles': ['admin'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       testAuthHttpClientOverride = MockClient((request) async {
         if (request.url.path == '/workspaces') {
           return http.Response(jsonEncode([]), 200);
@@ -964,7 +964,7 @@ void main() {
                 'id': 'ws-1',
                 'name': 'My WS',
                 'container_id': null,
-                'default_command': 'bark-pi',
+                'default_command': 'klangk-pi',
                 'created_at': '2026-05-28',
               },
             ]),
@@ -985,7 +985,7 @@ void main() {
       final textFields = tester.widgetList<TextField>(find.byType(TextField));
       final texts = textFields.map((tf) => tf.controller!.text).toList();
       expect(texts, contains('My WS'));
-      expect(texts, contains('bark-pi'));
+      expect(texts, contains('klangk-pi'));
     });
 
     testWidgets('edit dialog saves default command', (tester) async {
@@ -1008,8 +1008,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark', 'bark-custom'],
+              'default': 'klangk',
+              'allowed': ['klangk', 'klangk-custom'],
             }),
             200,
           );
@@ -1057,8 +1057,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark', 'bark-custom'],
+              'default': 'klangk',
+              'allowed': ['klangk', 'klangk-custom'],
             }),
             200,
           );
@@ -1079,7 +1079,7 @@ void main() {
       // Change image
       await tester.tap(find.byType(DropdownButtonFormField<String>));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('bark-custom').last);
+      await tester.tap(find.text('klangk-custom').last);
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Save'));
@@ -1087,7 +1087,7 @@ void main() {
 
       expect(putBody, isNotNull);
       final body = jsonDecode(putBody!) as Map<String, dynamic>;
-      expect(body['image'], 'bark-custom');
+      expect(body['image'], 'klangk-custom');
     });
 
     testWidgets('edit dialog submit via Enter', (tester) async {
@@ -1318,8 +1318,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark'],
+              'default': 'klangk',
+              'allowed': ['klangk'],
             }),
             200,
           );
@@ -1423,8 +1423,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark']
+              'default': 'klangk',
+              'allowed': ['klangk']
             }),
             200,
           );
@@ -1593,8 +1593,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark']
+              'default': 'klangk',
+              'allowed': ['klangk']
             }),
             200,
           );
@@ -1701,8 +1701,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark']
+              'default': 'klangk',
+              'allowed': ['klangk']
             }),
             200,
           );
@@ -1797,8 +1797,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark']
+              'default': 'klangk',
+              'allowed': ['klangk']
             }),
             200,
           );
@@ -1856,8 +1856,8 @@ void main() {
         if (request.url.path == '/images' && request.method == 'GET') {
           return http.Response(
             jsonEncode({
-              'default': 'bark',
-              'allowed': ['bark']
+              'default': 'klangk',
+              'allowed': ['klangk']
             }),
             200,
           );

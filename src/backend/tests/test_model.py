@@ -2,7 +2,7 @@
 
 import pytest
 
-from bark_backend import model
+from klangk_backend import model
 
 
 class TestUsers:
@@ -236,7 +236,7 @@ class TestDefaultCommand:
 
 class TestWriteDefaultCommand:
     def test_write_and_clear(self, tmp_path, monkeypatch):
-        from bark_backend import workspaces
+        from klangk_backend import workspaces
 
         monkeypatch.setattr(workspaces, "WORKSPACES_ROOT", tmp_path)
         workspaces.write_default_command("u1", "ws1", "pi")
@@ -247,7 +247,7 @@ class TestWriteDefaultCommand:
         assert not cmd_file.exists()
 
     def test_clear_nonexistent(self, tmp_path, monkeypatch):
-        from bark_backend import workspaces
+        from klangk_backend import workspaces
 
         monkeypatch.setattr(workspaces, "WORKSPACES_ROOT", tmp_path)
         # Should not raise even if file doesn't exist

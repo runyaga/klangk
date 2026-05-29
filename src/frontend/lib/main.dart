@@ -19,7 +19,7 @@ void main() {
           update: (_, auth, client) => client!..updateAuth(auth),
         ),
       ],
-      child: BarkApp(initialLocation: initialLocation),
+      child: KlangkApp(initialLocation: initialLocation),
     ),
   );
 }

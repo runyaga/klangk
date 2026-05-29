@@ -1,4 +1,4 @@
-"""CLI configuration storage (~/.config/bark/cli.toml)."""
+"""CLI configuration storage (~/.config/klangk/cli.toml)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import tomli_w
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_CONFIG_PATH = Path.home() / ".config" / "bark" / "cli.toml"
+_CONFIG_PATH = Path.home() / ".config" / "klangk" / "cli.toml"
 
 
 @dataclass

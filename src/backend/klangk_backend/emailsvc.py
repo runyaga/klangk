@@ -12,26 +12,26 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_password() -> str | None:
-    """Resolve BARK_SMTP_PASSWORD via resolve_env_secret."""
-    return resolve_env_secret("BARK_SMTP_PASSWORD")
+    """Resolve KLANGK_SMTP_PASSWORD via resolve_env_secret."""
+    return resolve_env_secret("KLANGK_SMTP_PASSWORD")
 
 
 def smtp_config() -> dict:
     """Read SMTP configuration from environment at call time."""
     return {
-        "host": resolve_env_secret("BARK_SMTP_HOST"),
-        "port": int(resolve_env_secret("BARK_SMTP_PORT", "587")),
-        "user": resolve_env_secret("BARK_SMTP_USER"),
+        "host": resolve_env_secret("KLANGK_SMTP_HOST"),
+        "port": int(resolve_env_secret("KLANGK_SMTP_PORT", "587")),
+        "user": resolve_env_secret("KLANGK_SMTP_USER"),
         "password": _resolve_password(),
-        "from_addr": resolve_env_secret("BARK_SMTP_FROM"),
-        "use_tls": resolve_env_secret("BARK_SMTP_USE_TLS", "true").lower()
+        "from_addr": resolve_env_secret("KLANGK_SMTP_FROM"),
+        "use_tls": resolve_env_secret("KLANGK_SMTP_USE_TLS", "true").lower()
         in ("true", "1"),
     }
 
 
 def use_smtp() -> bool:
     """Return True if SMTP is configured, False to use sendmail."""
-    return bool(resolve_env_secret("BARK_SMTP_HOST"))
+    return bool(resolve_env_secret("KLANGK_SMTP_HOST"))
 
 
 def build_message(to: str, subject: str, body: str) -> EmailMessage:
@@ -67,7 +67,7 @@ async def send_via_smtp(msg: EmailMessage) -> None:
 
 
 async def send_via_sendmail(msg: EmailMessage) -> None:
-    sendmail = resolve_env_secret("BARK_SENDMAIL_PATH", "sendmail")
+    sendmail = resolve_env_secret("KLANGK_SENDMAIL_PATH", "sendmail")
     logger.info("Using sendmail at: %s", sendmail)
     import shutil
 
@@ -98,12 +98,12 @@ async def send_email(to: str, subject: str, body: str) -> None:
         logger.info(
             "Sending email to %s via SMTP (%s)",
             to,
-            resolve_env_secret("BARK_SMTP_HOST"),
+            resolve_env_secret("KLANGK_SMTP_HOST"),
         )
         await send_via_smtp(msg)
     else:
         logger.info(
-            "Sending email to %s via sendmail (no BARK_SMTP_HOST set)", to
+            "Sending email to %s via sendmail (no KLANGK_SMTP_HOST set)", to
         )
         await send_via_sendmail(msg)
 
@@ -121,7 +121,7 @@ async def send_verification_email(to: str, verification_url: str) -> None:
     )
     text_body = (
         "Click the link below to verify your email address and "
-        "activate your Bark account:\n\n"
+        "activate your Klangk account:\n\n"
         f"<{verification_url}>\n\n"
         "This link expires in 72 hours.\n\n"
         "If you did not request this, you can ignore this email."
@@ -132,10 +132,10 @@ async def send_verification_email(to: str, verification_url: str) -> None:
         '<span style="display:inline-block;background:#E65100;'
         "color:#fff;border-radius:50%;width:48px;height:48px;"
         'line-height:48px;font-size:24px">&#128062;</span>'
-        '<h2 style="margin:8px 0 0">Bark</h2>'
+        '<h2 style="margin:8px 0 0">Klangk</h2>'
         "</div>"
         "<p>Click the link below to verify your email address and "
-        "activate your Bark account:</p>"
+        "activate your Klangk account:</p>"
         f'<p><a href="{verification_url}">Verify my account</a></p>'
         "<p>This link expires in 72 hours.</p>"
         "<p><small>If you did not request this, you can "
@@ -144,7 +144,7 @@ async def send_verification_email(to: str, verification_url: str) -> None:
     )
     cfg = smtp_config()
     msg = EmailMessage()
-    msg["Subject"] = "Verify your Bark account"
+    msg["Subject"] = "Verify your Klangk account"
     msg["From"] = cfg["from_addr"] or cfg["user"] or "noreply@localhost"
     msg["To"] = to
     msg.set_content(text_body)
@@ -164,7 +164,7 @@ async def send_password_reset_email(to: str, reset_url: str) -> None:
         reset_url,
     )
     text_body = (
-        "Click the link below to reset your Bark password:\n\n"
+        "Click the link below to reset your Klangk password:\n\n"
         f"<{reset_url}>\n\n"
         "This link expires in 1 hour.\n\n"
         "If you did not request this, you can ignore this email."
@@ -176,7 +176,7 @@ async def send_password_reset_email(to: str, reset_url: str) -> None:
         '<span style="display:inline-block;background:#E65100;'
         "color:#fff;border-radius:50%;width:48px;height:48px;"
         'line-height:48px;font-size:24px">&#128062;</span>'
-        '<h2 style="margin:8px 0 0">Bark</h2>'
+        '<h2 style="margin:8px 0 0">Klangk</h2>'
         "</div>"
         "<p>Click the link below to reset your password:</p>"
         f'<p><a href="{reset_url}">Reset my password</a></p>'
@@ -187,7 +187,7 @@ async def send_password_reset_email(to: str, reset_url: str) -> None:
     )
     cfg = smtp_config()
     msg = EmailMessage()
-    msg["Subject"] = "Reset your Bark password"
+    msg["Subject"] = "Reset your Klangk password"
     msg["From"] = cfg["from_addr"] or cfg["user"] or "noreply@localhost"
     msg["To"] = to
     msg.set_content(text_body)

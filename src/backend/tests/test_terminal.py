@@ -4,7 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-from bark_backend.terminal import TerminalSession
+from klangk_backend.terminal import TerminalSession
 
 
 def _mock_stream():
@@ -62,7 +62,7 @@ class TestStart:
         call_kwargs = container.exec.call_args
         assert call_kwargs[1]["tty"] is True
         assert call_kwargs[1]["stdin"] is True
-        assert call_kwargs[1]["user"] == "bark"
+        assert call_kwargs[1]["user"] == "klangk"
         assert call_kwargs[1]["workdir"] == "/work"
         exec_obj.start.assert_called_once()
         exec_obj.resize.assert_awaited_once_with(h=40, w=120)
@@ -71,7 +71,7 @@ class TestStart:
         await s.stop()
 
     async def test_start_unsets_sensitive_env_vars(self, monkeypatch):
-        monkeypatch.setenv("BARK_LLM_API_KEY", "secret")
+        monkeypatch.setenv("KLANGK_LLM_API_KEY", "secret")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "secret2")
 
         stream = _mock_stream()
@@ -92,7 +92,7 @@ class TestStart:
         unset_keys = [
             env_args[i + 1] for i, a in enumerate(env_args) if a == "-u"
         ]
-        assert "BARK_LLM_API_KEY" in unset_keys
+        assert "KLANGK_LLM_API_KEY" in unset_keys
         assert "ANTHROPIC_API_KEY" in unset_keys
 
         await s.stop()
@@ -109,7 +109,7 @@ class TestStart:
             await s.start(command_override="bash")
 
         call_kwargs = container.exec.call_args[1]
-        assert "BARK_CMD_OVERRIDE=bash" in call_kwargs["environment"]
+        assert "KLANGK_CMD_OVERRIDE=bash" in call_kwargs["environment"]
 
         await s.stop()
 
@@ -126,7 +126,7 @@ class TestStart:
 
         call_kwargs = container.exec.call_args[1]
         assert not any(
-            "BARK_CMD_OVERRIDE" in e for e in call_kwargs["environment"]
+            "KLANGK_CMD_OVERRIDE" in e for e in call_kwargs["environment"]
         )
 
         await s.stop()

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// Bark logo widget — orange rounded square with paw icon on top and "Bark" text below.
-class BarkLogo extends StatelessWidget {
+/// Klangk logo widget — orange rounded square with paw icon on top and "Klangk" text below.
+class KlangkLogo extends StatelessWidget {
   final double height;
 
-  const BarkLogo({super.key, this.height = 40});
+  const KlangkLogo({super.key, this.height = 40});
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +35,7 @@ class BarkLogo extends StatelessWidget {
           children: [
             Icon(Icons.pets, color: Colors.white, size: iconSize),
             Text(
-              'Bark',
+              'Klangk',
               style: TextStyle(
                 fontSize: fontSize,
                 fontWeight: FontWeight.w800,

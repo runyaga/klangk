@@ -7,7 +7,7 @@ without disrupting others.
 Each test creates its own workspace to avoid shared container
 state between tests.
 
-Requires: Docker running, bark image built.
+Requires: Docker running, klangk image built.
 
 Run with: devenv shell -- test-cli-e2e
 """
@@ -29,8 +29,8 @@ import websockets
 
 @pytest.fixture(scope="module")
 def server():
-    """Start a real Bark server (with nginx LLM proxy) for the test module."""
-    data_dir = tempfile.mkdtemp(prefix="bark-fanout-e2e-")
+    """Start a real Klangk server (with nginx LLM proxy) for the test module."""
+    data_dir = tempfile.mkdtemp(prefix="klangk-fanout-e2e-")
     port = "18996"
     nginx_port = "18994"
     project_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
@@ -38,15 +38,15 @@ def server():
     # Start nginx as an LLM proxy so containers can reach the LLM.
     nginx_proc = None
     nginx_log = os.path.join(data_dir, "nginx.log")
-    if os.environ.get("BARK_LLM_BASE_URL"):
+    if os.environ.get("KLANGK_LLM_BASE_URL"):
         log_fd = open(nginx_log, "w")
         nginx_proc = subprocess.Popen(
             [os.path.join(project_root, "scripts", "nginx.sh")],
             env={
                 **os.environ,
                 "DEVENV_STATE": data_dir,
-                "BARK_NGINX_PORT": nginx_port,
-                "BARK_PORT": port,
+                "KLANGK_NGINX_PORT": nginx_port,
+                "KLANGK_PORT": port,
             },
             stdout=log_fd,
             stderr=log_fd,
@@ -73,22 +73,22 @@ def server():
 
     env = {
         **os.environ,
-        "BARK_PORT": port,
-        "BARK_NGINX_PORT": nginx_port,
-        "BARK_DATA_DIR": data_dir,
-        "BARK_JWT_SECRET": "fanout-e2e-secret",
-        "BARK_DEFAULT_USER": "test@example.com",
-        "BARK_DEFAULT_PASSWORD": "testpass",
-        "BARK_TEST_MODE": "1",
-        "BARK_INSTANCE_ID": "fanout-e2e",
-        "BARK_IDLE_TIMEOUT_SECONDS": "300",
-        "BARK_PORT_RANGE_START": "9100",
+        "KLANGK_PORT": port,
+        "KLANGK_NGINX_PORT": nginx_port,
+        "KLANGK_DATA_DIR": data_dir,
+        "KLANGK_JWT_SECRET": "fanout-e2e-secret",
+        "KLANGK_DEFAULT_USER": "test@example.com",
+        "KLANGK_DEFAULT_PASSWORD": "testpass",
+        "KLANGK_TEST_MODE": "1",
+        "KLANGK_INSTANCE_ID": "fanout-e2e",
+        "KLANGK_IDLE_TIMEOUT_SECONDS": "300",
+        "KLANGK_PORT_RANGE_START": "9100",
         "LOGFIRE_TOKEN": "",
     }
     proc = subprocess.Popen(
         [
             "uvicorn",
-            "bark_backend.main:app",
+            "klangk_backend.main:app",
             "--host",
             "0.0.0.0",
             "--port",
@@ -143,7 +143,7 @@ def server():
             "ps",
             "-a",
             "--filter",
-            "label=bark.instance=fanout-e2e",
+            "label=klangk.instance=fanout-e2e",
             "-q",
         ],
         capture_output=True,

@@ -1,4 +1,4 @@
-"""Bark CLI — typer app."""
+"""Klangk CLI — typer app."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from rich.table import Table
 from .auth import login, logout as do_logout
 from .client import (
     AuthError,
-    BarkClient,
+    KlangkClient,
     WorkspaceNotFoundError,
     _ws_exec,
     _ws_shell,
@@ -24,8 +24,8 @@ from .config import CLIConfig
 from ..container import validate_mount_spec
 
 app = typer.Typer(
-    name="bark",
-    help="Bark — containerized development shell.",
+    name="klangk",
+    help="Klangk — containerized development shell.",
     rich_markup_mode="rich",
 )
 
@@ -39,8 +39,8 @@ def _cfg() -> CLIConfig:
     return _cfg_cache
 
 
-def _client() -> BarkClient:  # pragma: no cover
-    return BarkClient(_cfg())
+def _client() -> KlangkClient:  # pragma: no cover
+    return KlangkClient(_cfg())
 
 
 _err = Console(stderr=True)
@@ -50,7 +50,7 @@ def _require_auth() -> None:
     cfg = _cfg()
     if not cfg.auth.token:
         _err.print(
-            "[red]Not logged in[/red] — run [bold]bark login[/bold] first."
+            "[red]Not logged in[/red] — run [bold]klangk login[/bold] first."
         )
         raise typer.Exit(code=1)
 
@@ -61,7 +61,7 @@ def login_cmd(
     server: str | None = typer.Option(
         None,
         "--server",
-        help="Bark server URL (e.g. http://localhost:8995)",
+        help="Klangk server URL (e.g. http://localhost:8995)",
     ),
     password_file: str | None = typer.Option(
         None,
@@ -69,7 +69,7 @@ def login_cmd(
         help="Read password from file (use - for stdin)",
     ),
 ) -> None:
-    """Authenticate with the Bark server."""
+    """Authenticate with the Klangk server."""
     if server is None:  # pragma: no cover
         server = _cfg().server.url
     password = None
@@ -145,7 +145,7 @@ def list_workspaces(
 def create(
     name: str = typer.Argument(..., help="Workspace name"),
     image: str | None = typer.Option(
-        None, "--image", help="Docker image to use (see `bark images`)"
+        None, "--image", help="Docker image to use (see `klangk images`)"
     ),
     mount: list[str] | None = typer.Option(
         None,
@@ -447,7 +447,7 @@ def shell(
     cfg = _cfg()
     if not cfg.auth.token:  # pragma: no cover
         _err.print(
-            "[red]Not logged in[/red] — run [bold]bark login[/bold] first."
+            "[red]Not logged in[/red] — run [bold]klangk login[/bold] first."
         )  # pragma: no cover
         raise typer.Exit(code=1)  # pragma: no cover
 
@@ -463,7 +463,7 @@ def shell(
     else:
         workspaces = client.list_workspaces()
         if not workspaces:
-            typer.echo("No workspaces found — create one with bark create.")
+            typer.echo("No workspaces found — create one with klangk create.")
             raise typer.Exit(code=1)
         if len(workspaces) == 1:
             ws = workspaces[0]
@@ -507,7 +507,7 @@ def exec_cmd(
 ) -> None:
     """Run a command in a workspace container.
 
-    Also usable as an rsync transport: rsync -avz -e "bark exec" src/ ws:/dest/
+    Also usable as an rsync transport: rsync -avz -e "klangk exec" src/ ws:/dest/
     """
     cfg = _cfg()
     _require_auth()
@@ -558,20 +558,20 @@ def sync(
 
     Examples:
 
-        bark sync ~/project my-workspace:/work/project
+        klangk sync ~/project my-workspace:/work/project
 
-        bark sync my-workspace:/work/output ~/output
+        klangk sync my-workspace:/work/output ~/output
 
-        bark sync ~/src ws:/work/src --delete --exclude .git
+        klangk sync ~/src ws:/work/src --delete --exclude .git
     """
     import shutil
     import subprocess
 
     _require_auth()
 
-    bark_bin = shutil.which("bark")
-    if not bark_bin:  # pragma: no cover
-        _err.print("[red]Cannot find bark in PATH[/red]")
+    klangk_bin = shutil.which("klangk")
+    if not klangk_bin:  # pragma: no cover
+        _err.print("[red]Cannot find klangk in PATH[/red]")
         raise typer.Exit(code=1)
 
     rsync_bin = shutil.which("rsync")
@@ -583,7 +583,7 @@ def sync(
         rsync_bin,
         "-avz",
         "-e",
-        f"{bark_bin} exec",
+        f"{klangk_bin} exec",
         *ctx.args,
         src,
         dest,
@@ -621,7 +621,7 @@ app.add_typer(vol_app, name="volumes")
 def volumes_list(
     plain: bool = typer.Option(False, "--plain", help="Plain text output"),
 ) -> None:
-    """List bark-managed Docker volumes."""
+    """List klangk-managed Docker volumes."""
     _require_auth()
     client = _client()
     resp = client.get("/volumes")

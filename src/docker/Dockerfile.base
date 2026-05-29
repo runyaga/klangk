@@ -66,24 +66,24 @@ RUN ln -sf /usr/bin/fdfind /usr/bin/fd
 # Install @earendil-works last so its `pi` binary wins.
 RUN npm install -g @mariozechner/pi-coding-agent @earendil-works/pi-coding-agent @anthropic-ai/claude-code
 
-# Create bark user with host UID/GID (passed as build args)
-ARG BARK_UID=1000
-ARG BARK_GID=1000
-RUN EXISTING_USER=$(getent passwd $BARK_UID | cut -d: -f1) \
+# Create klangk user with host UID/GID (passed as build args)
+ARG KLANGK_UID=1000
+ARG KLANGK_GID=1000
+RUN EXISTING_USER=$(getent passwd $KLANGK_UID | cut -d: -f1) \
     && [ -n "$EXISTING_USER" ] && userdel "$EXISTING_USER" || true \
-    && EXISTING_GROUP=$(getent group $BARK_GID | cut -d: -f1) \
+    && EXISTING_GROUP=$(getent group $KLANGK_GID | cut -d: -f1) \
     && [ -n "$EXISTING_GROUP" ] && groupdel "$EXISTING_GROUP" 2>/dev/null || true \
-    && groupadd -g $BARK_GID bark 2>/dev/null || true \
-    && useradd -u $BARK_UID -g $BARK_GID -m -d /home/bark -s /bin/sh bark
+    && groupadd -g $KLANGK_GID klangk 2>/dev/null || true \
+    && useradd -u $KLANGK_UID -g $KLANGK_GID -m -d /home/klangk -s /bin/sh klangk
 
 # Make /bin/sh point to bash so Pi's bash tool supports bashisms (source, etc.)
 RUN ln -sf /bin/bash /bin/sh
 
-RUN mkdir -p /work && chown bark:bark /work
+RUN mkdir -p /work && chown klangk:klangk /work
 WORKDIR /work
 
-# Allow bark user to sudo without a password (for installing packages, etc.)
-RUN echo "bark ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/bark
+# Allow klangk user to sudo without a password (for installing packages, etc.)
+RUN echo "klangk ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/klangk
 
 # Determinate Nix + devenv + cachix
 # (TODO: remove after testing — large layer, not needed for most workspaces)
@@ -91,5 +91,5 @@ RUN curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/
     | sh -s -- install linux --no-confirm --init none --no-start-daemon \
     && . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh \
     && nix profile install --profile /nix/var/nix/profiles/default nixpkgs#devenv nixpkgs#cachix \
-    && usermod -aG nixbld bark \
-    && chown -R bark:bark /nix/var
+    && usermod -aG nixbld klangk \
+    && chown -R klangk:klangk /nix/var

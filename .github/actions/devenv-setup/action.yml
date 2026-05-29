@@ -3,7 +3,7 @@ description: Bootstrap nix/devenv, build Docker image, and start services
 
 inputs:
   build-tasks:
-    description: "Space-separated devenv tasks to run (e.g. 'bark:docker-build bark:flutter-build')"
+    description: "Space-separated devenv tasks to run (e.g. 'klangk:docker-build klangk:flutter-build')"
     required: true
 
 runs:
@@ -29,7 +29,7 @@ runs:
       shell: bash
       run: ./bootstrap --unattended --cachix-version v1.11.1
 
-    - name: Prepare bark devenv
+    - name: Prepare klangk devenv
       shell: bash
       run: |
         . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh

@@ -1,4 +1,4 @@
-"""API route handlers for Bark backend."""
+"""API route handlers for Klangk backend."""
 
 import io
 import logging
@@ -33,9 +33,9 @@ async def health():
     return {"status": "ok"}
 
 
-# --- Test/debug endpoints (only when BARK_TEST_MODE is set) ---
+# --- Test/debug endpoints (only when KLANGK_TEST_MODE is set) ---
 
-if resolve_env_secret("BARK_TEST_MODE"):  # pragma: no cover
+if resolve_env_secret("KLANGK_TEST_MODE"):  # pragma: no cover
 
     @router.get("/api/test/idle-timeout")
     async def get_idle_timeout(workspace_id: str | None = None):
@@ -85,7 +85,7 @@ async def register(
     req: auth.RegisterRequest,
     request: Request,
 ):
-    if resolve_env_secret("BARK_TEST_MODE"):
+    if resolve_env_secret("KLANGK_TEST_MODE"):
         # Test mode: auto-verify so E2E tests get immediate access
         result = await auth.register(req, verified=True)
         return result
@@ -362,7 +362,7 @@ async def list_images(_user: dict = Depends(auth.get_current_user)):
 async def list_volumes(_user: dict = Depends(auth.get_current_user)):
     docker = await container.registry.get_docker()
     volumes = await docker.volumes.list(
-        filters={"label": [f"bark.instance={container.INSTANCE_ID}"]}
+        filters={"label": [f"klangk.instance={container.INSTANCE_ID}"]}
     )
     return [
         {
@@ -396,8 +396,8 @@ async def create_volume(
         {
             "Name": body.name,
             "Labels": {
-                "bark.managed": "true",
-                "bark.instance": container.INSTANCE_ID,
+                "klangk.managed": "true",
+                "klangk.instance": container.INSTANCE_ID,
             },
         }
     )
@@ -414,10 +414,10 @@ async def delete_volume(
         vol = await docker.volumes.get(name)
         info = await vol.show()
         labels = info.get("Labels") or {}
-        if labels.get("bark.instance") != container.INSTANCE_ID:
+        if labels.get("klangk.instance") != container.INSTANCE_ID:
             raise HTTPException(
                 status_code=404,
-                detail="Volume not managed by this Bark instance",
+                detail="Volume not managed by this Klangk instance",
             )
         await vol.delete()
     except container.aiodocker.exceptions.DockerError as e:
@@ -719,7 +719,7 @@ async def browser_delegate(body: BrowserDelegateRequest):
     """Bridge endpoint for Pi extensions to delegate actions to the browser.
 
     The container calls this endpoint with a bridge token (set as
-    BARK_BRIDGE_TOKEN in the container env). The backend resolves the
+    KLANGK_BRIDGE_TOKEN in the container env). The backend resolves the
     token to a workspace_id, relays the request to the Flutter client
     over WebSocket, and returns the browser's response.
     """

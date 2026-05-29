@@ -8,7 +8,7 @@ import 'package:bark_plugin_api/bark_plugin_api.dart';
 http.Client? testAuthHttpClientOverride;
 
 class AuthService extends ChangeNotifier {
-  static const _tokenKey = 'bark_jwt';
+  static const _tokenKey = 'klangk_jwt';
   String get _baseUrl => baseUrl;
 
   http.Client get _client => testAuthHttpClientOverride ?? http.Client();

@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:bark_frontend/auth/auth_service.dart';
+import 'package:klangk_frontend/auth/auth_service.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 void main() {
@@ -27,7 +27,7 @@ void main() {
     });
 
     test('loads token from SharedPreferences', () async {
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'saved-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'saved-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.isLoggedIn, isTrue);
@@ -186,7 +186,7 @@ void main() {
         return http.Response('', 200);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.isLoggedIn, isTrue);
@@ -201,7 +201,7 @@ void main() {
         throw Exception('Server down');
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -300,7 +300,7 @@ void main() {
         'email': 'alice@example.com',
         'roles': ['user'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.email, 'alice@example.com');
@@ -311,7 +311,7 @@ void main() {
         'sub': 'user-1',
         'roles': ['user']
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.email, isNull);
@@ -328,7 +328,7 @@ void main() {
         'email': 'alice@example.com',
         'roles': ['user'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.userId, 'user-42');
@@ -339,7 +339,7 @@ void main() {
         'sub': 'user-1',
         'roles': ['user', 'admin'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.roles, ['user', 'admin']);
@@ -347,7 +347,7 @@ void main() {
 
     test('roles returns empty list when no roles in payload', () async {
       final token = makeJwt({'sub': 'user-1'});
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.roles, isEmpty);
@@ -358,7 +358,7 @@ void main() {
         'sub': 'user-1',
         'roles': ['admin'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.isAdmin, isTrue);
@@ -369,7 +369,7 @@ void main() {
         'sub': 'user-1',
         'roles': ['user'],
       });
-      SharedPreferences.setMockInitialValues({'bark_jwt': token});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': token});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.isAdmin, isFalse);
@@ -382,7 +382,7 @@ void main() {
         return http.Response('Unauthorized', 401);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
       expect(service.isLoggedIn, isTrue);
@@ -396,7 +396,7 @@ void main() {
         return http.Response('[]', 200);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -409,7 +409,7 @@ void main() {
         return http.Response('Unauthorized', 401);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -422,7 +422,7 @@ void main() {
         return http.Response('Unauthorized', 401);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -437,7 +437,7 @@ void main() {
         return http.Response('{}', 200);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -453,7 +453,7 @@ void main() {
         return http.Response('Unauthorized', 401);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -466,7 +466,7 @@ void main() {
         return http.Response('Unauthorized', 401);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -483,7 +483,7 @@ void main() {
         return http.Response('{}', 200);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 
@@ -499,7 +499,7 @@ void main() {
         return http.Response('[]', 200);
       });
 
-      SharedPreferences.setMockInitialValues({'bark_jwt': 'my-token'});
+      SharedPreferences.setMockInitialValues({'klangk_jwt': 'my-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
 

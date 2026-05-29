@@ -1,13 +1,13 @@
-# @bark/bridge
+# @klangk/bridge
 
-Browser-delegated tool calls for Bark Pi extensions.
+Browser-delegated tool calls for Klangk Pi extensions.
 
-Routes requests through the Bark backend to the user's browser, which executes them with its session credentials (cookies, OAuth tokens, etc.).
+Routes requests through the Klangk backend to the user's browser, which executes them with its session credentials (cookies, OAuth tokens, etc.).
 
 ## Usage
 
 ```typescript
-import { browserFetch, browserAction, isBridgeAvailable } from "@bark/bridge";
+import { browserFetch, browserAction, isBridgeAvailable } from "@klangk/bridge";
 
 // Fetch a URL using the browser's credentials
 const result = await browserFetch("https://authenticated-api.com/data");
@@ -25,7 +25,7 @@ if (await isBridgeAvailable()) {
 
 ## Environment Variables
 
-Set automatically by the Bark container entrypoint:
+Set automatically by the Klangk container entrypoint:
 
-- `BARK_BRIDGE_URL` — URL of the Bark backend (via nginx)
-- `BARK_BRIDGE_TOKEN` — Opaque token that identifies this container's workspace
+- `KLANGK_BRIDGE_URL` — URL of the Klangk backend (via nginx)
+- `KLANGK_BRIDGE_TOKEN` — Opaque token that identifies this container's workspace

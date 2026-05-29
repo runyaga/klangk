@@ -19,15 +19,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      BARK_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-      BARK_LLM_BASE_URL: https://ollama.com/v1
-      BARK_LLM_MODEL: gemma4:31b
+      KLANGK_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      KLANGK_LLM_BASE_URL: https://ollama.com/v1
+      KLANGK_LLM_MODEL: gemma4:31b
     steps:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/devenv-setup
         with:
-          build-tasks: bark:docker-build
+          build-tasks: klangk:docker-build
 
       - name: Stop devenv services
         run: |

@@ -23,7 +23,7 @@ class ExecSession:
             "exec",
             "-i",
             "-u",
-            "bark",
+            "klangk",
             "-w",
             "/work",
             self.container_id,

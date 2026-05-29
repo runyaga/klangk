@@ -12,16 +12,16 @@ import 'auth/settings_page.dart';
 import 'workspace/workspace_list_page.dart';
 import 'workspace/workspace_page.dart';
 
-class BarkApp extends StatefulWidget {
+class KlangkApp extends StatefulWidget {
   final String initialLocation;
 
-  const BarkApp({super.key, this.initialLocation = '/'});
+  const KlangkApp({super.key, this.initialLocation = '/'});
 
   @override
-  State<BarkApp> createState() => _BarkAppState();
+  State<KlangkApp> createState() => _KlangkAppState();
 }
 
-class _BarkAppState extends State<BarkApp> {
+class _KlangkAppState extends State<KlangkApp> {
   GoRouter? _router;
 
   @override
@@ -42,7 +42,7 @@ class _BarkAppState extends State<BarkApp> {
         _router ??= _createRouter(auth, widget.initialLocation);
 
         return MaterialApp.router(
-          title: 'Bark',
+          title: 'Klangk',
           debugShowCheckedModeBanner: false,
           theme: _theme,
           routerConfig: _router!,

@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_frontend/widgets/bark_logo.dart';
+import 'package:klangk_frontend/widgets/klangk_logo.dart';
 
 void main() {
   Widget buildLogo({double height = 200}) {
     return Directionality(
       textDirection: TextDirection.ltr,
-      child: UnconstrainedBox(child: BarkLogo(height: height)),
+      child: UnconstrainedBox(child: KlangkLogo(height: height)),
     );
   }
 
-  group('BarkLogo', () {
+  group('KlangkLogo', () {
     test('default height is 40', () {
-      const logo = BarkLogo();
+      const logo = KlangkLogo();
       expect(logo.height, 40);
     });
 
     test('custom height is preserved', () {
-      const logo = BarkLogo(height: 120);
+      const logo = KlangkLogo(height: 120);
       expect(logo.height, 120);
     });
 
@@ -26,9 +26,9 @@ void main() {
       expect(find.byIcon(Icons.pets), findsOneWidget);
     });
 
-    testWidgets('renders Bark text', (tester) async {
+    testWidgets('renders Klangk text', (tester) async {
       await tester.pumpWidget(buildLogo());
-      expect(find.text('Bark'), findsOneWidget);
+      expect(find.text('Klangk'), findsOneWidget);
     });
 
     testWidgets('icon is white', (tester) async {
@@ -39,7 +39,7 @@ void main() {
 
     testWidgets('text is white and bold', (tester) async {
       await tester.pumpWidget(buildLogo());
-      final text = tester.widget<Text>(find.text('Bark'));
+      final text = tester.widget<Text>(find.text('Klangk'));
       expect(text.style?.color, Colors.white);
       expect(text.style?.fontWeight, FontWeight.w800);
     });
@@ -54,7 +54,7 @@ void main() {
       await tester.pumpWidget(buildLogo());
       final container = tester.widget<Container>(
         find.descendant(
-          of: find.byType(BarkLogo),
+          of: find.byType(KlangkLogo),
           matching: find.byType(Container),
         ),
       );
@@ -66,7 +66,7 @@ void main() {
       await tester.pumpWidget(buildLogo(height: 100));
       final container = tester.widget<Container>(
         find.descendant(
-          of: find.byType(BarkLogo),
+          of: find.byType(KlangkLogo),
           matching: find.byType(Container),
         ),
       );
@@ -78,7 +78,7 @@ void main() {
       await tester.pumpWidget(buildLogo());
       final container = tester.widget<Container>(
         find.descendant(
-          of: find.byType(BarkLogo),
+          of: find.byType(KlangkLogo),
           matching: find.byType(Container),
         ),
       );
@@ -91,7 +91,7 @@ void main() {
       await tester.pumpWidget(buildLogo());
       expect(
         find.descendant(
-          of: find.byType(BarkLogo),
+          of: find.byType(KlangkLogo),
           matching: find.byType(FittedBox),
         ),
         findsOneWidget,
@@ -102,7 +102,7 @@ void main() {
       await tester.pumpWidget(buildLogo(height: 150));
       final container = tester.widget<Container>(
         find.descendant(
-          of: find.byType(BarkLogo),
+          of: find.byType(KlangkLogo),
           matching: find.byType(Container),
         ),
       );

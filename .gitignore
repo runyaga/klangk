@@ -45,8 +45,8 @@ src/frontend/coverage/
 .DS_Store
 Thumbs.db
 
-# Bark data
-.bark/
+# Klangk data
+.klangk/
 
 # Claude
 .claude/

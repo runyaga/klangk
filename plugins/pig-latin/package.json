@@ -1,5 +1,5 @@
 {
-  "name": "@bark/pig-latin",
+  "name": "@klangk/pig-latin",
   "version": "1.0.0",
   "description": "Convert text to Pig Latin",
   "pi": {

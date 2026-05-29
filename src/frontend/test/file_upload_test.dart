@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_frontend/file_viewer/file_upload.dart';
+import 'package:klangk_frontend/file_viewer/file_upload.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 Widget buildDropZone({

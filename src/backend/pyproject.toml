@@ -1,7 +1,7 @@
 [project]
-name = "bark-backend"
+name = "klangk-backend"
 version = "0.1.0"
-description = "Bark backend: multi-user Pi coding agent web REPL"
+description = "Klangk backend: multi-user Pi coding agent web REPL"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115.0",
@@ -27,16 +27,16 @@ dependencies = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "--capture=no --cov=bark_backend --cov-report=term-missing --no-cov-on-fail --cov-fail-under=100"
+addopts = "--capture=no --cov=klangk_backend --cov-report=term-missing --no-cov-on-fail --cov-fail-under=100"
 
 [tool.ruff]
 line-length = 79
 
 [project.scripts]
-bark = "bark_backend.cli.main:main"
+klangk = "klangk_backend.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["bark_backend"]
+packages = ["klangk_backend"]
 
 [build-system]
 requires = ["hatchling"]

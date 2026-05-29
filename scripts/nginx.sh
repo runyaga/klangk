@@ -25,7 +25,7 @@ http {
   client_max_body_size 500m;
 
   server {
-    listen ${BARK_NGINX_PORT};
+    listen ${KLANGK_NGINX_PORT};
 
     # Hosted app proxy: extract port from URL and proxy directly to container
     location ~ ^/hosted/[^/]+/(\d+)/(.*)\$ {
@@ -46,8 +46,8 @@ http {
       allow 10.0.0.0/8;
       allow 127.0.0.1;
       deny all;
-      proxy_pass ${BARK_LLM_BASE_URL}/;
-      proxy_set_header Authorization "Bearer ${BARK_LLM_API_KEY}";
+      proxy_pass ${KLANGK_LLM_BASE_URL}/;
+      proxy_set_header Authorization "Bearer ${KLANGK_LLM_API_KEY}";
       proxy_set_header Host \$proxy_host;
       proxy_http_version 1.1;
       proxy_set_header Connection "";
@@ -58,7 +58,7 @@ http {
     }
 
     location / {
-      proxy_pass http://127.0.0.1:${BARK_PORT}/;
+      proxy_pass http://127.0.0.1:${KLANGK_PORT}/;
       proxy_set_header Host \$http_host;
       proxy_set_header X-Real-IP \$remote_addr;
       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -76,5 +76,5 @@ http {
 }
 NGINX
 
-echo "nginx listening on port $BARK_NGINX_PORT" >&2
+echo "nginx listening on port $KLANGK_NGINX_PORT" >&2
 exec nginx -e stderr -c "$NGINX_STATE/nginx.conf"

@@ -14,7 +14,7 @@ from .terminal import TerminalSession
 
 logger = logging.getLogger(__name__)
 
-_WS_DEBUG = bool(resolve_env_secret("BARK_WS_DEBUG"))
+_WS_DEBUG = bool(resolve_env_secret("KLANGK_WS_DEBUG"))
 
 # Active connections: ws -> {user, workspace_id, container_id, ...}
 _connections: dict[WebSocket, dict] = {}
@@ -164,9 +164,9 @@ def derive_hosting_info(headers) -> tuple[str, str, str]:
     Returns (hostname, proto, base_path). Env vars take precedence over headers.
     Works with both Request.headers and WebSocket.headers.
     """
-    hostname = resolve_env_secret("BARK_HOSTING_HOSTNAME")
-    proto = resolve_env_secret("BARK_HOSTING_PROTO")
-    base_path = resolve_env_secret("BARK_HOSTING_BASE_PATH")
+    hostname = resolve_env_secret("KLANGK_HOSTING_HOSTNAME")
+    proto = resolve_env_secret("KLANGK_HOSTING_PROTO")
+    base_path = resolve_env_secret("KLANGK_HOSTING_BASE_PATH")
     if not hostname:
         forwarded_host = headers.get("x-forwarded-host")
         if forwarded_host:
@@ -174,7 +174,7 @@ def derive_hosting_info(headers) -> tuple[str, str, str]:
             hostname = forwarded_host
         else:
             # Direct access (local dev) — use nginx port for hosted app URLs
-            nginx_port = resolve_env_secret("BARK_NGINX_PORT")
+            nginx_port = resolve_env_secret("KLANGK_NGINX_PORT")
             host = headers.get("host") or "localhost"
             if nginx_port:
                 host_no_port = host.split(":")[0]
@@ -276,7 +276,7 @@ async def handle_workspace_connect(
 
     ports = await container.registry.get_workspace_ports(workspace_id)
     status = state.get("container_status", "created")
-    container_name = f"bark-{container.INSTANCE_ID}-{workspace_id[:12]}"
+    container_name = f"klangk-{container.INSTANCE_ID}-{workspace_id[:12]}"
     ports_str = f" (ports {','.join(str(p) for p in ports)})" if ports else ""
     status_msg = {
         "connected": f"Connected to running container {container_name}{ports_str}",
@@ -352,7 +352,7 @@ async def handle_restart_container(ws: WebSocket, state: dict) -> None:
 
     ports = await container.registry.get_workspace_ports(workspace_id)
     ports_str = f" (ports {','.join(str(p) for p in ports)})" if ports else ""
-    container_name = f"bark-{container.INSTANCE_ID}-{workspace_id[:12]}"
+    container_name = f"klangk-{container.INSTANCE_ID}-{workspace_id[:12]}"
     status_msg = f"Container restarted {container_name}{ports_str}"
 
     timeout_mins = container.IDLE_TIMEOUT_SECONDS / 60
@@ -705,7 +705,7 @@ async def send_error(ws: WebSocket, message: str) -> None:
 
 
 def _log_ws_msg(direction: str, msg: dict, user: dict | None = None) -> None:
-    """Log a WebSocket message for debugging (BARK_WS_DEBUG=1)."""
+    """Log a WebSocket message for debugging (KLANGK_WS_DEBUG=1)."""
     msg_type = msg.get("type") or msg.get("cmd") or "?"
     # Truncate terminal_output/terminal_input data to avoid log spam
     if msg_type in ("terminal_output", "terminal_input"):

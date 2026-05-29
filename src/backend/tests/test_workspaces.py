@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bark_backend import workspaces as ws_mod, container
+from klangk_backend import workspaces as ws_mod, container
 
 
 class TestCreateWorkspace:
@@ -93,33 +93,23 @@ class TestDeleteWorkspace:
         (data_path / "file.txt").write_text("hello")
         (home_dir / ".bashrc").write_text("# custom")
 
-        deleted = await ws_mod.delete_workspace(
-            ws["id"], user["id"]
-        )
+        deleted = await ws_mod.delete_workspace(ws["id"], user["id"])
         assert deleted is True
-        assert (
-            await ws_mod.get_workspace(ws["id"], user["id"]) is None
-        )
+        assert await ws_mod.get_workspace(ws["id"], user["id"]) is None
         assert not data_path.exists()
         assert not home_dir.exists()
 
     async def test_delete_nonexistent(self, user):
-        deleted = await ws_mod.delete_workspace(
-            "fake-id", user["id"]
-        )
+        deleted = await ws_mod.delete_workspace("fake-id", user["id"])
         assert deleted is False
 
     async def test_delete_cascades_ports(self, user):
         ws = await ws_mod.create_workspace(user["id"], "ported")
-        ports_before = await container.registry.get_workspace_ports(
-            ws["id"]
-        )
+        ports_before = await container.registry.get_workspace_ports(ws["id"])
         assert len(ports_before) > 0
 
         await ws_mod.delete_workspace(ws["id"], user["id"])
-        ports_after = await container.registry.get_workspace_ports(
-            ws["id"]
-        )
+        ports_after = await container.registry.get_workspace_ports(ws["id"])
         assert ports_after == []
 
     async def test_delete_missing_dirs_ok(self, user):
@@ -129,9 +119,7 @@ class TestDeleteWorkspace:
         data_path.rmdir()
         home_dir.rmdir()
 
-        deleted = await ws_mod.delete_workspace(
-            ws["id"], user["id"]
-        )
+        deleted = await ws_mod.delete_workspace(ws["id"], user["id"])
         assert deleted is True
 
 

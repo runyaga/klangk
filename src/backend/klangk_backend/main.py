@@ -1,4 +1,4 @@
-"""Bark backend: FastAPI app with HTTP + WebSocket endpoints."""
+"""Klangk backend: FastAPI app with HTTP + WebSocket endpoints."""
 
 import logging
 from contextlib import asynccontextmanager
@@ -21,15 +21,15 @@ logger = logging.getLogger(__name__)
 async def seed_default_user() -> None:
     """Create default user if it doesn't exist.
 
-    If BARK_DEFAULT_PASSWORD is set, use it. Otherwise generate a random
+    If KLANGK_DEFAULT_PASSWORD is set, use it. Otherwise generate a random
     password and print it to the console (only on first creation).
     """
     import secrets
 
     import bcrypt
 
-    email = resolve_env_secret("BARK_DEFAULT_USER", "admin")
-    password = resolve_env_secret("BARK_DEFAULT_PASSWORD")
+    email = resolve_env_secret("KLANGK_DEFAULT_USER", "admin")
+    password = resolve_env_secret("KLANGK_DEFAULT_PASSWORD")
     existing = await model.get_user_by_email(email)
     if existing is None:
         generated = password is None
@@ -61,18 +61,16 @@ async def lifespan(app: FastAPI):
     await seed_default_user()
     from . import wshandler
 
-    container.registry.set_on_workspace_killed(
-        wshandler.reset_workspace_state
-    )
+    container.registry.set_on_workspace_killed(wshandler.reset_workspace_state)
     await container.registry.adopt_orphaned_containers()
     container.registry.start_cleanup_loop()
-    logger.info("Bark backend started")
+    logger.info("Klangk backend started")
     yield
     await container.registry.shutdown()
-    logger.info("Bark backend stopped")
+    logger.info("Klangk backend stopped")
 
 
-app = FastAPI(title="Bark", lifespan=lifespan)
+app = FastAPI(title="Klangk", lifespan=lifespan)
 
 
 def setup_logfire(app: FastAPI) -> bool:

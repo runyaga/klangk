@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI
 from httpx import AsyncClient, ASGITransport
 
-from bark_backend import main, model
+from klangk_backend import main, model
 
 
 # --- Seed default user ---
@@ -13,15 +13,15 @@ from bark_backend import main, model
 
 class TestSeedDefaultUser:
     async def test_creates_user_when_missing(self, db, monkeypatch):
-        monkeypatch.setenv("BARK_DEFAULT_USER", "seed-test")
-        monkeypatch.setenv("BARK_DEFAULT_PASSWORD", "seed-pass")
+        monkeypatch.setenv("KLANGK_DEFAULT_USER", "seed-test")
+        monkeypatch.setenv("KLANGK_DEFAULT_PASSWORD", "seed-pass")
         await main.seed_default_user()
         user = await model.get_user_by_email("seed-test")
         assert user is not None
 
     async def test_skips_existing_user(self, db, monkeypatch):
-        monkeypatch.setenv("BARK_DEFAULT_USER", "seed-test")
-        monkeypatch.setenv("BARK_DEFAULT_PASSWORD", "seed-pass")
+        monkeypatch.setenv("KLANGK_DEFAULT_USER", "seed-test")
+        monkeypatch.setenv("KLANGK_DEFAULT_PASSWORD", "seed-pass")
         await main.seed_default_user()
         # Call again — should not raise
         await main.seed_default_user()
@@ -29,8 +29,8 @@ class TestSeedDefaultUser:
         assert user is not None
 
     async def test_generates_password_when_not_set(self, db, monkeypatch):
-        monkeypatch.setenv("BARK_DEFAULT_USER", "gen-test")
-        monkeypatch.delenv("BARK_DEFAULT_PASSWORD", raising=False)
+        monkeypatch.setenv("KLANGK_DEFAULT_USER", "gen-test")
+        monkeypatch.delenv("KLANGK_DEFAULT_PASSWORD", raising=False)
         await main.seed_default_user()
         user = await model.get_user_by_email("gen-test")
         assert user is not None
@@ -40,8 +40,8 @@ class TestSeedDefaultUser:
         assert "admin" in roles
 
     async def test_generated_password_is_logged(self, db, monkeypatch, caplog):
-        monkeypatch.setenv("BARK_DEFAULT_USER", "log-test")
-        monkeypatch.delenv("BARK_DEFAULT_PASSWORD", raising=False)
+        monkeypatch.setenv("KLANGK_DEFAULT_USER", "log-test")
+        monkeypatch.delenv("KLANGK_DEFAULT_PASSWORD", raising=False)
         import logging
 
         with caplog.at_level(logging.INFO):

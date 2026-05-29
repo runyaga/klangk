@@ -85,16 +85,16 @@ Testing and running:
   or `nohup ... &` so the bash tool returns and you can continue working.
   A foreground server will block the bash tool forever.
 - For web apps: this container has mapped ports for serving apps to the user's
-  browser. The $BARK_PORT_MAPPINGS env var lists container_port:host_port pairs
+  browser. The $KLANGK_PORT_MAPPINGS env var lists container_port:host_port pairs
   (e.g., "8000:9000,8001:9001,..."). Only these mapped container ports are
   reachable from outside the container.
   - Always configure apps to listen on one of the mapped container ports
     (8000, 8001, 8002, etc.). Never hardcode arbitrary ports like 3000 or 5000
-    — use the container ports from $BARK_PORT_MAPPINGS.
+    — use the container ports from $KLANGK_PORT_MAPPINGS.
   - If creating multiple apps in the same workspace, each app must use a
     different container port. Use 8000 for the first app, 8001 for the second,
     and so on.
-  - If the user requests a specific port that isn't in $BARK_PORT_MAPPINGS,
+  - If the user requests a specific port that isn't in $KLANGK_PORT_MAPPINGS,
     start on that port but warn them it won't be accessible from their browser,
     and suggest using one of the mapped ports instead.
   - When reporting a URL to the user, or when asked about a hosted URL, always

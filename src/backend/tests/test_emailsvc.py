@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bark_backend import emailsvc
+from klangk_backend import emailsvc
 
 
 class TestBuildMessage:
@@ -17,60 +17,60 @@ class TestBuildMessage:
         assert msg.get_content().strip() == "Body"
 
     def test_from_uses_smtp_from(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_FROM", "custom@example.com")
+        monkeypatch.setenv("KLANGK_SMTP_FROM", "custom@example.com")
         msg = emailsvc.build_message("to@example.com", "Hi", "Body")
         assert msg["From"] == "custom@example.com"
 
     def test_from_falls_back_to_smtp_user(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_FROM", raising=False)
-        monkeypatch.setenv("BARK_SMTP_USER", "user@example.com")
+        monkeypatch.delenv("KLANGK_SMTP_FROM", raising=False)
+        monkeypatch.setenv("KLANGK_SMTP_USER", "user@example.com")
         msg = emailsvc.build_message("to@example.com", "Hi", "Body")
         assert msg["From"] == "user@example.com"
 
     def test_from_falls_back_to_noreply(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_FROM", raising=False)
-        monkeypatch.delenv("BARK_SMTP_USER", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_FROM", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_USER", raising=False)
         msg = emailsvc.build_message("to@example.com", "Hi", "Body")
         assert msg["From"] == "noreply@localhost"
 
 
 class TestResolvePassword:
     def test_plain_password(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", "secret123")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", "secret123")
         assert emailsvc._resolve_password() == "secret123"
 
     def test_file_prefix_reads_file(self, monkeypatch, tmp_path):
         pw_file = tmp_path / "smtp_pass"
         pw_file.write_text("file-secret\n")
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", f"file:{pw_file}")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", f"file:{pw_file}")
         assert emailsvc._resolve_password() == "file-secret"
 
     def test_file_missing_returns_none(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", "file:/nonexistent/file")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", "file:/nonexistent/file")
         assert emailsvc._resolve_password() is None
 
     def test_no_password(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_PASSWORD", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_PASSWORD", raising=False)
         assert emailsvc._resolve_password() is None
 
 
 class TestUseSmtp:
     def test_uses_smtp_when_host_set(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "mail.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "mail.example.com")
         assert emailsvc.use_smtp() is True
 
     def test_uses_sendmail_when_no_host(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_HOST", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_HOST", raising=False)
         assert emailsvc.use_smtp() is False
 
 
 class TestSendViaSmtp:
     async def test_calls_aiosmtplib_send(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
-        monkeypatch.setenv("BARK_SMTP_PORT", "587")
-        monkeypatch.setenv("BARK_SMTP_USER", "user")
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", "pass")
-        monkeypatch.setenv("BARK_SMTP_USE_TLS", "true")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_PORT", "587")
+        monkeypatch.setenv("KLANGK_SMTP_USER", "user")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", "pass")
+        monkeypatch.setenv("KLANGK_SMTP_USE_TLS", "true")
 
         mock_send = AsyncMock()
         with patch.object(emailsvc.aiosmtplib, "send", mock_send):
@@ -86,11 +86,11 @@ class TestSendViaSmtp:
         assert kwargs["start_tls"] is True
 
     async def test_no_auth_when_no_credentials(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
-        monkeypatch.setenv("BARK_SMTP_PORT", "25")
-        monkeypatch.delenv("BARK_SMTP_USER", raising=False)
-        monkeypatch.delenv("BARK_SMTP_PASSWORD", raising=False)
-        monkeypatch.setenv("BARK_SMTP_USE_TLS", "false")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_PORT", "25")
+        monkeypatch.delenv("KLANGK_SMTP_USER", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_PASSWORD", raising=False)
+        monkeypatch.setenv("KLANGK_SMTP_USE_TLS", "false")
 
         mock_send = AsyncMock()
         with patch.object(emailsvc.aiosmtplib, "send", mock_send):
@@ -120,7 +120,7 @@ class TestSendViaSendmail:
 
     async def test_custom_sendmail_path(self, monkeypatch):
         monkeypatch.setenv(
-            "BARK_SENDMAIL_PATH", "/run/current-system/sw/bin/sendmail"
+            "KLANGK_SENDMAIL_PATH", "/run/current-system/sw/bin/sendmail"
         )
         mock_proc = AsyncMock()
         mock_proc.communicate.return_value = (b"", b"")
@@ -149,14 +149,14 @@ class TestSendViaSendmail:
 
 class TestSendEmail:
     async def test_uses_smtp_when_configured(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "smtp.example.com")
         mock_smtp = AsyncMock()
         with patch.object(emailsvc, "send_via_smtp", mock_smtp):
             await emailsvc.send_email("to@example.com", "Hi", "Body")
         mock_smtp.assert_awaited_once()
 
     async def test_uses_sendmail_when_no_smtp(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_HOST", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_HOST", raising=False)
         mock_sendmail = AsyncMock()
         with patch.object(emailsvc, "send_via_sendmail", mock_sendmail):
             await emailsvc.send_email("to@example.com", "Hi", "Body")
@@ -165,12 +165,12 @@ class TestSendEmail:
 
 class TestSendVerificationEmail:
     async def test_sends_verification_email(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_HOST", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_HOST", raising=False)
         mock_sendmail = AsyncMock()
         with patch.object(emailsvc, "send_via_sendmail", mock_sendmail):
             await emailsvc.send_verification_email(
                 "user@example.com",
-                "https://bark.example.com/#/verify?token=abc123",
+                "https://klangk.example.com/#/verify?token=abc123",
             )
         mock_sendmail.assert_awaited_once()
         msg = mock_sendmail.call_args[0][0]
@@ -180,37 +180,37 @@ class TestSendVerificationEmail:
         parts = list(msg.iter_parts())
         assert len(parts) == 2
         text_part = parts[0].get_content()
-        assert "https://bark.example.com/#/verify?token=abc123" in text_part
+        assert "https://klangk.example.com/#/verify?token=abc123" in text_part
         assert "72 hours" in text_part
         html_part = parts[1].get_content()
         assert (
-            'href="https://bark.example.com/#/verify?token=abc123"'
+            'href="https://klangk.example.com/#/verify?token=abc123"'
             in html_part
         )
         assert "Verify my account" in html_part
-        assert "Bark" in html_part
+        assert "Klangk" in html_part
 
     async def test_sends_via_smtp_when_configured(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
-        monkeypatch.setenv("BARK_SMTP_USER", "user")
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", "pass")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_USER", "user")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", "pass")
         mock_smtp = AsyncMock()
         with patch.object(emailsvc, "send_via_smtp", mock_smtp):
             await emailsvc.send_verification_email(
                 "user@example.com",
-                "https://bark.example.com/#/verify?token=abc",
+                "https://klangk.example.com/#/verify?token=abc",
             )
         mock_smtp.assert_awaited_once()
 
 
 class TestSendPasswordResetEmail:
     async def test_sends_reset_email(self, monkeypatch):
-        monkeypatch.delenv("BARK_SMTP_HOST", raising=False)
+        monkeypatch.delenv("KLANGK_SMTP_HOST", raising=False)
         mock_sendmail = AsyncMock()
         with patch.object(emailsvc, "send_via_sendmail", mock_sendmail):
             await emailsvc.send_password_reset_email(
                 "user@example.com",
-                "https://bark.example.com/#/reset-password?token=xyz",
+                "https://klangk.example.com/#/reset-password?token=xyz",
             )
         mock_sendmail.assert_awaited_once()
         msg = mock_sendmail.call_args[0][0]
@@ -222,17 +222,17 @@ class TestSendPasswordResetEmail:
         assert "reset-password?token=xyz" in text_part
         assert "1 hour" in text_part
         html_part = parts[1].get_content()
-        assert 'href="https://bark.example.com/#/reset-password' in html_part
+        assert 'href="https://klangk.example.com/#/reset-password' in html_part
         assert "Reset my password" in html_part
 
     async def test_sends_via_smtp_when_configured(self, monkeypatch):
-        monkeypatch.setenv("BARK_SMTP_HOST", "smtp.example.com")
-        monkeypatch.setenv("BARK_SMTP_USER", "user")
-        monkeypatch.setenv("BARK_SMTP_PASSWORD", "pass")
+        monkeypatch.setenv("KLANGK_SMTP_HOST", "smtp.example.com")
+        monkeypatch.setenv("KLANGK_SMTP_USER", "user")
+        monkeypatch.setenv("KLANGK_SMTP_PASSWORD", "pass")
         mock_smtp = AsyncMock()
         with patch.object(emailsvc, "send_via_smtp", mock_smtp):
             await emailsvc.send_password_reset_email(
                 "user@example.com",
-                "https://bark.example.com/#/reset-password?token=xyz",
+                "https://klangk.example.com/#/reset-password?token=xyz",
             )
         mock_smtp.assert_awaited_once()

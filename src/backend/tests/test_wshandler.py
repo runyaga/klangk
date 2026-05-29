@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 from fastapi import WebSocketDisconnect
 
-from bark_backend import (
+from klangk_backend import (
     wshandler,
     container,
     workspaces as ws_mod,
 )
-from bark_backend.wshandler import (
+from klangk_backend.wshandler import (
     WorkspaceSession,
     derive_hosting_info,
     start_workspace_container,
@@ -88,9 +88,9 @@ class TestSendError:
 
 class TestDeriveHostingInfo:
     def test_env_vars_take_precedence(self, monkeypatch):
-        monkeypatch.setenv("BARK_HOSTING_HOSTNAME", "env.example.com")
-        monkeypatch.setenv("BARK_HOSTING_PROTO", "https")
-        monkeypatch.setenv("BARK_HOSTING_BASE_PATH", "/app")
+        monkeypatch.setenv("KLANGK_HOSTING_HOSTNAME", "env.example.com")
+        monkeypatch.setenv("KLANGK_HOSTING_PROTO", "https")
+        monkeypatch.setenv("KLANGK_HOSTING_BASE_PATH", "/app")
         ws = _mock_ws(headers={"host": "header.example.com"})
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "env.example.com"
@@ -99,28 +99,28 @@ class TestDeriveHostingInfo:
 
     def test_forwarded_host_used_as_is(self, monkeypatch):
         """Behind external reverse proxy — trust X-Forwarded-Host."""
-        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
-        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        monkeypatch.delenv("KLANGK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("KLANGK_NGINX_PORT", "8995")
         ws = _mock_ws(
             headers={
                 "x-forwarded-host": "arctor.repoze.org",
                 "x-forwarded-proto": "https",
-                "x-forwarded-prefix": "/bark",
+                "x-forwarded-prefix": "/klangk",
             }
         )
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "arctor.repoze.org"
         assert p == "https"
-        assert b == "/bark"
+        assert b == "/klangk"
 
     def test_host_header_with_nginx_port(self, monkeypatch):
         """Direct access (local dev) — substitute nginx port."""
-        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
-        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        monkeypatch.delenv("KLANGK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("KLANGK_NGINX_PORT", "8995")
         ws = _mock_ws(headers={"host": "myhost:8997"})
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "myhost:8995"
@@ -128,10 +128,10 @@ class TestDeriveHostingInfo:
         assert b == ""
 
     def test_host_header_no_nginx_port(self, monkeypatch):
-        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
-        monkeypatch.delenv("BARK_NGINX_PORT", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.delenv("KLANGK_NGINX_PORT", raising=False)
         ws = _mock_ws(headers={"host": "myhost:8997"})
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "myhost:8997"
@@ -139,10 +139,10 @@ class TestDeriveHostingInfo:
         assert b == ""
 
     def test_defaults_with_nginx_port(self, monkeypatch):
-        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
-        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        monkeypatch.delenv("KLANGK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.setenv("KLANGK_NGINX_PORT", "8995")
         ws = _mock_ws(headers={})
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "localhost:8995"
@@ -150,10 +150,10 @@ class TestDeriveHostingInfo:
         assert b == ""
 
     def test_defaults_no_nginx_port(self, monkeypatch):
-        monkeypatch.delenv("BARK_HOSTING_HOSTNAME", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_PROTO", raising=False)
-        monkeypatch.delenv("BARK_HOSTING_BASE_PATH", raising=False)
-        monkeypatch.delenv("BARK_NGINX_PORT", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_HOSTNAME", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_PROTO", raising=False)
+        monkeypatch.delenv("KLANGK_HOSTING_BASE_PATH", raising=False)
+        monkeypatch.delenv("KLANGK_NGINX_PORT", raising=False)
         ws = _mock_ws(headers={})
         h, p, b = derive_hosting_info(ws.headers)
         assert h == "localhost"
@@ -287,7 +287,7 @@ class TestHandleTerminalStart:
         mock_session = AsyncMock()
         mock_session.is_alive = True
         MockTS = MagicMock(return_value=mock_session)
-        with patch("bark_backend.wshandler.TerminalSession", MockTS):
+        with patch("klangk_backend.wshandler.TerminalSession", MockTS):
             await handle_terminal_start(
                 ws, state, {"cols": 80, "rows": 24, "commandOverride": "bash"}
             )
@@ -639,7 +639,7 @@ class TestHandleWebsocketDispatch:
     """Test all command dispatch branches through the main handler."""
 
     async def _run_commands(self, user, commands):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -684,7 +684,7 @@ class TestHandleWebsocketDispatch:
 
     async def test_container_survives_disconnect(self, user):
         """Container should NOT be killed on disconnect — idle timeout handles it."""
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -743,7 +743,7 @@ class TestHandleWebsocket:
         ws.close.assert_awaited_once_with(code=4001, reason="Invalid token")
 
     async def test_valid_token_then_disconnect(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -754,7 +754,7 @@ class TestHandleWebsocket:
         ws.accept.assert_awaited_once()
 
     async def test_invalid_json(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -768,7 +768,7 @@ class TestHandleWebsocket:
         assert any("Invalid JSON" in str(c) for c in calls)
 
     async def test_unknown_command(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -785,7 +785,7 @@ class TestHandleWebsocket:
         assert any("Unknown command" in str(c) for c in calls)
 
     async def test_ui_ready_with_pending(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -839,7 +839,7 @@ class TestHandleWebsocket:
         assert len(ready) == 1
 
     async def test_ui_ready_no_pending(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -863,7 +863,7 @@ class TestHandleWebsocket:
         assert len(ready) == 0
 
     async def test_general_exception_logged(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -910,7 +910,7 @@ class TestExecHandlers:
         mock_session.output = empty_output
         mock_session.returncode = 0
         with patch(
-            "bark_backend.wshandler.ExecSession",
+            "klangk_backend.wshandler.ExecSession",
             return_value=mock_session,
         ):
             with patch.object(container.registry, "record_activity"):
@@ -1023,7 +1023,7 @@ class TestExecHandlers:
 
 class TestExecDispatch:
     async def test_dispatch_exec_start(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1040,7 +1040,7 @@ class TestExecDispatch:
         mock.assert_awaited_once()
 
     async def test_dispatch_exec_input(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1057,7 +1057,7 @@ class TestExecDispatch:
         mock.assert_awaited_once()
 
     async def test_dispatch_exec_stop(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1074,7 +1074,7 @@ class TestExecDispatch:
         mock.assert_awaited_once()
 
     async def test_dispatch_exec_close_stdin(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1091,7 +1091,7 @@ class TestExecDispatch:
         mock.assert_awaited_once()
 
     async def test_dispatch_heartbeat(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1128,7 +1128,7 @@ class TestHandleHeartbeat:
 
 class TestBrowserBridge:
     async def test_dispatch_browser_response(self, user):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_token(user["id"], user["email"])
         ws = _mock_ws(query_params={"token": token})
@@ -1257,7 +1257,7 @@ class TestResetWorkspaceState:
 
 class TestWsDebugLogging:
     async def test_recv_logged_when_debug(self, user, monkeypatch):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
         token = auth_mod.create_token(user["id"], user["email"])

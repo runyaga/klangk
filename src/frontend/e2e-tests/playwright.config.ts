@@ -1,9 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
 // E2E tests use non-default ports to avoid conflicts with a dev server
-const BACKEND_PORT = process.env.BARK_E2E_PORT || "18997";
+const BACKEND_PORT = process.env.KLANGK_E2E_PORT || "18997";
 const BASE_URL =
-  process.env.BARK_TEST_URL || `http://localhost:${BACKEND_PORT}`;
+  process.env.KLANGK_TEST_URL || `http://localhost:${BACKEND_PORT}`;
 const BROWSERS = process.env.PLAYWRIGHT_BROWSERS_PATH || "";
 
 const chromiumUse = {
@@ -33,10 +33,10 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 300_000,
   retries: 0,
-  workers: process.env.BARK_E2E_WORKERS
-    ? /^\d+$/.test(process.env.BARK_E2E_WORKERS)
-      ? parseInt(process.env.BARK_E2E_WORKERS, 10)
-      : process.env.BARK_E2E_WORKERS
+  workers: process.env.KLANGK_E2E_WORKERS
+    ? /^\d+$/.test(process.env.KLANGK_E2E_WORKERS)
+      ? parseInt(process.env.KLANGK_E2E_WORKERS, 10)
+      : process.env.KLANGK_E2E_WORKERS
     : 4,
   fullyParallel: true,
   globalSetup: "./global-setup.ts",
@@ -49,18 +49,18 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testMatch: "bark.spec.ts",
+      testMatch: "klangk.spec.ts",
       use: chromiumUse,
     },
     {
       name: "firefox",
-      testMatch: "bark.spec.ts",
+      testMatch: "klangk.spec.ts",
       dependencies: ["chromium"],
       use: firefoxUse,
     },
     {
       name: "webkit",
-      testMatch: "bark.spec.ts",
+      testMatch: "klangk.spec.ts",
       dependencies: ["firefox"],
       use: webkitUse,
     },

@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 
-const BRIDGE_URL = process.env.BARK_BRIDGE_URL;
-const BRIDGE_TOKEN = process.env.BARK_BRIDGE_TOKEN;
+const BRIDGE_URL = process.env.KLANGK_BRIDGE_URL;
+const BRIDGE_TOKEN = process.env.KLANGK_BRIDGE_TOKEN;
 
 export default function (pi: any) {
   if (!BRIDGE_URL || !BRIDGE_TOKEN) return;

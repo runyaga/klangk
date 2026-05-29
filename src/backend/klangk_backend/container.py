@@ -12,10 +12,10 @@ from . import util, model
 
 logger = logging.getLogger(__name__)
 
-IMAGE_NAME = util.resolve_env_secret("BARK_IMAGE_NAME", "bark")
-INSTANCE_ID = util.resolve_env_secret("BARK_INSTANCE_ID", "default")
+IMAGE_NAME = util.resolve_env_secret("KLANGK_IMAGE_NAME", "klangk")
+INSTANCE_ID = util.resolve_env_secret("KLANGK_INSTANCE_ID", "default")
 
-_allowed_images_env = util.resolve_env_secret("BARK_ALLOWED_IMAGES", "")
+_allowed_images_env = util.resolve_env_secret("KLANGK_ALLOWED_IMAGES", "")
 ALLOWED_IMAGES: set[str] = {
     img.strip() for img in _allowed_images_env.split(",") if img.strip()
 }
@@ -67,13 +67,13 @@ def validate_mounts(mounts: list[str]) -> str | None:
 
 def parse_idle_timeout() -> tuple[int, int]:
     default = 30 * 60
-    env_val = util.resolve_env_secret("BARK_IDLE_TIMEOUT_SECONDS")
+    env_val = util.resolve_env_secret("KLANGK_IDLE_TIMEOUT_SECONDS")
     if env_val is not None:
         try:
             timeout = int(env_val)
         except ValueError:
             logger.warning(
-                "BARK_IDLE_TIMEOUT_SECONDS=%r is not a valid integer, "
+                "KLANGK_IDLE_TIMEOUT_SECONDS=%r is not a valid integer, "
                 "using default %d",
                 env_val,
                 default,
@@ -88,7 +88,7 @@ def parse_idle_timeout() -> tuple[int, int]:
 IDLE_TIMEOUT_SECONDS, CHECK_INTERVAL_SECONDS = parse_idle_timeout()
 
 PORT_RANGE_START = int(
-    util.resolve_env_secret("BARK_PORT_RANGE_START") or "9000"
+    util.resolve_env_secret("KLANGK_PORT_RANGE_START") or "9000"
 )
 CONTAINER_PORT_START = 8000
 DEFAULT_PORTS_PER_WORKSPACE = 5
@@ -298,12 +298,12 @@ class ContainerRegistry:
                 host_ports = host_ports[:num_ports]
 
         env_vars = []
-        nginx_port = util.resolve_env_secret("BARK_NGINX_PORT", "8995")
+        nginx_port = util.resolve_env_secret("KLANGK_NGINX_PORT", "8995")
         proxy_url = f"http://host.docker.internal:{nginx_port}/llm-proxy"
-        llm_model = util.resolve_env_secret("BARK_LLM_MODEL", "")
-        env_vars.append(f"BARK_LLM_PROXY_URL={proxy_url}")
+        llm_model = util.resolve_env_secret("KLANGK_LLM_MODEL", "")
+        env_vars.append(f"KLANGK_LLM_PROXY_URL={proxy_url}")
         if llm_model:
-            env_vars.append(f"BARK_LLM_MODEL={llm_model}")
+            env_vars.append(f"KLANGK_LLM_MODEL={llm_model}")
         env_vars.append("PI_SKIP_VERSION_CHECK=1")
         logger.info(
             "Container LLM proxy: %s (model: %s)",
@@ -322,7 +322,7 @@ class ContainerRegistry:
                 "OTEL_EXPORTER_OTLP_HEADERS="
                 f"Authorization=Bearer {logfire_token}"
             )
-            env_vars.append("OTEL_SERVICE_NAME=bark-pi-agent")
+            env_vars.append("OTEL_SERVICE_NAME=klangk-pi-agent")
             logfire_env = util.resolve_env_secret("LOGFIRE_ENVIRONMENT")
             if logfire_env:
                 env_vars.append(
@@ -334,29 +334,29 @@ class ContainerRegistry:
             f"{CONTAINER_PORT_START + i}:{hp}"
             for i, hp in enumerate(host_ports)
         ]
-        env_vars.append(f"BARK_PORT_MAPPINGS={','.join(mappings)}")
-        env_vars.append(f"BARK_WORKSPACE_ID={workspace_id}")
+        env_vars.append(f"KLANGK_PORT_MAPPINGS={','.join(mappings)}")
+        env_vars.append(f"KLANGK_WORKSPACE_ID={workspace_id}")
         bridge_token = self.create_bridge_token(workspace_id)
         env_vars.append(
-            f"BARK_BRIDGE_URL=http://host.docker.internal:{nginx_port}"
+            f"KLANGK_BRIDGE_URL=http://host.docker.internal:{nginx_port}"
         )
-        env_vars.append(f"BARK_BRIDGE_TOKEN={bridge_token}")
-        env_vars.append(f"BARK_HOSTING_HOSTNAME={hosting_hostname}")
-        env_vars.append(f"BARK_HOSTING_PROTO={hosting_proto}")
-        env_vars.append(f"BARK_HOSTING_BASE_PATH={hosting_base_path}")
+        env_vars.append(f"KLANGK_BRIDGE_TOKEN={bridge_token}")
+        env_vars.append(f"KLANGK_HOSTING_HOSTNAME={hosting_hostname}")
+        env_vars.append(f"KLANGK_HOSTING_PROTO={hosting_proto}")
+        env_vars.append(f"KLANGK_HOSTING_BASE_PATH={hosting_base_path}")
 
         if extra_env:
             for k, v in extra_env.items():
                 env_vars.append(f"{k}={v}")
 
-        # Ensure named volumes in extra_mounts exist with bark labels.
+        # Ensure named volumes in extra_mounts exist with klangk labels.
         # Named volumes don't contain / or start with .
         # Everything else is a bind mount, passed through as-is.
         if extra_mounts:
             for mount_spec in extra_mounts:
                 source = mount_spec.split(":")[0]
                 if "/" not in source and not source.startswith("."):
-                    # Named volume — ensure it exists with bark labels
+                    # Named volume — ensure it exists with klangk labels
                     try:
                         vol = await docker.volumes.get(source)
                         await vol.show()
@@ -366,8 +366,8 @@ class ContainerRegistry:
                                 {
                                     "Name": source,
                                     "Labels": {
-                                        "bark.managed": "true",
-                                        "bark.instance": INSTANCE_ID,
+                                        "klangk.managed": "true",
+                                        "klangk.instance": INSTANCE_ID,
                                     },
                                 }
                             )
@@ -385,20 +385,20 @@ class ContainerRegistry:
         config = {
             "Image": resolved_image,
             "Labels": {
-                "bark.managed": "true",
-                "bark.instance": INSTANCE_ID,
-                "bark.workspace-id": workspace_id,
+                "klangk.managed": "true",
+                "klangk.instance": INSTANCE_ID,
+                "klangk.workspace-id": workspace_id,
             },
             "HostConfig": {
                 "Init": True,
                 "ReadonlyRootfs": False,
                 "Binds": [
                     f"{host_path}:/work",
-                    f"{home_path}:/home/bark",
+                    f"{home_path}:/home/klangk",
                     "/var/run/docker.sock:/var/run/docker.sock",
                 ]
                 + (
-                    [f"{config_path}:/opt/bark/config:ro"]
+                    [f"{config_path}:/opt/klangk/config:ro"]
                     if config_path
                     else []
                 )
@@ -421,7 +421,7 @@ class ContainerRegistry:
         }
 
         container = await docker.containers.create_or_replace(
-            name=f"bark-{INSTANCE_ID}-{workspace_id[:12]}",
+            name=f"klangk-{INSTANCE_ID}-{workspace_id[:12]}",
             config=config,
         )
         await container.start()
@@ -558,12 +558,12 @@ class ContainerRegistry:
         try:
             docker = await self.get_docker()
             containers = await docker.containers.list(
-                filters={"label": [f"bark.instance={INSTANCE_ID}"]},
+                filters={"label": [f"klangk.instance={INSTANCE_ID}"]},
             )
             for c in containers:
                 if c.id not in self._cid_to_wsid:
                     labels = (await c.show())["Config"]["Labels"]
-                    workspace_id = labels.get("bark.workspace-id", "unknown")
+                    workspace_id = labels.get("klangk.workspace-id", "unknown")
                     self.track_activity(c.id, workspace_id)
                     logger.info(
                         "Adopted orphaned container %s (workspace %s)",
@@ -583,7 +583,7 @@ class ContainerRegistry:
             self.cleanup_task.cancel()
             self.cleanup_task = None
         # Skip container cleanup when running inside a container
-        # (developing bark in bark — don't kill our own container).
+        # (developing klangk in klangk — don't kill our own container).
         if os.path.exists("/.dockerenv"):
             logger.info("Running inside container, skipping container cleanup")
             return
@@ -592,12 +592,12 @@ class ContainerRegistry:
         try:
             docker = await self.get_docker()
             containers = await docker.containers.list(
-                filters={"label": [f"bark.instance={INSTANCE_ID}"]},
+                filters={"label": [f"klangk.instance={INSTANCE_ID}"]},
             )
             for c in containers:
                 if c.id not in tracked_ids:
                     logger.info(
-                        "Removing orphaned bark container %s",
+                        "Removing orphaned klangk container %s",
                         c.id,
                     )
                     tasks.append(c.delete(force=True))

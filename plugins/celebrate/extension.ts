@@ -1,5 +1,5 @@
-const BRIDGE_URL = process.env.BARK_BRIDGE_URL;
-const BRIDGE_TOKEN = process.env.BARK_BRIDGE_TOKEN;
+const BRIDGE_URL = process.env.KLANGK_BRIDGE_URL;
+const BRIDGE_TOKEN = process.env.KLANGK_BRIDGE_TOKEN;
 
 const CONFETTI_CHARS = [
   "\x1b[91m*\x1b[0m",

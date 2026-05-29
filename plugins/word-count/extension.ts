@@ -17,7 +17,7 @@ export default function (pi: any) {
       try {
         const result = await pi.exec(
           "python3",
-          ["/opt/bark/plugin-tools/word-count/word_count.py", params.path],
+          ["/opt/klangk/plugin-tools/word-count/word_count.py", params.path],
           { signal, timeout: 10000 },
         );
         return {

@@ -1,4 +1,4 @@
-"""Tests for bark CLI commands (main.py)."""
+"""Tests for klangk CLI commands (main.py)."""
 
 import os
 from unittest.mock import MagicMock, patch
@@ -7,16 +7,16 @@ import httpx
 import pytest
 import typer
 
-from bark_backend.cli.client import WorkspaceNotFoundError
-from bark_backend.cli.config import CLIConfig
-from bark_backend.cli.client import Workspace
+from klangk_backend.cli.client import WorkspaceNotFoundError
+from klangk_backend.cli.config import CLIConfig
+from klangk_backend.cli.client import Workspace
 
 
 @pytest.fixture
 def logged_in_cfg(tmp_path, monkeypatch):
     """Config with a valid token and email pre-loaded."""
     config_path = tmp_path / "cli.toml"
-    monkeypatch.setattr("bark_backend.cli.config._CONFIG_PATH", config_path)
+    monkeypatch.setattr("klangk_backend.cli.config._CONFIG_PATH", config_path)
     cfg = CLIConfig()
     cfg.server.url = "http://localhost:8995"
     cfg.auth.token = "test-token"
@@ -29,7 +29,7 @@ def logged_in_cfg(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def reset_main_state():
     """Reset module-level CLI state before and after each test."""
-    import bark_backend.cli.main as _main
+    import klangk_backend.cli.main as _main
 
     orig = _main._cfg_cache
     _main._cfg_cache = None
@@ -48,18 +48,18 @@ def reset_env():
 
 class TestMainCLI:
     def test_login_cmd_stores_token(self, tmp_path, monkeypatch):
-        from bark_backend.cli.main import login_cmd
+        from klangk_backend.cli.main import login_cmd
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "new-token"}
         with patch("httpx.post", return_value=mock_resp):
             with patch(
-                "bark_backend.cli.auth.Prompt.ask",
+                "klangk_backend.cli.auth.Prompt.ask",
                 side_effect=["u@test.com", "pw"],
             ):
                 login_cmd(
@@ -72,11 +72,11 @@ class TestMainCLI:
         assert cfg.auth.email == "u@test.com"
 
     def test_login_cmd_with_password_file(self, tmp_path, monkeypatch):
-        from bark_backend.cli.main import login_cmd
+        from klangk_backend.cli.main import login_cmd
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         pw_file = tmp_path / "pw.txt"
         pw_file.write_text("file-pw\n")
@@ -93,11 +93,11 @@ class TestMainCLI:
         assert cfg.auth.token == "file-token"
 
     def test_login_cmd_with_password_stdin(self, tmp_path, monkeypatch):
-        from bark_backend.cli.main import login_cmd
+        from klangk_backend.cli.main import login_cmd
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -117,11 +117,11 @@ class TestMainCLI:
         self, tmp_path, monkeypatch
     ):
         import typer
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.auth.token = None
@@ -131,12 +131,12 @@ class TestMainCLI:
             main._require_auth()
 
     def test_require_auth_passes_when_logged_in(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         main._require_auth()  # Should not raise
 
     def test_list_workspaces_empty(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         monkeypatch.setattr(main, "_cfg", lambda: CLIConfig.load())
         client = MagicMock()
@@ -149,7 +149,7 @@ class TestMainCLI:
         client.list_workspaces.assert_called_once()
 
     def test_list_workspaces_plain(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -169,7 +169,7 @@ class TestMainCLI:
 
         from rich.console import Console
 
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -196,7 +196,7 @@ class TestMainCLI:
 
         from rich.console import Console
 
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="new-id", name="new-ws", created_at="2025-01-01T00:00:00Z"
@@ -217,7 +217,7 @@ class TestMainCLI:
     def test_create_workspace_error(self, logged_in_cfg, monkeypatch):
         import typer
 
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         mock_response = MagicMock()
         mock_response.status_code = 400
@@ -233,7 +233,7 @@ class TestMainCLI:
             main.create("dup")
 
     def test_delete_workspace(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         monkeypatch.setattr(main, "_client", lambda: client)
@@ -245,8 +245,8 @@ class TestMainCLI:
     def test_delete_workspace_not_found(self, logged_in_cfg, monkeypatch):
         import typer
 
-        from bark_backend.cli.client import WorkspaceNotFoundError
-        from bark_backend.cli import main
+        from klangk_backend.cli.client import WorkspaceNotFoundError
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.delete_workspace.side_effect = WorkspaceNotFoundError("nope")
@@ -257,11 +257,11 @@ class TestMainCLI:
 
     def test_shell_requires_auth(self, tmp_path, monkeypatch):
         import typer
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.auth.token = None
@@ -271,11 +271,11 @@ class TestMainCLI:
             main.shell(None)
 
     def test_status_not_logged_in(self, tmp_path, monkeypatch, capsys):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://custom:1234"
@@ -288,7 +288,7 @@ class TestMainCLI:
         assert "not_logged_in" in output
 
     def test_status_logged_in(self, logged_in_cfg, capsys):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         main.status(plain=True)
         output = capsys.readouterr().out
@@ -300,7 +300,7 @@ class TestMainCLI:
 
         from rich.console import Console
 
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         buf = StringIO()
         with patch.object(
@@ -318,11 +318,11 @@ class TestMainCLI:
 
         from rich.console import Console
 
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.auth.token = None
@@ -339,7 +339,7 @@ class TestMainCLI:
         assert "not logged in" in output
 
     def test_status_plain_logged_in(self, logged_in_cfg, capsys):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         main.status(plain=True)
         output = capsys.readouterr().out
@@ -348,11 +348,11 @@ class TestMainCLI:
         assert "status=logged_in" in output
 
     def test_status_plain_not_logged_in(self, tmp_path, monkeypatch, capsys):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://custom:1234"
@@ -366,7 +366,7 @@ class TestMainCLI:
         assert "user=" not in output
 
     def test_logout_command(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         with patch("httpx.post", return_value=MagicMock(status_code=200)):
             main.logout()
@@ -374,7 +374,7 @@ class TestMainCLI:
         assert cfg.auth.token is None
 
     def test_logout_network_error_does_not_propagate(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         with patch("httpx.post", side_effect=httpx.ConnectError("no route")):
             main.logout()  # must not raise
@@ -382,7 +382,7 @@ class TestMainCLI:
     def test_shell_with_single_workspace_auto_selects(
         self, logged_in_cfg, monkeypatch, reset_env
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -406,7 +406,7 @@ class TestMainCLI:
 
     def test_shell_no_workspaces_exits(self, logged_in_cfg, monkeypatch):
         import typer
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.list_workspaces.return_value = []
@@ -418,7 +418,7 @@ class TestMainCLI:
     def test_shell_multiple_workspaces_prompts(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws1 = Workspace(
             id="id1" + "0" * 52, name="ws-a", created_at="2025-01-01T00:00:00Z"
@@ -439,7 +439,7 @@ class TestMainCLI:
                         main.shell(None)
 
     def test_shell_by_name(self, logged_in_cfg, monkeypatch, reset_env):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="target" + "0" * 52,
@@ -461,14 +461,14 @@ class TestMainCLI:
         client.resolve_workspace.assert_called_once_with("target-ws")
 
     def test_edit_with_flags(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
             name="my-ws",
             created_at="2025-01-01T00:00:00Z",
-            image="bark",
-            default_command="bark-pi",
+            image="klangk",
+            default_command="klangk-pi",
         )
         client = MagicMock()
         client.resolve_workspace.return_value = ws
@@ -491,13 +491,13 @@ class TestMainCLI:
         assert "image" not in body  # not provided, not sent
 
     def test_edit_clear_command(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
             name="my-ws",
             created_at="2025-01-01T00:00:00Z",
-            default_command="bark-pi",
+            default_command="klangk-pi",
         )
         client = MagicMock()
         client.resolve_workspace.return_value = ws
@@ -516,14 +516,14 @@ class TestMainCLI:
         assert call_args[1]["json"]["default_command"] is None
 
     def test_edit_interactive(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
             name="my-ws",
             created_at="2025-01-01T00:00:00Z",
-            image="bark",
-            default_command="bark-pi",
+            image="klangk",
+            default_command="klangk-pi",
         )
         client = MagicMock()
         client.resolve_workspace.return_value = ws
@@ -545,14 +545,14 @@ class TestMainCLI:
         assert body["default_command"] == "pi"
 
     def test_edit_interactive_change_all(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
             name="my-ws",
             created_at="2025-01-01T00:00:00Z",
-            image="bark",
-            default_command="bark-pi",
+            image="klangk",
+            default_command="klangk-pi",
         )
         client = MagicMock()
         client.resolve_workspace.return_value = ws
@@ -562,7 +562,7 @@ class TestMainCLI:
         with patch.object(main, "_client", return_value=client):
             with patch(
                 "builtins.input",
-                side_effect=["renamed", "bark-custom", "pi", "", ""],
+                side_effect=["renamed", "klangk-custom", "pi", "", ""],
             ):
                 from typer.testing import CliRunner
 
@@ -572,11 +572,11 @@ class TestMainCLI:
 
         body = client.put.call_args[1]["json"]
         assert body["name"] == "renamed"
-        assert body["image"] == "bark-custom"
+        assert body["image"] == "klangk-custom"
         assert body["default_command"] == "pi"
 
     def test_edit_interactive_add_mount(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -604,7 +604,7 @@ class TestMainCLI:
         assert body["mounts"] == ["/host:/container"]
 
     def test_edit_interactive_remove_mount(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -634,7 +634,7 @@ class TestMainCLI:
     def test_edit_interactive_add_and_remove_mount(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -665,7 +665,7 @@ class TestMainCLI:
     def test_edit_interactive_invalid_remove_number(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -696,7 +696,7 @@ class TestMainCLI:
     def test_edit_interactive_remove_all_mounts(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -726,7 +726,7 @@ class TestMainCLI:
     def test_edit_interactive_invalid_mount_rejected(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -755,7 +755,7 @@ class TestMainCLI:
         assert body["mounts"] == ["/a:/b"]
 
     def test_create_invalid_mount_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         monkeypatch.setattr(main, "_client", lambda: MagicMock())
 
@@ -768,7 +768,7 @@ class TestMainCLI:
         assert result.exit_code == 1
 
     def test_edit_invalid_mount_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -786,7 +786,7 @@ class TestMainCLI:
         assert result.exit_code == 1
 
     def test_edit_with_image_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -802,15 +802,15 @@ class TestMainCLI:
 
             runner = CliRunner()
             result = runner.invoke(
-                main.app, ["edit", "my-ws", "--image", "bark-custom"]
+                main.app, ["edit", "my-ws", "--image", "klangk-custom"]
             )
             assert result.exit_code == 0
 
         body = client.put.call_args[1]["json"]
-        assert body["image"] == "bark-custom"
+        assert body["image"] == "klangk-custom"
 
     def test_edit_with_mount_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -845,7 +845,7 @@ class TestMainCLI:
         ]
 
     def test_edit_interactive_no_changes(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -868,7 +868,7 @@ class TestMainCLI:
         client.put.assert_not_called()
 
     def test_edit_interactive_add_env(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -897,7 +897,7 @@ class TestMainCLI:
     def test_edit_interactive_invalid_env_rejected(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -925,7 +925,7 @@ class TestMainCLI:
         assert body["env"] == {"A": "1"}
 
     def test_create_with_env_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="new-id", name="ws", created_at="2025-01-01T00:00:00Z"
@@ -946,7 +946,7 @@ class TestMainCLI:
         )
 
     def test_create_with_invalid_env_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         monkeypatch.setattr(main, "_client", lambda: MagicMock())
 
@@ -959,7 +959,7 @@ class TestMainCLI:
         assert result.exit_code == 1
 
     def test_edit_interactive_remove_env(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -989,7 +989,7 @@ class TestMainCLI:
     def test_edit_interactive_invalid_env_remove_number(
         self, logged_in_cfg, monkeypatch
     ):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1016,7 +1016,7 @@ class TestMainCLI:
         client.put.assert_not_called()
 
     def test_edit_with_env_flag(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1038,7 +1038,7 @@ class TestMainCLI:
         assert body["env"] == {"A": "1"}
 
     def test_dup_workspace(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1061,7 +1061,7 @@ class TestMainCLI:
             assert "copy" in result.stdout
 
     def test_dup_workspace_not_found(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.resolve_workspace.side_effect = WorkspaceNotFoundError("nope")
@@ -1074,7 +1074,7 @@ class TestMainCLI:
             assert result.exit_code == 1
 
     def test_dup_workspace_conflict(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1093,7 +1093,7 @@ class TestMainCLI:
             assert result.exit_code == 1
 
     def test_dup_workspace_404(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1112,7 +1112,7 @@ class TestMainCLI:
             assert result.exit_code == 1
 
     def test_edit_workspace_not_found(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.resolve_workspace.side_effect = WorkspaceNotFoundError("nope")
@@ -1127,7 +1127,7 @@ class TestMainCLI:
             assert result.exit_code == 1
 
     def test_edit_404_from_server(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1148,8 +1148,8 @@ class TestMainCLI:
             assert result.exit_code == 1
 
     def test_exec_runs_command(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
-        from bark_backend.cli.client import Workspace
+        from klangk_backend.cli import main
+        from klangk_backend.cli.client import Workspace
 
         ws = Workspace(
             id="ws1" + "0" * 52,
@@ -1171,7 +1171,7 @@ class TestMainCLI:
                 assert exc_info.value.exit_code == 0
 
     def test_exec_no_command(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ctx = MagicMock()
         ctx.args = []
@@ -1180,8 +1180,8 @@ class TestMainCLI:
         assert exc_info.value.exit_code == 1
 
     def test_exec_workspace_not_found(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
-        from bark_backend.cli.client import WorkspaceNotFoundError
+        from klangk_backend.cli import main
+        from klangk_backend.cli.client import WorkspaceNotFoundError
 
         client = MagicMock()
         client.resolve_workspace.side_effect = WorkspaceNotFoundError("nope")
@@ -1194,7 +1194,7 @@ class TestMainCLI:
         assert exc_info.value.exit_code == 1
 
     def test_sync_runs_rsync(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ctx = MagicMock()
         ctx.args = []
@@ -1210,13 +1210,13 @@ class TestMainCLI:
         assert "-avz" in cmd
         assert "/tmp/foo" in cmd
         assert "ws:/work/foo" in cmd
-        assert "bark exec" in " ".join(cmd)
+        assert "klangk exec" in " ".join(cmd)
 
     def test_sync_no_rsync(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         def which_no_rsync(name):
-            return "/usr/bin/bark" if name == "bark" else None
+            return "/usr/bin/klangk" if name == "klangk" else None
 
         ctx = MagicMock()
         ctx.args = []
@@ -1226,7 +1226,7 @@ class TestMainCLI:
         assert exc_info.value.exit_code == 1
 
     def test_sync_passes_extra_args(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ctx = MagicMock()
         ctx.args = ["--delete", "--exclude=.git"]
@@ -1241,7 +1241,7 @@ class TestMainCLI:
         assert "--exclude=.git" in cmd
 
     def test_sync_rsync_failure(self, logged_in_cfg):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         ctx = MagicMock()
         ctx.args = []
@@ -1256,7 +1256,7 @@ class TestMainCLI:
 
 class TestVolumes:
     def test_volumes_ls(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.get.return_value = MagicMock(
@@ -1277,7 +1277,7 @@ class TestVolumes:
         assert "vol-1" in result.stdout
 
     def test_volumes_ls_empty(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.get.return_value = MagicMock(
@@ -1294,7 +1294,7 @@ class TestVolumes:
         assert "No volumes" in result.stdout
 
     def test_volumes_ls_plain(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.get.return_value = MagicMock(
@@ -1313,7 +1313,7 @@ class TestVolumes:
         assert "vol-1" in result.stdout
 
     def test_volumes_create(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.post.return_value = MagicMock(status_code=200)
@@ -1327,7 +1327,7 @@ class TestVolumes:
         assert "Created" in result.stdout
 
     def test_volumes_create_duplicate(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.post.return_value = MagicMock(status_code=409)
@@ -1340,7 +1340,7 @@ class TestVolumes:
         assert result.exit_code == 1
 
     def test_volumes_rm(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.delete.return_value = MagicMock(status_code=200)
@@ -1354,7 +1354,7 @@ class TestVolumes:
         assert "Deleted" in result.stdout
 
     def test_volumes_rm_not_found(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.delete.return_value = MagicMock(status_code=404)
@@ -1367,7 +1367,7 @@ class TestVolumes:
         assert result.exit_code == 1
 
     def test_volumes_rm_in_use(self, logged_in_cfg, monkeypatch):
-        from bark_backend.cli import main
+        from klangk_backend.cli import main
 
         client = MagicMock()
         client.delete.return_value = MagicMock(status_code=409)

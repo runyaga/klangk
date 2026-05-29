@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_frontend/layout/ide_layout.dart';
+import 'package:klangk_frontend/layout/ide_layout.dart';
 
 void main() {
   Widget buildLayout({

@@ -10,9 +10,11 @@ from pathlib import Path
 from .util import resolve_env_secret
 
 _data_dir = Path(
-    resolve_env_secret("BARK_DATA_DIR", str(Path.home() / ".bark" / "data"))
+    resolve_env_secret(
+        "KLANGK_DATA_DIR", str(Path.home() / ".klangk" / "data")
+    )
 )
-DB_PATH = _data_dir / "bark.db"
+DB_PATH = _data_dir / "klangk.db"
 
 
 async def get_db() -> aiosqlite.Connection:

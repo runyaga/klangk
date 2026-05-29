@@ -5,7 +5,7 @@ import { join } from "path";
 async function globalTeardown() {
   const projectRoot = join(__dirname, "..", "..", "..");
 
-  const pid = process.env.BARK_E2E_PID;
+  const pid = process.env.KLANGK_E2E_PID;
   if (pid) {
     const numPid = Number(pid);
     console.log(`Stopping E2E server (PID ${numPid})...`);
@@ -41,7 +41,7 @@ async function globalTeardown() {
   }
 
   // Stop nginx LLM proxy
-  const nginxPid = process.env.BARK_E2E_NGINX_PID;
+  const nginxPid = process.env.KLANGK_E2E_NGINX_PID;
   if (nginxPid) {
     try {
       process.kill(Number(nginxPid), "SIGKILL");
@@ -53,20 +53,20 @@ async function globalTeardown() {
   // Remove any containers that survived shutdown (including stopped ones holding ports)
   try {
     const ids = execSync(
-      'docker ps -a --filter "label=bark.managed=true" --filter "label=bark.instance=e2e-test" -q',
+      'docker ps -a --filter "label=klangk.managed=true" --filter "label=klangk.instance=e2e-test" -q',
     )
       .toString()
       .trim();
     if (ids) {
       execSync(`docker rm -f ${ids.split("\n").join(" ")}`);
-      console.log("Removed leftover bark containers");
+      console.log("Removed leftover klangk containers");
     }
   } catch {
     // Docker not available or no containers
   }
 
   // Print backend log location
-  const logPath = process.env.BARK_E2E_LOG;
+  const logPath = process.env.KLANGK_E2E_LOG;
   if (logPath && existsSync(logPath)) {
     console.log(`Backend log: ${logPath}`);
   }
@@ -74,7 +74,7 @@ async function globalTeardown() {
   // Clean up temp data directory. On CI, Docker containers create root-owned
   // files in bind-mounted workspace dirs, so rmSync fails with EACCES.
   // Use a Docker container to remove them first.
-  const dataDir = process.env.BARK_E2E_DATA_DIR;
+  const dataDir = process.env.KLANGK_E2E_DATA_DIR;
   if (dataDir) {
     console.log(`Cleaning up ${dataDir}`);
     try {

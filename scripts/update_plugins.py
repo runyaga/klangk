@@ -18,36 +18,36 @@ except ImportError:
     sys.exit(1)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PLUGINS_DIR = os.environ.get("BARK_PLUGINS_DIR") or os.path.join(
-    os.path.expanduser("~"), ".bark", "plugins"
+PLUGINS_DIR = os.environ.get("KLANGK_PLUGINS_DIR") or os.path.join(
+    os.path.expanduser("~"), ".klangk", "plugins"
 )
 YAML_PATH = os.path.join(PLUGINS_DIR, "plugins.yaml")
 LOCK_PATH = os.path.join(PLUGINS_DIR, "plugins.lock")
 
 DEFAULT_TEMPLATE = """\
-# Bark plugins configuration
+# Klangk plugins configuration
 # Run 'update-plugins' to fetch plugins listed here.
 # Each entry requires: name, git. Optional: path, ref.
 plugins:
-  # Default plugins (from the Bark repo)
+  # Default plugins (from the Klangk repo)
   - name: celebrate
-    git: git@github.com:mcdonc/bark.git
+    git: git@github.com:mcdonc/klangk.git
     path: plugins/celebrate
     ref: main
   - name: beep
-    git: git@github.com:mcdonc/bark.git
+    git: git@github.com:mcdonc/klangk.git
     path: plugins/beep
     ref: main
   - name: pig-latin
-    git: git@github.com:mcdonc/bark.git
+    git: git@github.com:mcdonc/klangk.git
     path: plugins/pig-latin
     ref: main
   - name: word-count
-    git: git@github.com:mcdonc/bark.git
+    git: git@github.com:mcdonc/klangk.git
     path: plugins/word-count
     ref: main
   - name: browser-fetch
-    git: git@github.com:mcdonc/bark.git
+    git: git@github.com:mcdonc/klangk.git
     path: plugins/browser-fetch
     ref: main
   # Add more plugins:
@@ -58,7 +58,7 @@ plugins:
   #
   # Plugin structure:
   #   extension.ts              # required: Pi extension (TypeScript)
-  #   bark/                     # optional: Dart package for client-side tools
+  #   klangk/                     # optional: Dart package for client-side tools
   #     pubspec.yaml            #   depends on bark_plugin_api
   #     lib/
   #       plugin.dart           #   class extending ToolPlugin

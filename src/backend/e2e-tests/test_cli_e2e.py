@@ -1,9 +1,9 @@
-"""CLI end-to-end tests against a real Bark server.
+"""CLI end-to-end tests against a real Klangk server.
 
-These tests start a real uvicorn server, run bark CLI commands as
+These tests start a real uvicorn server, run klangk CLI commands as
 subprocesses, and verify behavior against real Docker containers.
 
-Requires: Docker running, bark image built.
+Requires: Docker running, klangk image built.
 
 Run with: devenv shell -- test-cli-e2e
 """
@@ -32,26 +32,26 @@ def _run(args, timeout=30, input=None, **kwargs):
 
 @pytest.fixture(scope="session")
 def server():
-    """Start a real Bark server for the test session."""
-    data_dir = tempfile.mkdtemp(prefix="bark-cli-e2e-")
+    """Start a real Klangk server for the test session."""
+    data_dir = tempfile.mkdtemp(prefix="klangk-cli-e2e-")
     port = "18995"
     env = {
         **os.environ,
-        "BARK_PORT": port,
-        "BARK_DATA_DIR": data_dir,
-        "BARK_JWT_SECRET": "cli-e2e-test-secret",
-        "BARK_DEFAULT_USER": "test@example.com",
-        "BARK_DEFAULT_PASSWORD": "testpass",
-        "BARK_TEST_MODE": "1",
-        "BARK_INSTANCE_ID": "cli-e2e",
-        "BARK_IDLE_TIMEOUT_SECONDS": "300",
-        "BARK_PORT_RANGE_START": "9000",
+        "KLANGK_PORT": port,
+        "KLANGK_DATA_DIR": data_dir,
+        "KLANGK_JWT_SECRET": "cli-e2e-test-secret",
+        "KLANGK_DEFAULT_USER": "test@example.com",
+        "KLANGK_DEFAULT_PASSWORD": "testpass",
+        "KLANGK_TEST_MODE": "1",
+        "KLANGK_INSTANCE_ID": "cli-e2e",
+        "KLANGK_IDLE_TIMEOUT_SECONDS": "300",
+        "KLANGK_PORT_RANGE_START": "9000",
         "LOGFIRE_TOKEN": "",
     }
     proc = subprocess.Popen(
         [
             "uvicorn",
-            "bark_backend.main:app",
+            "klangk_backend.main:app",
             "--host",
             "0.0.0.0",
             "--port",
@@ -94,7 +94,7 @@ def server():
             "ps",
             "-a",
             "--filter",
-            "label=bark.instance=cli-e2e",
+            "label=klangk.instance=cli-e2e",
             "-q",
         ],
         capture_output=True,
@@ -111,15 +111,15 @@ def server():
 @pytest.fixture(scope="session")
 def cli_config(server, tmp_path_factory):
     """Create a CLI config pointing at the test server."""
-    config_dir = tmp_path_factory.mktemp("bark-cli-config")
+    config_dir = tmp_path_factory.mktemp("klangk-cli-config")
     env = {**os.environ, "HOME": str(config_dir)}
-    # The CLI reads from ~/.config/bark/cli.toml
-    bark_config_dir = config_dir / ".config" / "bark"
-    bark_config_dir.mkdir(parents=True)
+    # The CLI reads from ~/.config/klangk/cli.toml
+    klangk_config_dir = config_dir / ".config" / "klangk"
+    klangk_config_dir.mkdir(parents=True)
     return {
         "env": env,
-        "config_dir": bark_config_dir,
-        "config_file": bark_config_dir / "cli.toml",
+        "config_dir": klangk_config_dir,
+        "config_file": klangk_config_dir / "cli.toml",
         "server_url": server["url"],
     }
 
@@ -128,7 +128,7 @@ class TestLogin:
     def test_login_with_email_arg(self, server, cli_config):
         result = _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -150,7 +150,7 @@ class TestLogin:
     def test_login_reuses_token(self, server, cli_config):
         result = _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -166,7 +166,7 @@ class TestLogin:
 
     def test_status_shows_logged_in(self, cli_config):
         result = _run(
-            ["bark", "status", "--plain"],
+            ["klangk", "status", "--plain"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -177,7 +177,7 @@ class TestLogin:
 class TestWorkspaceCRUD:
     def test_create_workspace(self, cli_config):
         result = _run(
-            ["bark", "create", "e2e-crud"],
+            ["klangk", "create", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -185,7 +185,7 @@ class TestWorkspaceCRUD:
 
     def test_list_workspaces(self, cli_config):
         result = _run(
-            ["bark", "list", "--plain"],
+            ["klangk", "list", "--plain"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -193,21 +193,21 @@ class TestWorkspaceCRUD:
 
     def test_create_duplicate_fails(self, cli_config):
         result = _run(
-            ["bark", "create", "e2e-crud"],
+            ["klangk", "create", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode != 0
 
     def test_delete_nonexistent_fails(self, cli_config):
         result = _run(
-            ["bark", "rm", "nonexistent-ws"],
+            ["klangk", "rm", "nonexistent-ws"],
             env=cli_config["env"],
         )
         assert result.returncode != 0
 
     def test_delete_workspace(self, cli_config):
         result = _run(
-            ["bark", "rm", "e2e-crud"],
+            ["klangk", "rm", "e2e-crud"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
@@ -215,7 +215,7 @@ class TestWorkspaceCRUD:
 
     def test_list_after_delete(self, cli_config):
         result = _run(
-            ["bark", "list", "--plain"],
+            ["klangk", "list", "--plain"],
             env=cli_config["env"],
         )
         assert "e2e-crud" not in result.stdout
@@ -226,7 +226,7 @@ class TestDuplicate:
         env = cli_config["env"]
         _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -242,12 +242,12 @@ class TestDuplicate:
         env = cli_config["env"]
         self._login(cli_config)
         _run(
-            ["bark", "create", "e2e-dup-src", "--env", "FOO=bar"],
+            ["klangk", "create", "e2e-dup-src", "--env", "FOO=bar"],
             env=env,
         )
         try:
             result = _run(
-                ["bark", "dup", "e2e-dup-src", "e2e-dup-copy"],
+                ["klangk", "dup", "e2e-dup-src", "e2e-dup-copy"],
                 env=env,
             )
             assert result.returncode == 0
@@ -255,20 +255,20 @@ class TestDuplicate:
 
             # Verify copy appears in list
             result = _run(
-                ["bark", "list", "--plain"],
+                ["klangk", "list", "--plain"],
                 env=env,
             )
             assert "e2e-dup-src" in result.stdout
             assert "e2e-dup-copy" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-dup-copy"], env=env)
-            _run(["bark", "rm", "e2e-dup-src"], env=env)
+            _run(["klangk", "rm", "e2e-dup-copy"], env=env)
+            _run(["klangk", "rm", "e2e-dup-src"], env=env)
 
     def test_dup_nonexistent(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
         result = _run(
-            ["bark", "dup", "no-such-ws", "copy"],
+            ["klangk", "dup", "no-such-ws", "copy"],
             env=env,
         )
         assert result.returncode != 0
@@ -277,13 +277,13 @@ class TestDuplicate:
 class TestExec:
     @pytest.fixture(autouse=True, scope="class")
     def workspace(self, cli_config):
-        _run(["bark", "create", "e2e-exec"], env=cli_config["env"])
+        _run(["klangk", "create", "e2e-exec"], env=cli_config["env"])
         yield
-        _run(["bark", "rm", "e2e-exec"], env=cli_config["env"])
+        _run(["klangk", "rm", "e2e-exec"], env=cli_config["env"])
 
     def test_exec_echo(self, cli_config):
         result = _run(
-            ["bark", "exec", "e2e-exec", "echo", "hello from exec"],
+            ["klangk", "exec", "e2e-exec", "echo", "hello from exec"],
             env=cli_config["env"],
             timeout=60,
         )
@@ -292,7 +292,7 @@ class TestExec:
 
     def test_exec_piped_stdin(self, cli_config):
         result = _run(
-            ["bark", "exec", "e2e-exec", "cat"],
+            ["klangk", "exec", "e2e-exec", "cat"],
             input="piped data\n",
             env=cli_config["env"],
             timeout=60,
@@ -302,7 +302,7 @@ class TestExec:
 
     def test_exec_exit_code(self, cli_config):
         result = _run(
-            ["bark", "exec", "e2e-exec", "false"],
+            ["klangk", "exec", "e2e-exec", "false"],
             env=cli_config["env"],
             timeout=60,
         )
@@ -312,9 +312,9 @@ class TestExec:
 class TestSync:
     @pytest.fixture(autouse=True, scope="class")
     def workspace(self, cli_config):
-        _run(["bark", "create", "e2e-sync"], env=cli_config["env"])
+        _run(["klangk", "create", "e2e-sync"], env=cli_config["env"])
         yield
-        _run(["bark", "rm", "e2e-sync"], env=cli_config["env"])
+        _run(["klangk", "rm", "e2e-sync"], env=cli_config["env"])
 
     def test_sync_to_container(self, cli_config, tmp_path):
         # Create local files
@@ -325,7 +325,7 @@ class TestSync:
 
         result = _run(
             [
-                "bark",
+                "klangk",
                 "sync",
                 str(src) + "/",
                 "e2e-sync:/work/synced/",
@@ -338,7 +338,7 @@ class TestSync:
         # Verify files arrived
         verify = _run(
             [
-                "bark",
+                "klangk",
                 "exec",
                 "e2e-sync",
                 "cat",
@@ -354,7 +354,7 @@ class TestSync:
         # Create a file in the container
         _run(
             [
-                "bark",
+                "klangk",
                 "exec",
                 "e2e-sync",
                 "bash",
@@ -370,7 +370,7 @@ class TestSync:
 
         result = _run(
             [
-                "bark",
+                "klangk",
                 "sync",
                 "e2e-sync:/work/remote-file.txt",
                 str(dest) + "/",
@@ -387,7 +387,7 @@ class TestDefaultCommand:
         env = cli_config["env"]
         _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -400,14 +400,14 @@ class TestDefaultCommand:
         )
 
     def test_default_command_written_to_container(self, cli_config):
-        """set-command → container gets BARK_DEFAULT_COMMAND → .bark-command."""
+        """set-command → container gets KLANGK_DEFAULT_COMMAND → .klangk-command."""
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "create", "e2e-defcmd"], env=env)
+        _run(["klangk", "create", "e2e-defcmd"], env=env)
         try:
             # Set command before container starts
             result = _run(
-                ["bark", "edit", "e2e-defcmd", "--command", "echo hello"],
+                ["klangk", "edit", "e2e-defcmd", "--command", "echo hello"],
                 env=env,
             )
             assert result.returncode == 0
@@ -416,11 +416,11 @@ class TestDefaultCommand:
             # exec triggers container start; config mount has the command
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "exec",
                     "e2e-defcmd",
                     "cat",
-                    "/opt/bark/config/default-command",
+                    "/opt/klangk/config/default-command",
                 ],
                 env=env,
                 timeout=60,
@@ -430,36 +430,36 @@ class TestDefaultCommand:
 
             # Clear
             result = _run(
-                ["bark", "edit", "e2e-defcmd", "--command", ""], env=env
+                ["klangk", "edit", "e2e-defcmd", "--command", ""], env=env
             )
             assert result.returncode == 0
             assert "Updated" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-defcmd"], env=env)
+            _run(["klangk", "rm", "e2e-defcmd"], env=env)
 
     def test_default_command_bash_no_infinite_loop(self, cli_config):
         """Setting default command to bash should not cause infinite recursion."""
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "create", "e2e-defbash"], env=env)
+        _run(["klangk", "create", "e2e-defbash"], env=env)
         try:
             _run(
-                ["bark", "edit", "e2e-defbash", "--command", "bash"],
+                ["klangk", "edit", "e2e-defbash", "--command", "bash"],
                 env=env,
             )
             # Start the container first
             _run(
-                ["bark", "exec", "e2e-defbash", "true"],
+                ["klangk", "exec", "e2e-defbash", "true"],
                 env=env,
                 timeout=30,
             )
             # Run an interactive bash inside the container that sources
             # .bashrc, which would exec bash again without the
-            # BARK_CMD_STARTED guard. If recursion happens, this hangs
+            # KLANGK_CMD_STARTED guard. If recursion happens, this hangs
             # and times out. We pipe "exit" to terminate the shell.
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "exec",
                     "e2e-defbash",
                     "bash",
@@ -471,7 +471,7 @@ class TestDefaultCommand:
             )
             assert result.returncode == 0
         finally:
-            _run(["bark", "rm", "e2e-defbash"], env=env)
+            _run(["klangk", "rm", "e2e-defbash"], env=env)
 
 
 class TestMounts:
@@ -479,7 +479,7 @@ class TestMounts:
         env = cli_config["env"]
         _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -497,7 +497,7 @@ class TestMounts:
         try:
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "create",
                     "e2e-mount",
                     "--mount",
@@ -508,16 +508,16 @@ class TestMounts:
             assert result.returncode == 0
             assert "e2e-mount" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-mount"], env=env)
+            _run(["klangk", "rm", "e2e-mount"], env=env)
 
     def test_edit_with_mount_flags(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "create", "e2e-mount-edit"], env=env)
+        _run(["klangk", "create", "e2e-mount-edit"], env=env)
         try:
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "edit",
                     "e2e-mount-edit",
                     "--mount",
@@ -530,25 +530,25 @@ class TestMounts:
             assert result.returncode == 0
             assert "Updated" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-mount-edit"], env=env)
+            _run(["klangk", "rm", "e2e-mount-edit"], env=env)
 
     def test_edit_interactive_add_mount(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "create", "e2e-mount-int"], env=env)
+        _run(["klangk", "create", "e2e-mount-int"], env=env)
         try:
             # Interactive: keep name, keep image, keep command,
             # add mount "/tmp:/mnt/test", skip add, skip remove,
             # skip add env
             result = _run(
-                ["bark", "edit", "e2e-mount-int"],
+                ["klangk", "edit", "e2e-mount-int"],
                 input="\n\n\n/tmp:/mnt/test\n\n\n\n",
                 env=env,
             )
             assert result.returncode == 0
             assert "Updated" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-mount-int"], env=env)
+            _run(["klangk", "rm", "e2e-mount-int"], env=env)
 
 
 class TestEnvVars:
@@ -556,7 +556,7 @@ class TestEnvVars:
         env = cli_config["env"]
         _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -574,29 +574,29 @@ class TestEnvVars:
         try:
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "create",
                     "e2e-env",
                     "--env",
                     "FOO=bar",
                     "--env",
-                    "BARK_SKILLS=test",
+                    "KLANGK_SKILLS=test",
                 ],
                 env=env,
             )
             assert result.returncode == 0
             assert "e2e-env" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-env"], env=env)
+            _run(["klangk", "rm", "e2e-env"], env=env)
 
     def test_edit_with_env_flag(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
-        _run(["bark", "create", "e2e-env-edit"], env=env)
+        _run(["klangk", "create", "e2e-env-edit"], env=env)
         try:
             result = _run(
                 [
-                    "bark",
+                    "klangk",
                     "edit",
                     "e2e-env-edit",
                     "--env",
@@ -607,7 +607,7 @@ class TestEnvVars:
             assert result.returncode == 0
             assert "Updated" in result.stdout
         finally:
-            _run(["bark", "rm", "e2e-env-edit"], env=env)
+            _run(["klangk", "rm", "e2e-env-edit"], env=env)
 
 
 class TestVolumes:
@@ -615,7 +615,7 @@ class TestVolumes:
         env = cli_config["env"]
         _run(
             [
-                "bark",
+                "klangk",
                 "login",
                 "test@example.com",
                 "--server",
@@ -632,38 +632,38 @@ class TestVolumes:
         self._login(cli_config)
 
         # Create
-        result = _run(["bark", "volumes", "create", "e2e-vol"], env=env)
+        result = _run(["klangk", "volumes", "create", "e2e-vol"], env=env)
         assert result.returncode == 0
         assert "Created" in result.stdout
 
         # List
-        result = _run(["bark", "volumes", "ls", "--plain"], env=env)
+        result = _run(["klangk", "volumes", "ls", "--plain"], env=env)
         assert result.returncode == 0
         assert "e2e-vol" in result.stdout
 
         # Create duplicate fails
-        result = _run(["bark", "volumes", "create", "e2e-vol"], env=env)
+        result = _run(["klangk", "volumes", "create", "e2e-vol"], env=env)
         assert result.returncode != 0
 
         # Remove
-        result = _run(["bark", "volumes", "rm", "e2e-vol"], env=env)
+        result = _run(["klangk", "volumes", "rm", "e2e-vol"], env=env)
         assert result.returncode == 0
         assert "Deleted" in result.stdout
 
         # List after delete
-        result = _run(["bark", "volumes", "ls", "--plain"], env=env)
+        result = _run(["klangk", "volumes", "ls", "--plain"], env=env)
         assert "e2e-vol" not in result.stdout
 
     def test_volumes_rm_nonexistent(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
-        result = _run(["bark", "volumes", "rm", "no-such-vol"], env=env)
+        result = _run(["klangk", "volumes", "rm", "no-such-vol"], env=env)
         assert result.returncode != 0
 
     def test_volumes_empty_list(self, cli_config):
         env = cli_config["env"]
         self._login(cli_config)
-        result = _run(["bark", "volumes", "ls"], env=env)
+        result = _run(["klangk", "volumes", "ls"], env=env)
         assert result.returncode == 0
         # May show "No volumes." or an empty table
 
@@ -674,11 +674,11 @@ class TestAuthError:
         # Fresh config dir with no login
         config_dir = tmp_path / "no-login"
         config_dir.mkdir()
-        bark_config = config_dir / ".config" / "bark"
-        bark_config.mkdir(parents=True)
+        klangk_config = config_dir / ".config" / "klangk"
+        klangk_config.mkdir(parents=True)
         env = {**os.environ, "HOME": str(config_dir)}
         result = _run(
-            ["bark", "list"],
+            ["klangk", "list"],
             env=env,
         )
         assert result.returncode != 0
@@ -689,14 +689,14 @@ class TestAuthError:
 class TestLogout:
     def test_logout(self, cli_config):
         result = _run(
-            ["bark", "logout"],
+            ["klangk", "logout"],
             env=cli_config["env"],
         )
         assert result.returncode == 0
 
     def test_status_after_logout(self, cli_config):
         result = _run(
-            ["bark", "status", "--plain"],
+            ["klangk", "status", "--plain"],
             env=cli_config["env"],
         )
         assert "not_logged_in" in result.stdout

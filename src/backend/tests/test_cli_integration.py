@@ -7,13 +7,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import websockets
 
-from bark_backend.cli.config import CLIConfig
+from klangk_backend.cli.config import CLIConfig
 
 
 class TestWsShell:
     @pytest.mark.asyncio
     async def test_ws_shell_connection_failure_raises(self):
-        from bark_backend.cli.client import _ws_shell
+        from klangk_backend.cli.client import _ws_shell
 
         ws_mock = MagicMock()
 
@@ -38,7 +38,7 @@ class TestWsShell:
 
     @pytest.mark.asyncio
     async def test_ws_shell_success_sends_connect_and_start(self):
-        from bark_backend.cli.client import _ws_shell
+        from klangk_backend.cli.client import _ws_shell
 
         ws_mock = MagicMock()
 
@@ -81,7 +81,7 @@ class TestWsShell:
 
     @pytest.mark.asyncio
     async def test_ws_shell_sends_command_override(self):
-        from bark_backend.cli.client import _ws_shell
+        from klangk_backend.cli.client import _ws_shell
 
         ws_mock = MagicMock()
 
@@ -126,7 +126,7 @@ class TestWsShell:
 class TestRunShell:
     @pytest.mark.asyncio
     async def test_stdout_loop_bytes_message(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.recv = AsyncMock(
@@ -167,7 +167,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_stdout_loop_ignores_unknown_event(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.recv = AsyncMock(
@@ -200,7 +200,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_stdout_loop_connection_closed(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.recv = AsyncMock(
@@ -217,7 +217,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_stdin_loop_broken_pipe(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.send = AsyncMock()
@@ -240,7 +240,7 @@ class TestRunShell:
         fake_stdin.fileno = MagicMock(return_value=0)
         fake_stdin.read = MagicMock(side_effect=BrokenPipeError)
         with patch(
-            "bark_backend.cli.client.select.select",
+            "klangk_backend.cli.client.select.select",
             return_value=([0], [], []),
         ):
             task = asyncio.create_task(
@@ -256,7 +256,7 @@ class TestRunShell:
     @pytest.mark.asyncio
     async def test_resize_loop_sends_on_size_change(self, monkeypatch):
         """resize_loop detects size change and sends terminal_resize via _send_resize."""
-        from bark_backend.cli import client as cli_client
+        from klangk_backend.cli import client as cli_client
         from io import BytesIO
 
         fake_buf = BytesIO(b"")
@@ -291,7 +291,7 @@ class TestRunShell:
 
         # select returns empty so stdin_loop keeps looping without reading EOF
         with patch(
-            "bark_backend.cli.client.select.select",
+            "klangk_backend.cli.client.select.select",
             return_value=([], [], []),
         ):
             task = asyncio.create_task(
@@ -317,11 +317,11 @@ class TestRunShell:
 
 class TestAuthLines:
     def test_logout_network_error_propagates(self, tmp_path, monkeypatch):
-        from bark_backend.cli import auth
+        from klangk_backend.cli import auth
 
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://localhost:8995"
@@ -340,11 +340,11 @@ class TestAuthLines:
 
 class TestClientLines:
     def test_delete_workspace_500_exit(self):
-        from bark_backend.cli.client import BarkClient
+        from klangk_backend.cli.client import KlangkClient
 
         cfg = CLIConfig()
         cfg.auth.token = "tok"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
 
         list_resp = MagicMock()
         list_resp.status_code = 200
@@ -364,12 +364,12 @@ class TestClientLines:
 
 class TestImagesCommand:
     def test_images_lists_allowed(self, monkeypatch):
-        from bark_backend.cli import main as cli_main
+        from klangk_backend.cli import main as cli_main
 
         mock_client = MagicMock()
         mock_client.list_images.return_value = {
-            "default": "bark",
-            "allowed": ["bark", "bark-custom"],
+            "default": "klangk",
+            "allowed": ["klangk", "klangk-custom"],
         }
         monkeypatch.setattr(cli_main, "_client", lambda: mock_client)
         monkeypatch.setattr(cli_main, "_cfg", lambda: CLIConfig())
@@ -382,8 +382,8 @@ class TestImagesCommand:
         runner = CliRunner()
         result = runner.invoke(cli_main.app, ["images"])
         assert result.exit_code == 0
-        assert "bark" in result.output
-        assert "bark-custom" in result.output
+        assert "klangk" in result.output
+        assert "klangk-custom" in result.output
 
 
 class TestWsExec:
@@ -391,7 +391,7 @@ class TestWsExec:
     async def test_ws_exec_success(self):
         import base64
 
-        from bark_backend.cli.client import _ws_exec
+        from klangk_backend.cli.client import _ws_exec
 
         ws_mock = MagicMock()
 
@@ -424,8 +424,10 @@ class TestWsExec:
             return len(data)
 
         with patch("websockets.connect", return_value=ws_mock):
-            with patch("bark_backend.cli.client.os.read", fake_os_read):
-                with patch("bark_backend.cli.client.os.write", fake_os_write):
+            with patch("klangk_backend.cli.client.os.read", fake_os_read):
+                with patch(
+                    "klangk_backend.cli.client.os.write", fake_os_write
+                ):
                     code = await _ws_exec(
                         "ws://localhost/ws", "token", "ws1", ["ls"]
                     )
@@ -435,7 +437,7 @@ class TestWsExec:
 
     @pytest.mark.asyncio
     async def test_ws_exec_connection_failure(self):
-        from bark_backend.cli.client import _ws_exec
+        from klangk_backend.cli.client import _ws_exec
 
         ws_mock = MagicMock()
 

@@ -2,13 +2,13 @@
 
 ## Context
 
-Bark users sometimes operate in environments where the only authentication credentials for accessing data exist in the user's browser (cookies, OAuth tokens, session-based APIs). When Pi runs in the container, it can't access these credentials. Previously, the AG-UI RPC channel allowed Pi extensions to delegate UI requests to the browser. With the move to terminal-based Pi (interactive mode, no RPC), that channel is gone.
+Klangk users sometimes operate in environments where the only authentication credentials for accessing data exist in the user's browser (cookies, OAuth tokens, session-based APIs). When Pi runs in the container, it can't access these credentials. Previously, the AG-UI RPC channel allowed Pi extensions to delegate UI requests to the browser. With the move to terminal-based Pi (interactive mode, no RPC), that channel is gone.
 
 We need a new mechanism that lets Pi extensions inside the container ask the browser to perform actions on their behalf — specifically, making authenticated HTTP requests using the browser's session.
 
 ## Design: Backend-Mediated Bridge
 
-Pi extensions make an HTTP POST to a bridge endpoint on the Bark backend (reachable from the container via `host.docker.internal`). The backend relays the request to the Flutter client over the existing WebSocket connection. The Flutter client executes the action (e.g., fetches a URL with browser credentials), sends the result back over the same WebSocket, and the backend returns it as the HTTP response to the Pi extension.
+Pi extensions make an HTTP POST to a bridge endpoint on the Klangk backend (reachable from the container via `host.docker.internal`). The backend relays the request to the Flutter client over the existing WebSocket connection. The Flutter client executes the action (e.g., fetches a URL with browser credentials), sends the result back over the same WebSocket, and the backend returns it as the HTTP response to the Pi extension.
 
 ```text
 Pi extension (container)
@@ -54,8 +54,8 @@ Pi extension (gets result, returns as tool output)
 - Timeout after N seconds with an error response
 - Some actions return data (`fetch` returns `{status, headers, body}`), others are fire-and-forget (`celebrate`, `beep` return `{status: "ok"}`)
 
-**File**: `src/backend/bark_backend/api.py` — new endpoint
-**File**: `src/backend/bark_backend/ws_handler.py` — new `browser_response` command handler, pending request registry
+**File**: `src/backend/klangk_backend/api.py` — new endpoint
+**File**: `src/backend/klangk_backend/ws_handler.py` — new `browser_response` command handler, pending request registry
 
 ### Phase 2: Flutter client handler
 
@@ -71,9 +71,9 @@ Send result back: `{"cmd": "browser_response", "id": "<id>", ...result...}`
 **File**: `src/frontend/lib/workspace/workspace_page.dart` or a new `browser_delegate.dart`
 **File**: `src/frontend/lib/agui/agui_client.dart` — handle new `browser_request` message type in `_listenToChannel` (this file gets renamed post-AG-UI removal)
 
-### Phase 3: `@bark/bridge` npm package
+### Phase 3: `@klangk/bridge` npm package
 
-A small npm package that Pi extensions import to talk to the bridge. Reads `BARK_BRIDGE_URL` and `BARK_WORKSPACE_ID` from the environment (set by the container entrypoint). Provides:
+A small npm package that Pi extensions import to talk to the bridge. Reads `KLANGK_BRIDGE_URL` and `KLANGK_WORKSPACE_ID` from the environment (set by the container entrypoint). Provides:
 
 - `browserFetch(url, options?)` — fetch a URL with the browser's session credentials
 - `browserAction(action, payload?)` — trigger a browser-side action (celebrate, beep, etc.)
@@ -82,14 +82,14 @@ A small npm package that Pi extensions import to talk to the bridge. Reads `BARK
 Extension authors import one function and don't think about the plumbing:
 
 ```typescript
-import { browserFetch, browserAction } from "@bark/bridge";
+import { browserFetch, browserAction } from "@klangk/bridge";
 
 // In a tool handler:
 const result = await browserFetch("https://authenticated-api.com/data");
 await browserAction("celebrate");
 ```
 
-**Location**: `src/bridge/` (published as `@bark/bridge`)
+**Location**: `src/bridge/` (published as `@klangk/bridge`)
 
 ### Phase 4: Pi extensions
 
@@ -98,7 +98,7 @@ Reimplement existing client-side tools using the bridge:
 **`browser_fetch`** — fetch a URL using the user's browser credentials
 
 - LLM calls `browser_fetch(url, method, headers)`
-- Extension uses `@bark/bridge` to POST to the backend bridge
+- Extension uses `@klangk/bridge` to POST to the backend bridge
 - Backend relays to Flutter, Flutter makes the authenticated request, result flows back
 
 **`celebrate`** — trigger confetti animation in the Flutter UI
@@ -119,12 +119,12 @@ Reimplement existing client-side tools using the bridge:
 
 ### Phase 5: Dart plugin system for browser actions
 
-The Flutter app needs a plugin registry so different deployments can handle different `browser_request` actions. A Bark plugin is a normal Pi extension (npm package) that optionally includes a `bark/` directory with Flutter code.
+The Flutter app needs a plugin registry so different deployments can handle different `browser_request` actions. A Klangk plugin is a normal Pi extension (npm package) that optionally includes a `klangk/` directory with Flutter code.
 
 **Dart plugin interface:**
 
 ```dart
-abstract class BarkPlugin {
+abstract class KlangkPlugin {
   /// The browser_request action this plugin handles (e.g. "celebrate", "beep", "fetch")
   String get action;
 
@@ -139,29 +139,29 @@ abstract class BarkPlugin {
 my-plugin/
   package.json          # Normal Pi extension package
   src/
-    index.ts            # Pi extension: registers tools, uses @bark/bridge
-  bark/                 # Optional — only if the plugin needs Flutter-side behavior
+    index.ts            # Pi extension: registers tools, uses @klangk/bridge
+  klangk/                 # Optional — only if the plugin needs Flutter-side behavior
     pubspec.yaml
-    lib/plugin.dart     # Class extending BarkPlugin
+    lib/plugin.dart     # Class extending KlangkPlugin
     lib/...             # Supporting Dart files (widgets, audio, etc.)
 ```
 
 **Build integration:**
 
-- `import_dart_plugins.py` (or replacement) scans plugin directories for `bark/` subdirectories
-- Generates a `bark_plugins` package with `createAllPlugins()` that returns all registered `BarkPlugin` instances
-- Same codegen pattern as today, but the interface is `BarkPlugin` (handles `browser_request` actions) instead of `ToolPlugin` (handles AG-UI `HOST_TOOL_REQUEST`)
+- `import_dart_plugins.py` (or replacement) scans plugin directories for `klangk/` subdirectories
+- Generates a `klangk_plugins` package with `createAllPlugins()` that returns all registered `KlangkPlugin` instances
+- Same codegen pattern as today, but the interface is `KlangkPlugin` (handles `browser_request` actions) instead of `ToolPlugin` (handles AG-UI `HOST_TOOL_REQUEST`)
 
 **Runtime dispatch in Flutter:**
 
 When a `browser_request` arrives over the WebSocket:
 
 1. Look up `request.action` in the plugin registry
-2. If a `BarkPlugin` is registered for that action, call `plugin.handle(request, context)`
+2. If a `KlangkPlugin` is registered for that action, call `plugin.handle(request, context)`
 3. Return the result as `browser_response`
 4. If no plugin is registered, return `{"error": "no handler for action: <action>"}`
 
-**Built-in plugins** (ship with Bark, no external install):
+**Built-in plugins** (ship with Klangk, no external install):
 
 - `celebrate` — confetti animation
 - `beep` — play a sound
@@ -169,7 +169,7 @@ When a `browser_request` arrives over the WebSocket:
 **Example: celebrate plugin Dart side:**
 
 ```dart
-class CelebratePlugin extends BarkPlugin {
+class CelebratePlugin extends KlangkPlugin {
   @override
   String get action => "celebrate";
 
@@ -184,7 +184,7 @@ class CelebratePlugin extends BarkPlugin {
 **Example: celebrate plugin Pi extension side:**
 
 ```typescript
-import { browserAction } from "@bark/bridge";
+import { browserAction } from "@klangk/bridge";
 
 export default function (pi) {
   pi.registerTool("celebrate", {

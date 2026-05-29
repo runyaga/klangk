@@ -1,4 +1,4 @@
-"""HTTP + WebSocket client for the Bark backend."""
+"""HTTP + WebSocket client for the Klangk backend."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _get_terminal_size() -> tuple[int, int]:
     return 80, 24
 
 
-class BarkClient:
+class KlangkClient:
     def __init__(self, cfg: CLIConfig):
         self.cfg = cfg
 
@@ -88,7 +88,7 @@ class BarkClient:
     def _check_auth(self, resp: httpx.Response) -> None:
         """Raise AuthError if the server returned 401."""
         if resp.status_code == 401:
-            raise AuthError("Session expired — run `bark login`")
+            raise AuthError("Session expired — run `klangk login`")
 
     def list_workspaces(self) -> list[Workspace]:
         resp = self.get("/workspaces")

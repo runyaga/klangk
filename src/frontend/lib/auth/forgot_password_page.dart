@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'auth_service.dart';
 import '../utils/page_title.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 
 class ForgotPasswordPage extends StatefulWidget {
   const ForgotPasswordPage({super.key});
@@ -90,7 +90,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const BarkLogo(height: 80),
+        const KlangkLogo(height: 80),
         const SizedBox(height: 24),
         Text(
           'Check your email',
@@ -118,7 +118,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const BarkLogo(height: 80),
+          const KlangkLogo(height: 80),
           const SizedBox(height: 24),
           Text(
             'Forgot Password',

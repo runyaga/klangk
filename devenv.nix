@@ -37,7 +37,7 @@
   env.PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
 
   tasks = {
-    "bark:flutter-build" = {
+    "klangk:flutter-build" = {
       exec = ''exec bash "$DEVENV_ROOT/scripts/flutterbuildweb.sh"'';
       showOutput = true;
       execIfModified = [
@@ -46,32 +46,32 @@
         "src/frontend/web/**"
         "src/frontend/pubspec.yaml"
         "src/frontend/pubspec.lock"
-        "${config.env.BARK_PLUGINS_DIR}/**/*.dart"
-        "${config.env.BARK_PLUGINS_DIR}/plugins.lock"
+        "${config.env.KLANGK_PLUGINS_DIR}/**/*.dart"
+        "${config.env.KLANGK_PLUGINS_DIR}/plugins.lock"
       ];
     };
-    "bark:docker-build" = {
+    "klangk:docker-build" = {
       exec = ''exec bash "$DEVENV_ROOT/scripts/dockerbuild.sh"'';
       showOutput = true;
       execIfModified = [
         "scripts/dockerbuild.sh"
         "src/docker/**"
-        "${config.env.BARK_PLUGINS_DIR}/**/*.ts"
-        "${config.env.BARK_PLUGINS_DIR}/**/tools/**"
-        "${config.env.BARK_PLUGINS_DIR}/plugins.lock"
+        "${config.env.KLANGK_PLUGINS_DIR}/**/*.ts"
+        "${config.env.KLANGK_PLUGINS_DIR}/**/tools/**"
+        "${config.env.KLANGK_PLUGINS_DIR}/plugins.lock"
       ];
     };
-    "bark:kill-containers" = {
+    "klangk:kill-containers" = {
       exec = ''
         if [ ! -f /.dockerenv ]; then
-          docker ps -a --filter "label=bark.instance=''${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+          docker ps -a --filter "label=klangk.instance=''${KLANGK_INSTANCE_ID}" -q | xargs -r docker rm -f
         fi
       '';
     };
-    "bark:kill-port-holders" = {
+    "klangk:kill-port-holders" = {
       exec = ''
         if [ ! -f /.dockerenv ]; then
-          for port in $BARK_PORT $BARK_NGINX_PORT; do
+          for port in $KLANGK_PORT $KLANGK_NGINX_PORT; do
             fuser -k "$port/tcp" 2>/dev/null || true
           done
         fi
@@ -82,21 +82,21 @@
   processes = {
     backend = {
       exec = ''
-        cd $DEVENV_ROOT/src/backend && exec uvicorn bark_backend.main:app --host 0.0.0.0 --port $BARK_PORT
+        cd $DEVENV_ROOT/src/backend && exec uvicorn klangk_backend.main:app --host 0.0.0.0 --port $KLANGK_PORT
       '';
       after = [
-        "bark:flutter-build"
-        "bark:docker-build"
-        "bark:kill-containers"
-        "bark:kill-port-holders"
+        "klangk:flutter-build"
+        "klangk:docker-build"
+        "klangk:kill-containers"
+        "klangk:kill-port-holders"
       ];
     };
     nginx = {
       exec = ''exec bash "$DEVENV_ROOT/scripts/nginx.sh"'';
       after = [
-        "bark:flutter-build"
-        "bark:docker-build"
-        "bark:kill-port-holders"
+        "klangk:flutter-build"
+        "klangk:docker-build"
+        "klangk:kill-port-holders"
       ];
     };
   };
@@ -107,23 +107,23 @@
   # dotenv.enable loads .env values as mkDefault, so .env entries override these.
   # devenv.local.nix with lib.mkForce overrides everything.
   # Priority: devenv.local.nix (mkForce/50) > .env (mkDefault/1000) > these defaults (1500)
-  env.BARK_PORT = lib.mkOverride 1500 "8997";
-  env.BARK_NGINX_PORT = lib.mkOverride 1500 "8995";
-  env.BARK_SOLIPLEX_PORT = lib.mkOverride 1500 "8555";
-  env.BARK_DATA_DIR = lib.mkOverride 1500 (config.devenv.root + "/.devenv/state/bark/data");
-  env.BARK_PLUGINS_DIR = lib.mkOverride 1500 (config.devenv.root + "/.devenv/state/bark/plugins");
-  env.BARK_IMAGE_NAME = lib.mkOverride 1500 "bark";
-  env.BARK_INSTANCE_ID = lib.mkOverride 1500 "default";
+  env.KLANGK_PORT = lib.mkOverride 1500 "8997";
+  env.KLANGK_NGINX_PORT = lib.mkOverride 1500 "8995";
+  env.KLANGK_SOLIPLEX_PORT = lib.mkOverride 1500 "8555";
+  env.KLANGK_DATA_DIR = lib.mkOverride 1500 (config.devenv.root + "/.devenv/state/klangk/data");
+  env.KLANGK_PLUGINS_DIR = lib.mkOverride 1500 (config.devenv.root + "/.devenv/state/klangk/plugins");
+  env.KLANGK_IMAGE_NAME = lib.mkOverride 1500 "klangk";
+  env.KLANGK_INSTANCE_ID = lib.mkOverride 1500 "default";
   dotenv.enable = true;
 
-  scripts.flutterbuildweb.exec = ''exec devenv tasks run bark:flutter-build --refresh-task-cache "$@"'';
-  scripts.dockerbuild.exec = ''exec devenv tasks run bark:docker-build --refresh-task-cache "$@"'';
+  scripts.flutterbuildweb.exec = ''exec devenv tasks run klangk:flutter-build --refresh-task-cache "$@"'';
+  scripts.dockerbuild.exec = ''exec devenv tasks run klangk:docker-build --refresh-task-cache "$@"'';
   scripts.pull-base-image.exec = ''exec bash "$DEVENV_ROOT/scripts/pull-base-image.sh" "$@"'';
   scripts.push-base-image.exec = ''exec bash "$DEVENV_ROOT/scripts/push-base-image.sh" "$@"'';
   scripts.dockerbuild-base.exec = ''exec bash "$DEVENV_ROOT/scripts/dockerbuild-base.sh" "$@"'';
 
   scripts.kill-containers.exec = ''
-    docker ps -a --filter "label=bark.instance=''${BARK_INSTANCE_ID}" -q | xargs -r docker rm -f
+    docker ps -a --filter "label=klangk.instance=''${KLANGK_INSTANCE_ID}" -q | xargs -r docker rm -f
   '';
 
   scripts.restart.exec = ''
@@ -153,7 +153,7 @@
     exec python -m pytest src/backend/tests -v -n auto "$@"
   '';
 
-  # CLI E2E tests: start real server, run bark commands, need Docker
+  # CLI E2E tests: start real server, run klangk commands, need Docker
   scripts.test-cli-e2e.exec = ''
     cd $DEVENV_ROOT
     exec python -m pytest src/backend/e2e-tests -v -p no:xdist --no-cov "$@"
@@ -161,7 +161,7 @@
 
   scripts.test-frontend-e2e.exec = ''
     cd $DEVENV_ROOT
-    devenv tasks run bark:flutter-build bark:docker-build
+    devenv tasks run klangk:flutter-build klangk:docker-build
     cd src/frontend/e2e-tests
     npm install --silent
     exec npx playwright test --reporter=list "$@"
@@ -247,9 +247,9 @@
   };
 
   enterShell = ''
-    mkdir -p "$BARK_DATA_DIR"
+    mkdir -p "$KLANGK_DATA_DIR"
 
-    # Ensure bark_plugins stub exists so flutter pub get works
+    # Ensure klangk_plugins stub exists so flutter pub get works
     # before plugins are fetched (first-time checkout / CI)
     bash "$DEVENV_ROOT/scripts/stub_dart_plugins.sh"
 

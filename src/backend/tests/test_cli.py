@@ -1,4 +1,4 @@
-"""Tests for the bark CLI."""
+"""Tests for the klangk CLI."""
 
 import asyncio
 import json
@@ -11,10 +11,10 @@ import httpx
 import pytest
 from io import BytesIO
 
-from bark_backend.cli.config import CLIConfig
-from bark_backend.cli.client import (
+from klangk_backend.cli.config import CLIConfig
+from klangk_backend.cli.client import (
     AuthError,
-    BarkClient,
+    KlangkClient,
     Workspace,
     WorkspaceNotFoundError,
 )
@@ -26,7 +26,7 @@ from bark_backend.cli.client import (
 class TestCLIConfig:
     def test_load_empty(self, monkeypatch):
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH",
+            "klangk_backend.cli.config._CONFIG_PATH",
             Path("/nonexistent/config.toml"),
         )
         cfg = CLIConfig.load()
@@ -41,7 +41,7 @@ class TestCLIConfig:
             '[auth]\ntoken = "abc123"\nemail = "test@example.com"\n'
         )
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig.load()
         assert cfg.server.url == "http://custom:9999"
@@ -51,7 +51,7 @@ class TestCLIConfig:
     def test_save_roundtrip(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://saved:5678"
@@ -66,7 +66,7 @@ class TestCLIConfig:
     def test_save_creates_parent_dirs(self, tmp_path, monkeypatch):
         config_path = tmp_path / "sub" / "dir" / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.save()
@@ -76,7 +76,7 @@ class TestCLIConfig:
         config_path = tmp_path / "cli.toml"
         config_path.write_text('[auth]\ntoken = "tok"\n')
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig.load()
         assert cfg.auth.token == "tok"
@@ -90,17 +90,17 @@ class TestAuth:
     def test_login_success(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "jwt123"}
         with patch("httpx.post", return_value=mock_resp):
             with patch(
-                "bark_backend.cli.auth.Prompt.ask",
+                "klangk_backend.cli.auth.Prompt.ask",
                 side_effect=["u@test.com", "pass123"],
             ):
-                from bark_backend.cli import auth
+                from klangk_backend.cli import auth
 
                 auth.login("http://localhost:8995")
         cfg = CLIConfig.load()
@@ -110,7 +110,7 @@ class TestAuth:
     def test_login_with_user_flag(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -118,10 +118,10 @@ class TestAuth:
         with patch("httpx.post", return_value=mock_resp):
             # Only one Prompt.ask call (password) since email is provided
             with patch(
-                "bark_backend.cli.auth.Prompt.ask",
+                "klangk_backend.cli.auth.Prompt.ask",
                 return_value="secret",
             ):
-                from bark_backend.cli import auth
+                from klangk_backend.cli import auth
 
                 auth.login("http://localhost:8995", email="cli@test.com")
         cfg = CLIConfig.load()
@@ -131,7 +131,7 @@ class TestAuth:
     def test_login_with_password_file(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         pw_file = tmp_path / "pw.txt"
         pw_file.write_text("file-secret\n")
@@ -139,7 +139,7 @@ class TestAuth:
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "jwt789"}
         with patch("httpx.post", return_value=mock_resp):
-            from bark_backend.cli import auth
+            from klangk_backend.cli import auth
 
             auth.login(
                 "http://localhost:8995",
@@ -153,7 +153,7 @@ class TestAuth:
     def test_login_reuses_valid_token(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         # Save a config with an existing token
         cfg = CLIConfig()
@@ -165,7 +165,7 @@ class TestAuth:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         with patch("httpx.get", return_value=mock_resp):
-            from bark_backend.cli import auth
+            from klangk_backend.cli import auth
 
             auth.login("http://localhost:8995")
 
@@ -177,7 +177,7 @@ class TestAuth:
     def test_login_network_error_falls_through(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://localhost:8995"
@@ -192,10 +192,10 @@ class TestAuth:
         with patch("httpx.get", side_effect=httpx.ConnectError("unreachable")):
             with patch("httpx.post", return_value=post_resp):
                 with patch(
-                    "bark_backend.cli.auth.Prompt.ask",
+                    "klangk_backend.cli.auth.Prompt.ask",
                     side_effect=["new@test.com", "pw"],
                 ):
-                    from bark_backend.cli import auth
+                    from klangk_backend.cli import auth
 
                     auth.login("http://localhost:8995")
 
@@ -205,7 +205,7 @@ class TestAuth:
     def test_login_expired_token_prompts(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.server.url = "http://localhost:8995"
@@ -222,10 +222,10 @@ class TestAuth:
         with patch("httpx.get", return_value=get_resp):
             with patch("httpx.post", return_value=post_resp):
                 with patch(
-                    "bark_backend.cli.auth.Prompt.ask",
+                    "klangk_backend.cli.auth.Prompt.ask",
                     side_effect=["new@test.com", "pw"],
                 ):
-                    from bark_backend.cli import auth
+                    from klangk_backend.cli import auth
 
                     auth.login("http://localhost:8995")
 
@@ -236,17 +236,17 @@ class TestAuth:
     def test_login_failure(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 401
         mock_resp.json.return_value = {"detail": "Bad credentials"}
         with patch("httpx.post", return_value=mock_resp):
             with patch(
-                "bark_backend.cli.auth.Prompt.ask",
+                "klangk_backend.cli.auth.Prompt.ask",
                 side_effect=["u@test.com", "wrong"],
             ):
-                from bark_backend.cli import auth
+                from klangk_backend.cli import auth
 
                 with pytest.raises(SystemExit):
                     auth.login("http://localhost:8995")
@@ -255,12 +255,12 @@ class TestAuth:
         config_path = tmp_path / "cli.toml"
         config_path.write_text('[auth]\ntoken = "tok"\nemail = "x@y.com"\n')
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         with patch("httpx.post", return_value=mock_resp):
-            from bark_backend.cli import auth
+            from klangk_backend.cli import auth
 
             auth.logout()
         cfg = CLIConfig.load()
@@ -270,24 +270,24 @@ class TestAuth:
     def test_logout_swallows_server_error(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         cfg = CLIConfig()
         cfg.save()
         with patch("httpx.post", side_effect=Exception("no server")):
-            from bark_backend.cli import auth
+            from klangk_backend.cli import auth
 
             auth.logout()  # Should not raise
 
 
-# --- BarkClient tests ---
+# --- KlangkClient tests ---
 
 
-class TestBarkClient:
+class TestKlangkClient:
     def test_auth_error_on_401(self, monkeypatch):
         cfg = CLIConfig()
         cfg.auth.token = None
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 401
         with patch.object(client, "get", return_value=mock_resp):
@@ -297,7 +297,7 @@ class TestBarkClient:
     def test_list_workspaces_parses_response(self):
         cfg = CLIConfig()
         cfg.auth.token = "valid-token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [
@@ -321,7 +321,7 @@ class TestBarkClient:
     def test_create_workspace_returns_workspace(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {
@@ -337,7 +337,7 @@ class TestBarkClient:
     def test_delete_workspace_not_found(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = []
@@ -348,7 +348,7 @@ class TestBarkClient:
     def test_delete_workspace_success(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         list_resp = MagicMock()
         list_resp.status_code = 200
         list_resp.json.return_value = [
@@ -370,7 +370,7 @@ class TestBarkClient:
     def test_resolve_workspace_by_name(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [
@@ -392,7 +392,7 @@ class TestBarkClient:
     def test_resolve_workspace_not_found_raises(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = [
@@ -409,7 +409,7 @@ class TestBarkClient:
     def test_delete_workspace_401_raises_auth_error(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         list_resp = MagicMock()
         list_resp.status_code = 200
         list_resp.json.return_value = [
@@ -425,7 +425,7 @@ class TestBarkClient:
     def test_delete_workspace_non_200_exits(self):
         cfg = CLIConfig()
         cfg.auth.token = "token"
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         list_resp = MagicMock()
         list_resp.status_code = 200
         list_resp.json.return_value = [
@@ -443,7 +443,7 @@ class TestBarkClient:
     def test_no_token_uses_empty_string(self):
         cfg = CLIConfig()
         cfg.auth.token = None
-        client = BarkClient(cfg)
+        client = KlangkClient(cfg)
         headers = client._headers()
         assert headers["Authorization"] == "Bearer "
 
@@ -458,9 +458,9 @@ class TestShellProtocol:
         assert ws_url == "ws://localhost:8995/ws"
 
     def test_ws_url_https_conversion(self):
-        url = "https://bark.example.com"
+        url = "https://klangk.example.com"
         ws_url = url.replace("https://", "wss://").rstrip("/") + "/ws"
-        assert ws_url == "wss://bark.example.com/ws"
+        assert ws_url == "wss://klangk.example.com/ws"
 
 
 # --- Terminal size ---
@@ -468,7 +468,7 @@ class TestShellProtocol:
 
 class TestTerminalSize:
     def test_get_terminal_size_positive_ints(self):
-        from bark_backend.cli.client import _get_terminal_size
+        from klangk_backend.cli.client import _get_terminal_size
 
         cols, rows = _get_terminal_size()
         assert isinstance(cols, int) and cols > 0
@@ -476,7 +476,7 @@ class TestTerminalSize:
 
     def test_get_terminal_size_returns_default_when_not_tty(self, monkeypatch):
         """When stdin is not a TTY, _get_terminal_size returns (80, 24) without calling os."""
-        from bark_backend.cli import client as cli_client
+        from klangk_backend.cli import client as cli_client
 
         called = []
 
@@ -492,7 +492,7 @@ class TestTerminalSize:
         assert len(called) == 0  # os.get_terminal_size was never invoked
 
     def test_get_terminal_size_calls_os_when_tty(self, monkeypatch):
-        from bark_backend.cli import client as cli_client
+        from klangk_backend.cli import client as cli_client
 
         called_with = []
 
@@ -519,7 +519,7 @@ class TestTerminalSize:
 class TestRunShell:
     @pytest.mark.asyncio
     async def test_stdin_loop_sends_terminal_input(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.send = AsyncMock()
@@ -554,10 +554,12 @@ class TestRunShell:
 
         with (
             patch(
-                "bark_backend.cli.client.select.select",
+                "klangk_backend.cli.client.select.select",
                 side_effect=fake_select,
             ),
-            patch("bark_backend.cli.client.os.read", side_effect=fake_os_read),
+            patch(
+                "klangk_backend.cli.client.os.read", side_effect=fake_os_read
+            ),
         ):
             task = asyncio.create_task(_run_shell(ws, 80, 24, stdin=fake_buf))
             await asyncio.sleep(0.5)
@@ -572,7 +574,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_stdin_loop_batches_escape_sequences(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.send = AsyncMock()
@@ -616,10 +618,12 @@ class TestRunShell:
 
         with (
             patch(
-                "bark_backend.cli.client.select.select",
+                "klangk_backend.cli.client.select.select",
                 side_effect=fake_select,
             ),
-            patch("bark_backend.cli.client.os.read", side_effect=fake_os_read),
+            patch(
+                "klangk_backend.cli.client.os.read", side_effect=fake_os_read
+            ),
         ):
             task = asyncio.create_task(_run_shell(ws, 80, 24, stdin=fake_buf))
             await asyncio.sleep(0.5)
@@ -635,7 +639,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_stdout_loop_writes_data(self):
-        from bark_backend.cli.client import _run_shell
+        from klangk_backend.cli.client import _run_shell
 
         ws = AsyncMock()
         ws.recv = AsyncMock(
@@ -667,7 +671,7 @@ class TestRunShell:
         fake_buf.fileno = lambda: 0
         fake_stdout = CaptureWriter()
         with patch(
-            "bark_backend.cli.client.select.select",
+            "klangk_backend.cli.client.select.select",
             return_value=([0], [], []),
         ):
             task = asyncio.create_task(
@@ -684,7 +688,7 @@ class TestRunShell:
 
     @pytest.mark.asyncio
     async def test_ws_shell_connection_failure(self):
-        from bark_backend.cli.client import _ws_shell
+        from klangk_backend.cli.client import _ws_shell
 
         ws_mock = MagicMock()
 
@@ -712,9 +716,9 @@ class TestRunShell:
 
 class TestMisc:
     def test_auth_error_message(self):
-        err = AuthError("Session expired — run `bark login`")
+        err = AuthError("Session expired — run `klangk login`")
         assert "Session expired" in str(err)
-        assert "bark login" in str(err)
+        assert "klangk login" in str(err)
 
     def test_workspace_dataclass_fields(self):
         ws = Workspace(id="x", name="y", created_at="z")
@@ -725,17 +729,17 @@ class TestMisc:
     def test_login_success_stores_email(self, tmp_path, monkeypatch):
         config_path = tmp_path / "cli.toml"
         monkeypatch.setattr(
-            "bark_backend.cli.config._CONFIG_PATH", config_path
+            "klangk_backend.cli.config._CONFIG_PATH", config_path
         )
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"access_token": "jwt"}
         with patch("httpx.post", return_value=mock_resp):
             with patch(
-                "bark_backend.cli.auth.Prompt.ask",
+                "klangk_backend.cli.auth.Prompt.ask",
                 side_effect=["admin@example.com", "pw"],
             ):
-                from bark_backend.cli import auth
+                from klangk_backend.cli import auth
 
                 auth.login("http://localhost:8995")
         cfg = CLIConfig.load()

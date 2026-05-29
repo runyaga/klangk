@@ -5,9 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:bark_frontend/auth/auth_service.dart';
-import 'package:bark_frontend/auth/login_page.dart';
-import 'package:bark_frontend/auth/pending_redirect.dart';
+import 'package:klangk_frontend/auth/auth_service.dart';
+import 'package:klangk_frontend/auth/login_page.dart';
+import 'package:klangk_frontend/auth/pending_redirect.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 void main() {
@@ -37,7 +37,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(LoginPage), findsOneWidget);
-      expect(find.text('Bark'), findsOneWidget);
+      expect(find.text('Klangk'), findsOneWidget);
       expect(find.text('Log In'), findsWidgets); // button + title
     });
 
@@ -81,7 +81,7 @@ void main() {
       expect(find.textContaining('Log in'), findsWidgets);
     });
 
-    testWidgets('shows Bark logo', (tester) async {
+    testWidgets('shows Klangk logo', (tester) async {
       await tester.pumpWidget(buildLoginPage());
       await tester.pumpAndSettle();
 

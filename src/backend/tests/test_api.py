@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import FastAPI, HTTPException
 from httpx import AsyncClient, ASGITransport
 
-from bark_backend import (
+from klangk_backend import (
     api,
     auth,
     container,
@@ -90,7 +90,7 @@ class TestAuthRoutes:
 
     async def test_register_test_mode(self, client, db, monkeypatch):
         """In test mode, unauthenticated registration is allowed and auto-verified."""
-        monkeypatch.setenv("BARK_TEST_MODE", "1")
+        monkeypatch.setenv("KLANGK_TEST_MODE", "1")
         resp = await client.post(
             "/auth/register",
             json={"email": "new@example.com", "password": "newpass"},
@@ -153,7 +153,7 @@ class TestAuthRoutes:
 
     async def test_verify_email(self, client, db):
         """Verify endpoint marks user as verified."""
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         import bcrypt
 
@@ -177,7 +177,7 @@ class TestAuthRoutes:
         assert resp.status_code == 400
 
     async def test_verify_nonexistent_user(self, client, db):
-        from bark_backend import auth as auth_mod
+        from klangk_backend import auth as auth_mod
 
         token = auth_mod.create_verification_token("nonexistent-id")
         resp = await client.get(f"/auth/verify?token={token}")
@@ -738,7 +738,7 @@ class TestWorkspaceRoutes:
             "/workspaces",
             json={
                 "name": "src-ws",
-                "image": "bark",
+                "image": "klangk",
                 "default_command": "pi",
                 "mounts": ["/tmp:/mnt/tmp"],
                 "env": {"FOO": "bar"},
@@ -754,7 +754,7 @@ class TestWorkspaceRoutes:
         assert resp.status_code == 200
         data = resp.json()
         assert data["name"] == "dup-ws"
-        assert data["image"] == "bark"
+        assert data["image"] == "klangk"
         assert data["default_command"] == "pi"
         assert data["mounts"] == ["/tmp:/mnt/tmp"]
         assert data["env"] == {"FOO": "bar"}
@@ -857,7 +857,7 @@ class TestVolumeRoutes:
                                     "Name": "test-vol",
                                     "CreatedAt": "2026-01-01T00:00:00Z",
                                     "Labels": {
-                                        "bark.instance": container.INSTANCE_ID
+                                        "klangk.instance": container.INSTANCE_ID
                                     },
                                 }
                             ]
@@ -920,8 +920,8 @@ class TestVolumeRoutes:
         mock_vol.show = AsyncMock(
             return_value={
                 "Labels": {
-                    "bark.managed": "true",
-                    "bark.instance": container.INSTANCE_ID,
+                    "klangk.managed": "true",
+                    "klangk.instance": container.INSTANCE_ID,
                 }
             }
         )
@@ -954,7 +954,7 @@ class TestVolumeRoutes:
         headers = await _auth_headers(client)
         mock_vol = MagicMock()
         mock_vol.show = AsyncMock(
-            return_value={"Labels": {"bark.instance": "other-instance"}}
+            return_value={"Labels": {"klangk.instance": "other-instance"}}
         )
         mock_docker = MagicMock()
         mock_docker.volumes = MagicMock()
@@ -992,8 +992,8 @@ class TestVolumeRoutes:
         mock_vol.show = AsyncMock(
             return_value={
                 "Labels": {
-                    "bark.managed": "true",
-                    "bark.instance": container.INSTANCE_ID,
+                    "klangk.managed": "true",
+                    "klangk.instance": container.INSTANCE_ID,
                 }
             }
         )
@@ -1019,8 +1019,8 @@ class TestVolumeRoutes:
         mock_vol.show = AsyncMock(
             return_value={
                 "Labels": {
-                    "bark.managed": "true",
-                    "bark.instance": container.INSTANCE_ID,
+                    "klangk.managed": "true",
+                    "klangk.instance": container.INSTANCE_ID,
                 }
             }
         )
@@ -1353,7 +1353,7 @@ class TestSetIdleTimeout:
             container.IDLE_TIMEOUT_SECONDS = original_timeout
 
     async def test_endpoint_missing_without_test_mode(self, client):
-        """Without BARK_TEST_MODE, the endpoints should not exist."""
+        """Without KLANGK_TEST_MODE, the endpoints should not exist."""
         resp = await client.post(
             "/api/test/set-idle-timeout", json={"seconds": 10}
         )

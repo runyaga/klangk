@@ -7,35 +7,35 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiodocker.exceptions
 import pytest
 
-from bark_backend import container, model
+from klangk_backend import container, model
 
 
 class TestParseIdleTimeout:
     def test_default_values(self, monkeypatch):
-        monkeypatch.delenv("BARK_IDLE_TIMEOUT_SECONDS", raising=False)
+        monkeypatch.delenv("KLANGK_IDLE_TIMEOUT_SECONDS", raising=False)
         timeout, interval = container.parse_idle_timeout()
         assert timeout == 30 * 60
         assert interval == max(10, min(60, timeout // 3))
 
     def test_custom_value(self, monkeypatch):
-        monkeypatch.setenv("BARK_IDLE_TIMEOUT_SECONDS", "120")
+        monkeypatch.setenv("KLANGK_IDLE_TIMEOUT_SECONDS", "120")
         timeout, interval = container.parse_idle_timeout()
         assert timeout == 120
         assert interval == max(10, min(60, 120 // 3))
 
     def test_invalid_value_uses_default(self, monkeypatch):
-        monkeypatch.setenv("BARK_IDLE_TIMEOUT_SECONDS", "not_a_number")
+        monkeypatch.setenv("KLANGK_IDLE_TIMEOUT_SECONDS", "not_a_number")
         timeout, interval = container.parse_idle_timeout()
         assert timeout == 30 * 60
 
     def test_small_value_clamps_interval(self, monkeypatch):
-        monkeypatch.setenv("BARK_IDLE_TIMEOUT_SECONDS", "15")
+        monkeypatch.setenv("KLANGK_IDLE_TIMEOUT_SECONDS", "15")
         timeout, interval = container.parse_idle_timeout()
         assert timeout == 15
         assert interval == 10  # clamped to min 10
 
     def test_large_value_clamps_interval(self, monkeypatch):
-        monkeypatch.setenv("BARK_IDLE_TIMEOUT_SECONDS", "3600")
+        monkeypatch.setenv("KLANGK_IDLE_TIMEOUT_SECONDS", "3600")
         timeout, interval = container.parse_idle_timeout()
         assert timeout == 3600
         assert interval == 60  # clamped to max 60
@@ -284,7 +284,7 @@ class TestStartContainer:
             "Authorization=Bearer test-token"
             in (env_dict["OTEL_EXPORTER_OTLP_HEADERS"])
         )
-        assert env_dict["OTEL_SERVICE_NAME"] == "bark-pi-agent"
+        assert env_dict["OTEL_SERVICE_NAME"] == "klangk-pi-agent"
 
     async def test_create_container_logfire_custom_base_url(
         self, workspace, monkeypatch
@@ -410,8 +410,8 @@ class TestStartContainer:
 
     async def test_llm_proxy_env_vars(self, workspace, monkeypatch):
         """Container gets proxy URL, not real API keys."""
-        monkeypatch.setenv("BARK_LLM_MODEL", "gemma4:31b")
-        monkeypatch.setenv("BARK_NGINX_PORT", "8995")
+        monkeypatch.setenv("KLANGK_LLM_MODEL", "gemma4:31b")
+        monkeypatch.setenv("KLANGK_NGINX_PORT", "8995")
         mock_docker = _mock_docker()
         mock_c = _mock_container("cid")
         mock_docker.containers.create_or_replace = AsyncMock(
@@ -429,12 +429,12 @@ class TestStartContainer:
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         env = call_kwargs[1]["config"]["Env"]
         env_dict = dict(e.split("=", 1) for e in env)
-        assert env_dict["BARK_LLM_PROXY_URL"] == (
+        assert env_dict["KLANGK_LLM_PROXY_URL"] == (
             "http://host.docker.internal:8995/llm-proxy"
         )
-        assert env_dict["BARK_LLM_MODEL"] == "gemma4:31b"
+        assert env_dict["KLANGK_LLM_MODEL"] == "gemma4:31b"
         # API keys should NOT be in the container env
-        assert not any(e.startswith("BARK_LLM_API_KEY=") for e in env)
+        assert not any(e.startswith("KLANGK_LLM_API_KEY=") for e in env)
         assert not any(e.startswith("ANTHROPIC_API_KEY=") for e in env)
         # host.docker.internal must be resolvable
         host_config = call_kwargs[1]["config"]["HostConfig"]
@@ -459,7 +459,7 @@ class TestStartContainer:
             )
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         binds = call_kwargs[1]["config"]["HostConfig"]["Binds"]
-        assert "/tmp/config:/opt/bark/config:ro" in binds
+        assert "/tmp/config:/opt/klangk/config:ro" in binds
 
     async def test_no_config_mount_without_config_path(self, workspace):
         """Container has no config mount when config_path is not set."""
@@ -497,13 +497,13 @@ class TestStartContainer:
                 "/tmp/home",
                 hosting_hostname="example.com",
                 hosting_proto="https",
-                hosting_base_path="/bark",
+                hosting_base_path="/klangk",
             )
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         env = call_kwargs[1]["config"]["Env"]
-        assert "BARK_HOSTING_HOSTNAME=example.com" in env
-        assert "BARK_HOSTING_PROTO=https" in env
-        assert "BARK_HOSTING_BASE_PATH=/bark" in env
+        assert "KLANGK_HOSTING_HOSTNAME=example.com" in env
+        assert "KLANGK_HOSTING_PROTO=https" in env
+        assert "KLANGK_HOSTING_BASE_PATH=/klangk" in env
 
     async def test_port_allocation_on_create(self, workspace):
         mock_docker = _mock_docker()
@@ -566,8 +566,8 @@ class TestStartContainer:
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         config = call_kwargs[1]["config"]
         assert config["Image"] == container.IMAGE_NAME
-        assert config["Labels"]["bark.managed"] == "true"
-        assert config["Labels"]["bark.workspace-id"] == workspace["id"]
+        assert config["Labels"]["klangk.managed"] == "true"
+        assert config["Labels"]["klangk.workspace-id"] == workspace["id"]
         assert config["HostConfig"]["ReadonlyRootfs"] is False
         assert config["HostConfig"]["Init"] is True
         assert config["OpenStdin"] is True
@@ -586,12 +586,12 @@ class TestStartContainer:
                 workspace["id"],
                 "/tmp/ws",
                 "/tmp/home",
-                extra_env={"BARK_SKILLS": "stats,rdkit", "FOO": "bar"},
+                extra_env={"KLANGK_SKILLS": "stats,rdkit", "FOO": "bar"},
             )
         call_kwargs = mock_docker.containers.create_or_replace.call_args
         env_list = call_kwargs[1]["config"]["Env"]
         env_dict = dict(e.split("=", 1) for e in env_list)
-        assert env_dict["BARK_SKILLS"] == "stats,rdkit"
+        assert env_dict["KLANGK_SKILLS"] == "stats,rdkit"
         assert env_dict["FOO"] == "bar"
 
 
@@ -644,7 +644,7 @@ class TestValidateMountSpec:
 
 class TestExtraMountsVolumeCreation:
     async def test_auto_creates_named_volume(self, workspace):
-        """Named volumes (no leading /) are auto-created with bark labels."""
+        """Named volumes (no leading /) are auto-created with klangk labels."""
         mock_docker = _mock_docker()
         mock_c = _mock_container("cid")
         mock_docker.containers.create_or_replace = AsyncMock(
@@ -671,8 +671,10 @@ class TestExtraMountsVolumeCreation:
         mock_docker.volumes.create.assert_awaited_once()
         create_args = mock_docker.volumes.create.call_args[0][0]
         assert create_args["Name"] == "nix-store"
-        assert create_args["Labels"]["bark.managed"] == "true"
-        assert create_args["Labels"]["bark.instance"] == container.INSTANCE_ID
+        assert create_args["Labels"]["klangk.managed"] == "true"
+        assert (
+            create_args["Labels"]["klangk.instance"] == container.INSTANCE_ID
+        )
 
     async def test_existing_volume_not_recreated(self, workspace):
         """Existing volumes are used as-is, not recreated."""
@@ -1382,7 +1384,7 @@ class TestAdoptOrphanedContainers:
         mock_container.id = "orphan-123"
         mock_container.show = AsyncMock(
             return_value={
-                "Config": {"Labels": {"bark.workspace-id": "ws-orphan"}}
+                "Config": {"Labels": {"klangk.workspace-id": "ws-orphan"}}
             }
         )
         mock_docker = AsyncMock()

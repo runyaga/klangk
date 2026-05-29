@@ -1,5 +1,5 @@
-name: bark_frontend
-description: Bark - Web Coding Agent
+name: klangk_frontend
+description: Klangk - Web Coding Agent
 publish_to: none
 version: 0.1.0
 
@@ -26,7 +26,7 @@ dependencies:
     git:
       url: https://github.com/mcdonc/bark-plugin-api.git
   # Path set by import_plugins.py — do not edit this line
-  bark_plugins:
+  klangk_plugins:
     path: PLACEHOLDER
 
 dev_dependencies:

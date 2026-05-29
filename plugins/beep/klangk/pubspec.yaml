@@ -1,5 +1,5 @@
-name: bark_plugin_beep
-description: Audible beep plugin for Bark
+name: klangk_plugin_beep
+description: Audible beep plugin for Klangk
 publish_to: none
 version: 0.1.0
 

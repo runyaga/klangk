@@ -27,7 +27,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Create stub bark_plugins package
+      - name: Create stub klangk_plugins package
         run: bash scripts/stub_dart_plugins.sh
 
       - name: Install dependencies

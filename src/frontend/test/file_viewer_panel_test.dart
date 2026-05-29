@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:bark_frontend/ws/ws_client.dart';
-import 'package:bark_frontend/file_viewer/file_viewer_panel.dart';
+import 'package:klangk_frontend/ws/ws_client.dart';
+import 'package:klangk_frontend/file_viewer/file_viewer_panel.dart';
 import 'package:bark_plugin_api/bark_plugin_api.dart';
 
 class _MockWsClient extends WsClient {

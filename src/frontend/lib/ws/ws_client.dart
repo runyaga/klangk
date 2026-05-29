@@ -19,7 +19,7 @@ class WsDebugEntry {
   }) : timestamp = DateTime.now();
 }
 
-/// Manages WebSocket connection to the Bark backend, sending commands
+/// Manages WebSocket connection to the Klangk backend, sending commands
 /// and streaming terminal output and browser bridge requests.
 class WsClient extends ChangeNotifier {
   // coverage:ignore-start

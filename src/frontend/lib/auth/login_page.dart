@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'auth_service.dart';
 import 'pending_redirect.dart';
 import '../utils/page_title.dart';
-import '../widgets/bark_logo.dart';
+import '../widgets/klangk_logo.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key}); // coverage:ignore-line
@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const BarkLogo(height: 80),
+                    const KlangkLogo(height: 80),
                     const SizedBox(height: 8),
                     Text(
                       'Web Coding Agent',
