@@ -497,18 +497,18 @@ test.describe("Klangk E2E", () => {
       const filesTabX = (width * 3) / 4;
 
       // Switch to Files tab
-      await f.click({ position: { x: filesTabX, y: 16 }, force: true });
+      await f.click({ position: { x: filesTabX, y: 76 }, force: true });
       await page.waitForTimeout(500);
 
       // Switch back to Terminal tab
-      await f.click({ position: { x: termTabX, y: 16 }, force: true });
+      await f.click({ position: { x: termTabX, y: 76 }, force: true });
       await page.waitForTimeout(500);
 
       // Switch to Files again and back
-      await f.click({ position: { x: filesTabX, y: 16 }, force: true });
+      await f.click({ position: { x: filesTabX, y: 76 }, force: true });
       await page.waitForTimeout(500);
-      await f.click({ position: { x: termTabX, y: 16 }, force: true });
-      await page.waitForTimeout(1000);
+      await f.click({ position: { x: termTabX, y: 76 }, force: true });
+      await page.waitForTimeout(2000);
 
       // Terminal should still work — run a command
       const termX = width / 2;
