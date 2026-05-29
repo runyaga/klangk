@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:klangk_frontend/ws/ws_client.dart';
 import 'package:klangk_frontend/terminal/container_terminal.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 
 class _MockWsClient extends WsClient {
   final StreamController<Map<String, dynamic>> _controller =

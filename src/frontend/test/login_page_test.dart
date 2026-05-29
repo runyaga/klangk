@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:klangk_frontend/auth/auth_service.dart';
 import 'package:klangk_frontend/auth/login_page.dart';
 import 'package:klangk_frontend/auth/pending_redirect.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 
 void main() {
   setUp(() {

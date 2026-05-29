@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 
 class _TestPlugin extends ToolPlugin {
   bool disposed = false;

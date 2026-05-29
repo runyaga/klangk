@@ -131,7 +131,7 @@ klangk/
         suppress_browser_menu.dart  # Widget to suppress browser context menu per-panel
       widgets/
         klangk_logo.dart          # Klangk logo widget (orange paw icon)
-      (ToolPlugin and ToolPluginRegistry are in the bark_plugin_api package)
+      (ToolPlugin and ToolPluginRegistry are in the klangk_plugin_api package)
       (Plugin registration is in the klangk_plugins package at $KLANGK_PLUGINS_DIR/.dart/)
       auth/
         auth_service.dart       # JWT storage, login/register/logout, async init, email/roles/isAdmin from JWT payload
@@ -472,7 +472,7 @@ All plugins live in `$KLANGK_PLUGINS_DIR/<name>/` directories. A plugin can cont
 
 - `extension.ts` — Pi extension with `pi.registerTool()`. Copied to `src/docker/extensions/` at build time.
 - `klangk/` — Optional Dart package for client-side browser actions:
-  - `klangk/pubspec.yaml` — Package definition, depends on `bark_plugin_api` (git)
+  - `klangk/pubspec.yaml` — Package definition, depends on `klangk_plugin_api` (git)
   - `klangk/lib/plugin.dart` — Class extending `ToolPlugin` with action handlers
   - `klangk/lib/*.dart` — Supporting Dart files (widgets, utilities)
 - `tools/` — Server-side scripts. Everything in this subdirectory is copied to `/opt/klangk/plugin-tools/<name>/` in the Docker image.
@@ -492,7 +492,7 @@ A plugin needs at minimum an `extension.ts`. The `klangk/` subdirectory is only 
 For local development, create files directly in `$KLANGK_PLUGINS_DIR`:
 
 1. Create `$KLANGK_PLUGINS_DIR/<name>/extension.ts` with `pi.registerTool()`
-2. For client-side browser actions, add `klangk/pubspec.yaml` (depends on `bark_plugin_api`) and `klangk/lib/plugin.dart` extending `ToolPlugin`
+2. For client-side browser actions, add `klangk/pubspec.yaml` (depends on `klangk_plugin_api`) and `klangk/lib/plugin.dart` extending `ToolPlugin`
 3. For server-side scripts, add files in `$KLANGK_PLUGINS_DIR/<name>/tools/`
 4. `devenv up` rebuilds automatically when `$KLANGK_PLUGINS_DIR` changes
 

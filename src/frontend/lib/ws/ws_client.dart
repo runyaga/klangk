@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../auth/auth_service.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 
 /// A single WebSocket debug log entry.
 class WsDebugEntry {

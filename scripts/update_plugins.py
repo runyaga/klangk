@@ -59,7 +59,7 @@ plugins:
   # Plugin structure:
   #   extension.ts              # required: Pi extension (TypeScript)
   #   klangk/                     # optional: Dart package for client-side tools
-  #     pubspec.yaml            #   depends on bark_plugin_api
+  #     pubspec.yaml            #   depends on klangk_plugin_api
   #     lib/
   #       plugin.dart           #   class extending ToolPlugin
   #   tools/                    # optional: server-side scripts

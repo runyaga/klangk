@@ -22,9 +22,9 @@ dependencies:
   flutter_markdown_plus: ^1.0.7
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
-  bark_plugin_api:
+  klangk_plugin_api:
     git:
-      url: https://github.com/mcdonc/bark-plugin-api.git
+      url: https://github.com/mcdonc/klangk-plugin-api.git
   # Path set by import_plugins.py — do not edit this line
   klangk_plugins:
     path: PLACEHOLDER

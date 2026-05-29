@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../ws/ws_client.dart';
 import '../auth/auth_service.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'package:klangk_plugins/klangk_plugins.dart';
 import '../utils/page_title.dart';
 import '../widgets/klangk_logo.dart';

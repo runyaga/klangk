@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'confetti.dart';
 
 class CelebratePlugin extends ToolPlugin with ChangeNotifier {

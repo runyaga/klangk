@@ -1,4 +1,4 @@
-import 'package:bark_plugin_api/bark_plugin_api.dart';
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import 'beep.dart';
 
 class BeepPlugin extends ToolPlugin {

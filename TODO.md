@@ -17,7 +17,6 @@
 
 ## Backend
 
-- **Rename bark_plugin_api to klangk_plugin_api**: Rename the external `bark-plugin-api` git repo and Dart package to `klangk-plugin-api` / `klangk_plugin_api`, then update all references in this repo (pubspec.yaml files, import statements, scripts).
 - **OTEL exporter needs CA cert bundle in worktrees**: The OpenTelemetry metrics exporter fails with `OSError: Could not find a suitable TLS CA certificate bundle` when running from a git worktree, because the certifi `cacert.pem` path resolves relative to the worktree's venv which may not have it. Either pin the `REQUESTS_CA_BUNDLE` env var to the main repo's cert bundle, or ensure the worktree venv has certifi installed.
 - **WorkspaceSessions singleton class in wshandler.py**: Extract `_sessions`, `_pending_browser_requests`, `get_session`, `get_or_create_session`, `remove_session` into a `Sessions` class for better encapsulation and testability. Create a singleton of it to replace `_sessions` global.
 - **Connections singleton class in wshandler.py**: Create a `Connections` class with a `handle_websocket` method that owns the `_connections` dict. Instantiate as a module-level singleton. Eliminates the `_connections` global and makes the WebSocket handler testable as an instance rather than module-level functions.
