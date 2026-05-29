@@ -10,13 +10,11 @@ export PI_CODING_AGENT_DIR="$PI_AGENT_DIR"
 SESSION_DIR="/home/klangk/.pi/sessions"
 
 # Set up Pi agent config (from build-time /opt/klangk).
-# /home/klangk is a persistent bind mount, so clean the agent dir first to
-# avoid stale files from previous container starts.
-rm -rf "$PI_AGENT_DIR"
-mkdir -p "$PI_AGENT_DIR/bin"
-# Symlink extensions and npm packages from the read-only image.
-ln -sf /opt/klangk/pi-agent/extensions "$PI_AGENT_DIR/extensions"
-ln -sf /opt/klangk/pi-agent/npm "$PI_AGENT_DIR/npm"
+# /home/klangk is a persistent bind mount; sync image extensions/npm into
+# the writable agent dir so pi install can add new ones alongside.
+mkdir -p "$PI_AGENT_DIR/bin" "$PI_AGENT_DIR/extensions" "$PI_AGENT_DIR/npm"
+rsync -a /opt/klangk/pi-agent/extensions/ "$PI_AGENT_DIR/extensions/"
+rsync -a /opt/klangk/pi-agent/npm/ "$PI_AGENT_DIR/npm/"
 
 # Symlink system fd/rg into Pi's bin dir so it doesn't re-download them
 ln -sf /usr/bin/fd "$PI_AGENT_DIR/bin/fd"
@@ -40,7 +38,7 @@ cat >"$PI_AGENT_DIR/models.json" <<EOF
 EOF
 
 # Merge runtime LLM config into build-time settings (which has "packages"
-# from pi install). The npm dir is symlinked above so Pi finds the packages
+# from pi install). The npm dir is rsynced above so Pi finds the packages
 # without reinstalling.
 jq --arg model "$KLANGK_LLM_MODEL" '. + {defaultProvider: "llm-proxy", defaultModel: $model}' \
   /opt/klangk/pi-agent/settings.json >"$PI_AGENT_DIR/settings.json"
