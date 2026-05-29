@@ -153,37 +153,41 @@ class _SkeuoTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: isSelected ? KColors.bgSurface : KColors.bgCanvas,
-          border: Border(
-            top: BorderSide(
-              color: isSelected ? KColors.accentGreen : Colors.transparent,
-              width: 2,
-            ),
-            bottom: BorderSide(
-              color: isSelected ? Colors.transparent : KColors.borderDefault,
-            ),
-          ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(8),
+          bottomRight: Radius.circular(8),
         ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isSelected ? KColors.textPrimary : KColors.textSecondary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected ? KColors.textPrimary : KColors.textSecondary,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: isSelected ? KColors.bgSurface : KColors.bgCanvas,
+            border: Border(
+              top: BorderSide(
+                color: isSelected ? KColors.accentGreen : Colors.transparent,
+                width: 2,
               ),
             ),
-          ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? KColors.textPrimary : KColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color:
+                      isSelected ? KColors.textPrimary : KColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
