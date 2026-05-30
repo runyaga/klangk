@@ -326,25 +326,6 @@ class ContainerRegistry:
             llm_model,
         )
 
-        logfire_token = util.resolve_env_secret("LOGFIRE_TOKEN")
-        if logfire_token:
-            logfire_base = util.resolve_env_secret(
-                "LOGFIRE_BASE_URL",
-                "https://logfire-api.pydantic.dev",
-            )
-            env_vars.append(f"OTEL_EXPORTER_OTLP_ENDPOINT={logfire_base}")
-            env_vars.append(
-                "OTEL_EXPORTER_OTLP_HEADERS="
-                f"Authorization=Bearer {logfire_token}"
-            )
-            env_vars.append("OTEL_SERVICE_NAME=klangk-pi-agent")
-            logfire_env = util.resolve_env_secret("LOGFIRE_ENVIRONMENT")
-            if logfire_env:
-                env_vars.append(
-                    "OTEL_RESOURCE_ATTRIBUTES="
-                    f"deployment.environment={logfire_env}"
-                )
-
         mappings = [
             f"{CONTAINER_PORT_START + i}:{hp}"
             for i, hp in enumerate(host_ports)
