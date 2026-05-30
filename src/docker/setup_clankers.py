@@ -155,7 +155,6 @@ def merge_keybindings():
     defaults = {
         "tui.editor.cursorLeft": ["left"],
         "tui.editor.cursorRight": ["right"],
-        "tui.editor.cursorWordRight": ["ctrl+right"],
     }
 
     kb_path = AGENT_DIR / "keybindings.json"
