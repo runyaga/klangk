@@ -57,7 +57,7 @@ In CI, `devenv processes up -d` starts nginx before E2E tests run.
 
 - **Pi Coding Agent**: Minimal terminal coding harness (pi.dev) running in interactive terminal mode with native session persistence and extension tools
 - **LLM Provider**: Any OpenAI-compatible LLM provider (Ollama Cloud, self-hosted Ollama, etc.), configurable via env vars (`KLANGK_LLM_BASE_URL`, `KLANGK_LLM_MODEL`, `KLANGK_LLM_API_KEY`). The model must support tool/function calling — Pi uses tools (bash, edit, write, read) to interact with the workspace.
-- **Pydantic Logfire**: AI observability — FastAPI auto-instrumentation via Logfire Python SDK (`LOGFIRE_TOKEN`), Pi agent tracing via [pi-otel-telemetry](https://github.com/mprokopov/pi-otel-telemetry) extension (OTLP export to Logfire). Both trace sources appear in the same Logfire project. Container OTEL env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`) are auto-constructed from `LOGFIRE_TOKEN`/`LOGFIRE_BASE_URL` when set.
+- **Pydantic Logfire**: AI observability — FastAPI auto-instrumentation via Logfire Python SDK (`LOGFIRE_TOKEN`). Pi agent tracing via [pi-otel-telemetry](https://github.com/mprokopov/pi-otel-telemetry) extension (OTLP export to Logfire) — requires `LOGFIRE_TOKEN` as a workspace env var and sourcing `. /opt/klangk/otel.sh` in the container shell (or `.bashrc`) to set the standard `OTEL_*` env vars.
 - **devenv**: Nix-based development environment with auto-setup, conditional build tasks (`execIfModified`), auto-reload disabled
 
 ## Features
@@ -270,7 +270,7 @@ All settings can be overridden in `.env`. Defaults (where appropriate) are provi
 | `KLANGK_SENDMAIL_PATH`          | `sendmail`                           | Path to sendmail binary (used when KLANGK_SMTP_HOST is not set)                                                                                             |
 | `LOGFIRE_TOKEN`                 |                                      | Pydantic Logfire write token (opt-in)                                                                                                                       |
 | `LOGFIRE_BASE_URL`              | `https://logfire-api.pydantic.dev`   | Logfire API base URL (for self-hosted instances)                                                                                                            |
-| `LOGFIRE_ENVIRONMENT`           |                                      | Logfire environment tag (e.g., `production`, `staging`) — filters traces in the dashboard. Also passed to containers via `OTEL_RESOURCE_ATTRIBUTES`.        |
+| `LOGFIRE_ENVIRONMENT`           |                                      | Logfire environment tag (e.g., `production`, `staging`) — filters traces in the dashboard.                                                                  |
 
 ### Ports
 
