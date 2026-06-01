@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import '../theme/colors.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -22,12 +25,29 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
   bool _needsVerification = false;
   bool _resending = false;
+  bool _registrationEnabled = true;
 
   @override
   void initState() {
     super.initState();
     setPageTitle('Login');
+    _loadConfig();
   }
+
+  Future<void> _loadConfig() async {
+    // coverage:ignore-start
+    try {
+      final response = await http.get(Uri.parse('${baseUrl}/api/config'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _registrationEnabled = data['registration_enabled'] ?? true;
+          });
+        }
+      }
+    } catch (_) {}
+  } // coverage:ignore-end
 
   @override
   void dispose() {
@@ -185,20 +205,22 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isRegister = !_isRegister;
-                          _error = null;
-                        });
-                      },
-                      child: Text(
-                        _isRegister
-                            ? 'Already have an account? Log in'
-                            : 'Need an account? Create one',
+                    if (_registrationEnabled) ...[
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _isRegister = !_isRegister;
+                            _error = null;
+                          });
+                        },
+                        child: Text(
+                          _isRegister
+                              ? 'Already have an account? Log in'
+                              : 'Need an account? Create one',
+                        ),
                       ),
-                    ),
+                    ],
                     // coverage:ignore-start
                     if (!_isRegister)
                       TextButton(

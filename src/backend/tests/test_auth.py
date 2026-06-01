@@ -42,6 +42,16 @@ class TestJWT:
 
 
 class TestRegister:
+    async def test_register_disabled(self, db, monkeypatch):
+        monkeypatch.setenv("KLANGK_DISABLE_REGISTRATION", "true")
+        with pytest.raises(HTTPException) as exc_info:
+            await auth.register(
+                auth.RegisterRequest(
+                    email="blocked@example.com", password="pass1234"
+                )
+            )
+        assert exc_info.value.status_code == 403
+
     async def test_register_success(self, db):
         result = await auth.register(
             auth.RegisterRequest(email="new@example.com", password="pass1234")

@@ -130,9 +130,17 @@ def validate_email(email: str) -> None:
         )
 
 
+def registration_enabled() -> bool:
+    """Check if public registration is enabled."""
+    val = resolve_env_secret("KLANGK_DISABLE_REGISTRATION", "")
+    return val.lower() not in ("1", "true", "yes")
+
+
 async def register(
     req: RegisterRequest, verified: bool = False
 ) -> RegisterResult:
+    if not registration_enabled():
+        raise HTTPException(status_code=403, detail="Registration is disabled")
     existing = await model.get_user_by_email(req.email)
     if existing is not None:
         raise HTTPException(status_code=400, detail="Registration failed")

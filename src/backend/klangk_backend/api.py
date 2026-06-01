@@ -74,7 +74,10 @@ SOLIPLEX_URL = resolve_env_secret("SOLIPLEX_URL", "")
 
 @router.get("/api/config")
 async def get_config():
-    return {"soliplex_url": SOLIPLEX_URL}
+    return {
+        "soliplex_url": SOLIPLEX_URL,
+        "registration_enabled": auth.registration_enabled(),
+    }
 
 
 # --- Auth endpoints ---
