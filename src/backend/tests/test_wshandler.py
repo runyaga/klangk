@@ -231,6 +231,18 @@ class TestHandleTerminalInput:
         await handle_terminal_input(state, {"data": "ls\n"})
         t.write.assert_not_awaited()
 
+    async def test_oversized_input_dropped(self):
+        t = _mock_terminal()
+        state = _base_state()
+        state["terminal_session"] = t
+        state["container_id"] = "cid"
+        container.registry.track_activity("cid", "ws")
+
+        big_data = "x" * 70000
+        await handle_terminal_input(state, {"data": big_data})
+        t.write.assert_not_awaited()
+        container.registry.states.pop("ws", None)
+
 
 # --- handle_terminal_resize ---
 
@@ -1009,6 +1021,16 @@ class TestExecHandlers:
     async def test_exec_input_no_session(self):
         state = {"container_id": "cid", "dockerexec": None}
         await handle_exec_input(state, {"data": ""})  # should not raise
+
+    async def test_exec_input_oversized_dropped(self):
+        import base64
+
+        session = AsyncMock()
+        session.is_alive = True
+        state = {"container_id": "cid", "dockerexec": session}
+        big_data = base64.b64encode(b"x" * 70000).decode()
+        await handle_exec_input(state, {"data": big_data})
+        session.write.assert_not_awaited()
 
     async def test_exec_close_stdin(self):
         session = AsyncMock()

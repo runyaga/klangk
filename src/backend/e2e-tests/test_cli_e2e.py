@@ -59,6 +59,8 @@ def _start_server(data_dir, port, instance_id, extra_env=None):
             "0.0.0.0",
             "--port",
             port,
+            "--ws-max-size",
+            "65536",
         ],
         cwd=os.path.join(os.path.dirname(__file__), ".."),
         env=env,

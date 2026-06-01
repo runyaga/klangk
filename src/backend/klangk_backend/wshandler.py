@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 _WS_DEBUG = bool(resolve_env_secret("KLANGK_WS_DEBUG"))
 
+# Max size for terminal/exec input data (base64-decoded bytes).
+_MAX_INPUT_SIZE = 65536
+
 
 class SafeWebSocket:
     """Serialize WebSocket writes with an asyncio.Lock.
@@ -446,8 +449,14 @@ async def handle_terminal_input(state: dict, msg: dict) -> None:
     session: TerminalSession | None = state.get("terminal_session")
     if session is None or not session.is_alive:
         return
+    data = msg.get("data", "")
+    if len(data) > _MAX_INPUT_SIZE:
+        logger.warning(
+            "terminal_input too large (%d bytes), dropping", len(data)
+        )
+        return
     container.registry.record_activity(state["container_id"])
-    await session.write(msg.get("data", ""))
+    await session.write(data)
 
 
 async def handle_terminal_resize(state: dict, msg: dict) -> None:
@@ -483,10 +492,13 @@ async def handle_exec_input(state: dict, msg: dict) -> None:
     session: ExecSession | None = state.get("dockerexec")
     if session is None or not session.is_alive:
         return
-    container.registry.record_activity(state["container_id"])
     import base64
 
     raw = base64.b64decode(msg.get("data", ""))
+    if len(raw) > _MAX_INPUT_SIZE:
+        logger.warning("exec_input too large (%d bytes), dropping", len(raw))
+        return
+    container.registry.record_activity(state["container_id"])
     await session.write(raw)
 
 
