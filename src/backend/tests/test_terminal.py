@@ -236,7 +236,7 @@ class TestWrite:
     async def test_write_exception_suppressed(self):
         stream = _mock_stream()
         stream.read_out = AsyncMock(return_value=None)
-        stream.write_in = AsyncMock(side_effect=RuntimeError("broken"))
+        stream.write_in = AsyncMock(side_effect=OSError("broken"))
         exec_obj = _mock_exec(stream)
         container = _mock_container(exec_obj)
         docker = _mock_docker(container)
@@ -275,7 +275,7 @@ class TestResize:
         stream = _mock_stream()
         stream.read_out = AsyncMock(return_value=None)
         exec_obj = _mock_exec(stream)
-        exec_obj.resize = AsyncMock(side_effect=[None, RuntimeError("broken")])
+        exec_obj.resize = AsyncMock(side_effect=[None, OSError("broken")])
         container = _mock_container(exec_obj)
         docker = _mock_docker(container)
 
@@ -314,11 +314,11 @@ class TestStop:
     async def test_stop_handles_close_exceptions(self):
         stream = _mock_stream()
         stream.read_out = AsyncMock(return_value=None)
-        stream.close = AsyncMock(side_effect=RuntimeError("close fail"))
+        stream.close = AsyncMock(side_effect=OSError("close fail"))
         exec_obj = _mock_exec(stream)
         container = _mock_container(exec_obj)
         docker = _mock_docker(container)
-        docker.close = AsyncMock(side_effect=RuntimeError("docker close fail"))
+        docker.close = AsyncMock(side_effect=OSError("docker close fail"))
 
         with patch("aiodocker.Docker", return_value=docker):
             s = TerminalSession("cid")
@@ -328,6 +328,56 @@ class TestStop:
         await s.stop()
         assert s._stream is None
         assert s._exec is None
+
+    async def test_stop_cancels_blocked_read_loop(self):
+        """CancelledError re-raised from _read_loop when stop() cancels it."""
+        hang = asyncio.Future()  # blocks forever until cancelled
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(side_effect=[first_msg, hang])
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Read loop is now blocked on the hanging future
+        await s.stop()
+        assert s._running is False
+        assert s._stream is None
+
+    async def test_stop_read_task_unexpected_exception(self):
+        """Non-CancelledError from read task is logged, not raised."""
+
+        async def bad_task():
+            raise RuntimeError("unexpected")
+
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(return_value=None)
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Replace the read task with one that raises a non-CancelledError
+        if s._read_task is not None:
+            s._read_task.cancel()
+            try:
+                await s._read_task
+            except (asyncio.CancelledError, Exception):
+                pass
+        s._read_task = asyncio.create_task(bad_task())
+        await asyncio.sleep(0)  # let it finish
+
+        # stop() should handle the RuntimeError without raising
+        await s.stop()
+        assert s._read_task is None
 
     async def test_stop_when_not_started(self):
         s = TerminalSession("cid")

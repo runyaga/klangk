@@ -6,6 +6,7 @@ import os
 from collections.abc import AsyncGenerator
 
 import aiodocker
+import aiodocker.exceptions
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +108,10 @@ class TerminalSession:
                     # Bounded queue: blocks when full, back-pressuring the
                     # PTY via its kernel buffer.
                     await self._output_queue.put(text)
-        except (asyncio.CancelledError, Exception):
-            pass
+        except asyncio.CancelledError:  # pragma: no cover
+            raise
+        except Exception:
+            logger.exception("Error in terminal read loop")
         finally:
             # Blocks until consumer drains a slot; no deadlock since
             # consumer and producer are different tasks.
@@ -127,16 +130,22 @@ class TerminalSession:
         if self._stream is not None:
             try:
                 await self._stream.write_in(data.encode("utf-8"))
-            except Exception:
-                pass
+            except (
+                aiodocker.exceptions.DockerError,
+                OSError,
+            ):
+                logger.debug("Write to terminal stream failed", exc_info=True)
 
     async def resize(self, cols: int, rows: int) -> None:
         """Resize the terminal."""
         if self._exec is not None:
             try:
                 await self._exec.resize(h=rows, w=cols)
-            except Exception:
-                pass
+            except (
+                aiodocker.exceptions.DockerError,
+                OSError,
+            ):
+                logger.debug("Terminal resize failed", exc_info=True)
 
     async def output(self) -> AsyncGenerator[str, None]:
         """Yield terminal output as it arrives."""
@@ -154,22 +163,30 @@ class TerminalSession:
             self._read_task.cancel()
             try:
                 await self._read_task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception:
+                logger.exception("Error awaiting terminal read task")
             self._read_task = None
 
         if self._stream is not None:
             try:
                 await self._stream.close()
-            except Exception:
-                pass
+            except (
+                aiodocker.exceptions.DockerError,
+                OSError,
+            ):
+                logger.debug("Error closing terminal stream", exc_info=True)
             self._stream = None
 
         if hasattr(self, "_docker") and self._docker is not None:
             try:
                 await self._docker.close()
-            except Exception:
-                pass
+            except (
+                aiodocker.exceptions.DockerError,
+                OSError,
+            ):
+                logger.debug("Error closing Docker client", exc_info=True)
             self._docker = None
 
         self._exec = None
