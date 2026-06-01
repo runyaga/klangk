@@ -53,6 +53,7 @@ Open [http://localhost:8995](http://localhost:8995) and log in with `admin@examp
 Klangk also provides a CLI for terminal-based access to the same containers:
 
 ```bash
+devenv shell  # then .....
 klangk login admin@example.com        # authenticate (prompts for password)
 klangk list                             # list workspaces
 klangk create my-project                # create a workspace
@@ -143,8 +144,7 @@ nginx reverse proxy (port 8995)
 
 ### Plugins
 
-Plugins are fetched from git repos into `$KLANGK_PLUGINS_DIR` at development
-time. Run `update-plugins` to set up:
+Plugins are Pi extensions that potenitalluy have Dart code in them to allow the frontend to participate. Plugins are fetched from git repos into `$KLANGK_PLUGINS_DIR` at development time. Run `update-plugins` to set up:
 
 ```bash
 devenv shell -- update-plugins           # creates $KLANGK_PLUGINS_DIR/plugins.yaml on first run

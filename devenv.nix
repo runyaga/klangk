@@ -31,6 +31,7 @@
     git # HM for "error: Failed to find git" during devenv:git-hooks:install
     sqlite
     rsync
+    claude-code
   ];
 
   env.PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
