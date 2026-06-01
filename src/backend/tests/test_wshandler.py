@@ -304,6 +304,8 @@ class TestHandleTerminalStart:
             mock_session.output = fake_output
 
             await handle_terminal_start(ws, state, {"cols": 100, "rows": 30})
+            # Let the background task run
+            await asyncio.sleep(0)
 
         MockTS.assert_called_once_with("cid")
         mock_session.start.assert_awaited_once_with(
@@ -311,6 +313,8 @@ class TestHandleTerminalStart:
         )
         assert state["terminal_session"] is mock_session
         assert state["terminal_task"] is not None
+        # Should have sent terminal_started ack
+        ws.send_json.assert_awaited_with({"type": "terminal_started"})
 
         # Clean up
         state["terminal_task"].cancel()
@@ -333,6 +337,8 @@ class TestHandleTerminalStart:
             await handle_terminal_start(
                 ws, state, {"cols": 80, "rows": 24, "commandOverride": "bash"}
             )
+            # Let the background task run
+            await asyncio.sleep(0)
 
         mock_session.start.assert_awaited_once_with(
             80, 24, command_override="bash"
@@ -343,6 +349,27 @@ class TestHandleTerminalStart:
             await state["terminal_task"]
         except asyncio.CancelledError:
             pass
+        container.registry.states.pop("ws", None)
+
+    async def test_start_failure_sends_error(self):
+        ws = _mock_ws()
+        state = _base_state()
+        state["container_id"] = "cid"
+        container.registry.track_activity("cid", "ws")
+
+        mock_session = AsyncMock()
+        mock_session.start = AsyncMock(
+            side_effect=RuntimeError("docker broke")
+        )
+        MockTS = MagicMock(return_value=mock_session)
+        with patch("klangk_backend.wshandler.TerminalSession", MockTS):
+            await handle_terminal_start(ws, state, {"cols": 80, "rows": 24})
+            await asyncio.sleep(0)
+
+        # Should have sent an error, not terminal_started
+        sent = ws.send_json.call_args_list
+        assert any(call.args[0].get("type") == "error" for call in sent)
+        assert state.get("terminal_session") is None
         container.registry.states.pop("ws", None)
 
     async def test_no_container(self):

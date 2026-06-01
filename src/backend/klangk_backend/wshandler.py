@@ -423,12 +423,23 @@ async def handle_terminal_start(
     rows = msg.get("rows", 24)
     command_override = msg.get("commandOverride")
     session = TerminalSession(container_id)
-    await session.start(cols, rows, command_override=command_override)
-    state["terminal_session"] = session
-    state["terminal_task"] = asyncio.create_task(
-        forward_terminal_output(ws, session, state)
-    )
-    container.registry.record_activity(container_id)
+
+    # Fire-and-forget: start the terminal in a background task so the
+    # receive loop stays responsive while dockerd creates the exec session.
+    async def _start_terminal() -> None:
+        try:
+            await session.start(cols, rows, command_override=command_override)
+            state["terminal_session"] = session
+            state["terminal_task"] = asyncio.create_task(
+                forward_terminal_output(ws, session, state)
+            )
+            container.registry.record_activity(container_id)
+            await ws.send_json({"type": "terminal_started"})
+        except Exception as e:
+            logger.error("Terminal start failed: %s", e)
+            await send_error(ws, f"Terminal start failed: {e}")
+
+    asyncio.create_task(_start_terminal())
 
 
 async def handle_terminal_input(state: dict, msg: dict) -> None:
