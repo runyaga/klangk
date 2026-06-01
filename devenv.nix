@@ -83,7 +83,7 @@
   processes = {
     backend = {
       exec = ''
-        cd $DEVENV_ROOT/src/backend && exec uvicorn klangk_backend.main:app --host 0.0.0.0 --port $KLANGK_PORT --ws-max-size 65536
+        cd $DEVENV_ROOT/src/backend && exec uvicorn klangk_backend.main:app --host 0.0.0.0 --port $KLANGK_PORT --ws-max-size 65536 --ws-ping-interval 20 --ws-ping-timeout 20
       '';
       after = [
         "klangk:flutter-build"
