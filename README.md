@@ -78,19 +78,20 @@ The CLI connects to the running Klangk backend over HTTP + WebSocket — it work
 
 All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` at low priority so `.env` values take precedence.
 
-| Variable                     | Default                        | Description                                                        |
-| ---------------------------- | ------------------------------ | ------------------------------------------------------------------ |
-| `KLANGK_NGINX_PORT`          | `8995`                         | **Primary access point** — nginx (UI, API, WebSocket, hosted apps) |
-| `KLANGK_PORT`                | `8997`                         | Backend (FastAPI/uvicorn) — proxied through nginx                  |
-| `KLANGK_DATA_DIR`            | `$DEVENV_STATE/klangk/data`    | Database, workspaces, Pi sessions                                  |
-| `KLANGK_PLUGINS_DIR`         | `$DEVENV_STATE/klangk/plugins` | Fetched plugins (outside repo for `execIfModified`)                |
-| `KLANGK_LLM_API_KEY`         |                                | LLM provider API key                                               |
-| `KLANGK_LLM_BASE_URL`        |                                | LLM API URL (any OpenAI-compatible provider)                       |
-| `KLANGK_LLM_MODEL`           |                                | LLM model name                                                     |
-| `KLANGK_JWT_SECRET`          |                                | JWT signing secret                                                 |
-| `KLANGK_DEFAULT_USER`        |                                | Auto-seeded admin email on startup                                 |
-| `KLANGK_DEFAULT_PASSWORD`    |                                | Auto-seeded password on startup (omit to generate random)          |
-| `KLANGK_MIN_PASSWORD_LENGTH` | `4`                            | Minimum password length                                            |
+| Variable                      | Default                        | Description                                                        |
+| ----------------------------- | ------------------------------ | ------------------------------------------------------------------ |
+| `KLANGK_NGINX_PORT`           | `8995`                         | **Primary access point** — nginx (UI, API, WebSocket, hosted apps) |
+| `KLANGK_PORT`                 | `8997`                         | Backend (FastAPI/uvicorn) — proxied through nginx                  |
+| `KLANGK_DATA_DIR`             | `$DEVENV_STATE/klangk/data`    | Database, workspaces, Pi sessions                                  |
+| `KLANGK_PLUGINS_DIR`          | `$DEVENV_STATE/klangk/plugins` | Fetched plugins (outside repo for `execIfModified`)                |
+| `KLANGK_LLM_API_KEY`          |                                | LLM provider API key                                               |
+| `KLANGK_LLM_BASE_URL`         |                                | LLM API URL (any OpenAI-compatible provider)                       |
+| `KLANGK_LLM_MODEL`            |                                | LLM model name                                                     |
+| `KLANGK_JWT_SECRET`           |                                | JWT signing secret                                                 |
+| `KLANGK_DEFAULT_USER`         |                                | Auto-seeded admin email on startup                                 |
+| `KLANGK_DEFAULT_PASSWORD`     |                                | Auto-seeded password on startup (omit to generate random)          |
+| `KLANGK_MIN_PASSWORD_LENGTH`  | `4`                            | Minimum password length                                            |
+| `KLANGK_DISABLE_REGISTRATION` |                                | Set to `true` to block signups and hide the registration link      |
 
 ### Ports
 
