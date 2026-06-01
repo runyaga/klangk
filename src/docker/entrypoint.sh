@@ -2,6 +2,9 @@
 # Minimal container entrypoint.
 set -e
 
+# Bind-mounted dirs may be owned by a different UID (e.g. host user).
+chown klangk:klangk /home/klangk
+
 # Set up Pi agent config as the klangk user (extensions, settings, models,
 # system prompt, Claude Code skills). Runs before the readiness signal so
 # terminal sessions find everything in place.

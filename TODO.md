@@ -40,6 +40,10 @@
 - **Move config directory into home**: The per-workspace config directory (containing `default-command`) is stored separately at `$KLANGK_DATA_DIR/workspaces/<user>/config/<workspace>/` rather than inside the home directory. Since the home directory is now the single bind mount for all user state, the config dir should move into it (e.g., `/home/klangk/.config/klangk/`) to keep all workspace state co-located and simplify the directory layout.
 - **Move LLM config to config mount**: `setup_pi.py` currently reads `KLANGK_LLM_MODEL` and `KLANGK_LLM_PROXY_URL` from container env vars to build `models.json` and `settings.json`. These should be written to the read-only config mount by the backend instead, so `setup_pi.py` doesn't need env vars and the terminal session doesn't need to selectively strip them. Would also allow changing LLM model without container restart.
 
+## Architecture
+
+- **Abstract workspace backend for non-Docker runtimes**: Extract `container_manager.py` into a `WorkspaceBackend` ABC with `create`, `start`, `stop`, `remove`, `exec`, `is_running` methods. `DockerBackend` wraps existing Docker calls. A `BubblewrapBackend` would use `bwrap` (bind-mount host filesystem, `--unshare-pid`/`--unshare-net`, writable `/work`) to sandbox processes without a Docker daemon. Manager layer keeps idle tracking, user→workspace mapping, and the public API. Backend selected via `BARK_WORKSPACE_BACKEND` env var. Tradeoffs: bubblewrap has no image layering, no built-in cgroups (use systemd-run), sub-second startup, no daemon dependency.
+
 ## Production
 
 - **Mount S3 bucket as filesystem**: Allow workspaces to mount an S3 bucket (via s3fs-fuse or goofys) for persistent shared storage across containers and restarts.
