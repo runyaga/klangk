@@ -6,8 +6,6 @@ import 'package:xterm/xterm.dart';
 import '../ws/ws_client.dart';
 import '../utils/web_helpers_stub.dart'
     if (dart.library.html) '../utils/web_helpers_web.dart';
-import '../utils/speech_stub.dart'
-    if (dart.library.html) '../utils/speech_web.dart';
 
 const _theme = TerminalTheme(
   cursor: Color(0xFF5B8C5A),
@@ -52,9 +50,6 @@ class ContainerTerminalState extends State<ContainerTerminal> {
   StreamSubscription<String>? _outputSub;
   StreamSubscription<Map<String, dynamic>>? _eventSub;
   bool _started = false;
-  bool _listening = false;
-  SpeechSession? _speechSession;
-  StreamSubscription<String>? _speechSub;
 
   @override
   void initState() {
@@ -92,44 +87,12 @@ class ContainerTerminalState extends State<ContainerTerminal> {
     );
   }
 
-  // coverage:ignore-start
-  void _toggleListening() {
-    if (_listening) {
-      _speechSession?.stop();
-      _speechSub?.cancel();
-      _speechSub = null;
-      _speechSession = null;
-      setState(() => _listening = false);
-    } else {
-      final session = startSpeechRecognition();
-      _speechSession = session;
-      _speechSub = session.transcripts.listen(
-        (text) {
-          widget.wsClient.sendTerminalInput(text);
-        },
-        onError: (_) {
-          setState(() => _listening = false);
-        },
-        onDone: () {
-          setState(() => _listening = false);
-          _speechSub = null;
-          _speechSession = null;
-        },
-      );
-      session.start();
-      setState(() => _listening = true);
-    }
-  }
-  // coverage:ignore-end
-
   void requestFocus() {
     _focusNode.requestFocus();
   }
 
   @override
   void dispose() {
-    _speechSession?.stop();
-    _speechSub?.cancel();
     _controller.dispose();
     _focusNode.dispose();
     _scrollController.dispose();
@@ -276,31 +239,6 @@ class ContainerTerminalState extends State<ContainerTerminal> {
       ),
     );
 
-    return Stack(
-      children: [
-        terminalView,
-        // coverage:ignore-start
-        if (isSpeechRecognitionSupported())
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: Opacity(
-              opacity: _listening ? 1.0 : 0.7,
-              child: FloatingActionButton.small(
-                onPressed: _toggleListening,
-                backgroundColor: _listening
-                    ? const Color(0xFFCC6666)
-                    : const Color(0xFF5B8C5A),
-                child: Icon(
-                  _listening ? Icons.mic_off : Icons.mic,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-        // coverage:ignore-end
-      ],
-    );
+    return terminalView;
   }
 }
