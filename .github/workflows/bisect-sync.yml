@@ -1,0 +1,37 @@
+name: Bisect Sync Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to test"
+        required: true
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KLANGK_LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      KLANGK_LLM_BASE_URL: https://ollama.com/v1
+      KLANGK_LLM_MODEL: gemma4:31b
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - uses: ./.github/actions/devenv-setup
+        with:
+          build-tasks: klangk:docker-build
+
+      - name: Stop devenv services
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv processes down --no-tui 2>/dev/null || true
+
+      - name: Run sync test only
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          devenv shell -- pytest src/backend/e2e-tests/test_cli_e2e.py::TestSync::test_sync_to_container -xvs
