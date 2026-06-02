@@ -2,8 +2,13 @@
 # Minimal container entrypoint.
 set -e
 
-# Bind-mounted dirs may be owned by a different UID (e.g. host user).
-chown klangk:klangk /home/klangk
+# The host bind-mounts $home_path as /home/klangk and pre-creates the
+# work/ subdirectory before the container starts.  Both end up owned by
+# the host UID.  chown is not recursive, so we must fix ownership on
+# the mount-point AND the work dir individually — otherwise the
+# container's klangk user cannot write to /home/klangk/work (breaks
+# rsync, file creation, etc.).
+chown klangk:klangk /home/klangk /home/klangk/work
 
 # Set up Pi agent config as the klangk user (extensions, settings, models,
 # system prompt, Claude Code skills). Runs before the readiness signal so
