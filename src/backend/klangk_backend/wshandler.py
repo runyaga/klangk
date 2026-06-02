@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from . import auth, container, workspaces
+from . import auth, container, model, workspaces
 from .util import derive_hosting_info, resolve_env_secret
 from .dockerexec import ExecSession
 from .terminal import TerminalSession
@@ -269,6 +269,29 @@ class WebSocketState:
         else:
             container.registry.remove_state(workspace_id)
             logger.info("Reset workspace state for %s", workspace_id)
+
+    async def logout_user(self, user_id: str) -> None:
+        """Stop containers for a logging-out user, skipping any that
+        have active subscribers belonging to other users."""
+        user_workspaces = await model.get_user_workspaces_with_containers(
+            user_id
+        )
+        for ws in user_workspaces:
+            if not ws["container_id"]:
+                continue
+            session = self.get_session(ws["id"])
+            if session:
+                has_others = any(
+                    conn.user["id"] != user_id
+                    for sock, conn in self.connections.items()
+                    if sock in session.subscribers
+                )
+                if has_others:
+                    continue
+            await container.registry.stop_and_remove_container(
+                ws["container_id"]
+            )
+            await self.reset_workspace(ws["id"])
 
     def handle_browser_response(self, msg: dict) -> None:
         """Resolve a pending browser-delegate request."""

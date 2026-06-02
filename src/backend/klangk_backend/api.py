@@ -326,7 +326,7 @@ async def logout(
     request: Request,
     user: dict = Depends(auth.get_current_user),
 ):
-    await container.registry.stop_user_containers(user["id"])
+    await wshandler.state.logout_user(user["id"])
     # Blocklist the token so it can't be reused after logout
     authorization = request.headers.get("authorization", "")
     if authorization.startswith("Bearer "):
