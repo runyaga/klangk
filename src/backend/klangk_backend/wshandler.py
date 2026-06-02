@@ -149,9 +149,26 @@ def get_or_create_session(workspace_id: str) -> WorkspaceSession:
 
 
 async def remove_session(workspace_id: str) -> None:
-    session = _sessions.pop(workspace_id, None)
-    if session:
+    """Remove workspace session (acquires session lock).
+
+    For internal use when the caller does NOT already hold the lock.
+    Use ``_remove_session_locked`` when the lock is already held.
+    """
+    session = _sessions.get(workspace_id)
+    if not session:
+        return
+    async with session.lock:
+        # Re-check: someone may have added a subscriber while we waited.
+        if session.subscribers:
+            return
+        _sessions.pop(workspace_id, None)
         await session.reset()
+
+
+async def _remove_session_locked(session: WorkspaceSession) -> None:
+    """Remove session when caller already holds ``session.lock``."""
+    _sessions.pop(session.workspace_id, None)
+    await session.reset()
 
 
 async def handle_websocket(ws: WebSocket) -> None:
@@ -832,18 +849,22 @@ async def cleanup_connection(ws: SafeWebSocket, state: dict) -> None:
     await stop_terminal(state)
     await stop_exec(state)
 
-    # Remove this WebSocket from subscribers
+    # Remove this WebSocket from subscribers.  Hold the session lock so
+    # no new subscriber can sneak in between the discard and the emptiness
+    # check (the "add" side in start_workspace_container already acquires
+    # the lock before adding to subscribers).
     session = get_session(workspace_id) if workspace_id else None
     if session:
-        session.subscribers.discard(ws)
-        session.browser_subscribers.discard(ws)
+        async with session.lock:
+            session.subscribers.discard(ws)
+            session.browser_subscribers.discard(ws)
 
-    # Clean up session if no subscribers remain. The container is NOT
-    # killed — the idle timeout handles container cleanup. This avoids
-    # the race where disconnecting one of several connections kills the
-    # container while others are still active.
-    if session and not session.subscribers:
-        await remove_session(workspace_id)
+            # Clean up session if no subscribers remain. The container is NOT
+            # killed — the idle timeout handles container cleanup. This avoids
+            # the race where disconnecting one of several connections kills the
+            # container while others are still active.
+            if not session.subscribers:
+                await _remove_session_locked(session)
 
 
 async def reset_workspace_state(workspace_id: str) -> None:

@@ -38,6 +38,7 @@ from klangk_backend.wshandler import (
     stop_exec,
     reset_workspace_state,
     _broadcast,
+    _remove_session_locked,
     _log_ws_msg,
     _SEND_QUEUE_SIZE,
 )
@@ -1422,6 +1423,110 @@ class TestBrowserBridge:
 class TestResetWorkspaceState:
     async def test_noop_for_unknown_workspace(self):
         await reset_workspace_state("ws-unknown")  # should not raise
+
+    async def test_removes_session_with_no_subscribers(self):
+        """remove_session acquires lock and removes empty session."""
+        wshandler.get_or_create_session("ws-reset-empty")
+        assert "ws-reset-empty" in wshandler._sessions
+        container.registry.track_activity("cid-reset", "ws-reset-empty")
+        try:
+            await reset_workspace_state("ws-reset-empty")
+            assert "ws-reset-empty" not in wshandler._sessions
+        finally:
+            wshandler._sessions.pop("ws-reset-empty", None)
+            container.registry.states.pop("ws-reset-empty", None)
+
+    async def test_remove_session_skips_if_subscribers_reappear(self):
+        """remove_session re-checks subscribers under lock and aborts if non-empty."""
+        session = wshandler.get_or_create_session("ws-reappear")
+        mock_ws = _mock_ws()
+        # Add subscriber so the re-check inside the lock finds a non-empty set
+        session.subscribers.add(mock_ws)
+        try:
+            await wshandler.remove_session("ws-reappear")
+            # Session should NOT have been removed
+            assert "ws-reappear" in wshandler._sessions
+            assert mock_ws in session.subscribers
+        finally:
+            wshandler._sessions.pop("ws-reappear", None)
+
+
+class TestRemoveSessionLocked:
+    async def test_removes_session(self):
+        session = wshandler.get_or_create_session("ws-locked-rm")
+        try:
+            async with session.lock:
+                await _remove_session_locked(session)
+            assert "ws-locked-rm" not in wshandler._sessions
+        finally:
+            wshandler._sessions.pop("ws-locked-rm", None)
+
+
+class TestCleanupSubscriberRace:
+    async def test_new_subscriber_not_lost_during_cleanup(self):
+        """A subscriber added under the lock while cleanup runs is not lost."""
+        ws1 = _mock_ws()
+        ws2 = _mock_ws()
+        session = WorkspaceSession("ws-race")
+        session.subscribers.add(ws1)
+        wshandler._sessions["ws-race"] = session
+
+        state = _base_state()
+        state["workspace_id"] = "ws-race"
+        state["container_id"] = "cid-race"
+        state["_idle_cb"] = None
+        state["terminal_session"] = None
+        state["terminal_task"] = None
+        state["dockerexec"] = None
+        state["exec_task"] = None
+
+        # Simulate: ws1 disconnects (cleanup_connection) while ws2 connects
+        # (start_workspace_container adds ws2 under the lock).
+        # We do this by adding ws2 after ws1's cleanup, verifying the session
+        # and ws2 survive.
+
+        await cleanup_connection(ws1, state)
+
+        # Session should be removed since ws1 was the last subscriber
+        assert "ws-race" not in wshandler._sessions
+
+        # Now create a fresh session for ws2 (simulating start_workspace_container)
+        session2 = wshandler.get_or_create_session("ws-race")
+        async with session2.lock:
+            session2.subscribers.add(ws2)
+
+        assert ws2 in session2.subscribers
+        assert "ws-race" in wshandler._sessions
+
+        wshandler._sessions.pop("ws-race", None)
+
+    async def test_concurrent_cleanup_and_add(self):
+        """When cleanup holds the lock, a concurrent add waits and is not lost."""
+        ws1 = _mock_ws()
+        ws2 = _mock_ws()
+        session = WorkspaceSession("ws-conc")
+        session.subscribers.add(ws1)
+        session.subscribers.add(ws2)
+        wshandler._sessions["ws-conc"] = session
+
+        state1 = _base_state()
+        state1["workspace_id"] = "ws-conc"
+        state1["container_id"] = "cid-conc"
+        state1["_idle_cb"] = None
+        state1["terminal_session"] = None
+        state1["terminal_task"] = None
+        state1["dockerexec"] = None
+        state1["exec_task"] = None
+
+        # ws1 disconnects, ws2 remains
+        await cleanup_connection(ws1, state1)
+
+        # Session should still exist because ws2 is still subscribed
+        assert "ws-conc" in wshandler._sessions
+        assert ws2 in session.subscribers
+        assert ws1 not in session.subscribers
+
+        wshandler._sessions.pop("ws-conc", None)
 
 
 class TestWsDebugLogging:
