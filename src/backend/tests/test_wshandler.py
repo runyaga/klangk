@@ -502,6 +502,34 @@ class TestHandleTerminalStart:
         mock_session.stop.assert_awaited_once()
         container.registry.states.pop("ws", None)
 
+    async def test_session_replaced_during_start_aborts(self):
+        """If stop_terminal replaces the session while start() is running,
+        the startup task stops the orphaned session and does not send
+        terminal_started."""
+        ws = _mock_ws()
+        state = _base_state()
+        state["container_id"] = "cid"
+        container.registry.track_activity("cid", "ws")
+
+        mock_session = AsyncMock()
+
+        async def start_and_replace(*a, **kw):
+            # Simulate stop_terminal replacing the session mid-start
+            state["terminal_session"] = AsyncMock()
+
+        mock_session.start = AsyncMock(side_effect=start_and_replace)
+        MockTS = MagicMock(return_value=mock_session)
+        with patch("klangk_backend.wshandler.TerminalSession", MockTS):
+            await handle_terminal_start(ws, state, {"cols": 80, "rows": 24})
+            await asyncio.sleep(0)
+
+        # The orphaned session must be stopped
+        mock_session.stop.assert_awaited_once()
+        # terminal_started must NOT be sent
+        for call in ws.send_json.call_args_list:
+            assert call.args[0].get("type") != "terminal_started"
+        container.registry.states.pop("ws", None)
+
     async def test_no_container(self):
         ws = _mock_ws()
         state = _base_state()

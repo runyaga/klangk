@@ -531,6 +531,11 @@ async def handle_terminal_start(
     async def _start_terminal() -> None:
         try:
             await session.start(cols, rows, command_override=command_override)
+            # Check we're still the active session — stop_terminal may have
+            # replaced us while session.start() was awaited.
+            if state.get("terminal_session") is not session:
+                await session.stop()
+                return
             state["terminal_task"] = asyncio.create_task(
                 forward_terminal_output(ws, session, state)
             )
