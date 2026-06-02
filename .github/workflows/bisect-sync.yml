@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to test"
+        description: "Git ref (full SHA) to test"
         required: true
         type: string
 
@@ -31,7 +31,7 @@ jobs:
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
           devenv processes down --no-tui 2>/dev/null || true
 
-      - name: Run sync test only
+      - name: Run CLI E2E tests
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell -- pytest src/backend/e2e-tests/test_cli_e2e.py::TestSync::test_sync_to_container -xvs
+          devenv shell -- test-cli-e2e
