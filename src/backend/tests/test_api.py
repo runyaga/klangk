@@ -809,20 +809,25 @@ class TestBrowserBridge:
 
     async def test_valid_token_success(self, client, user):
         token = container.registry.create_bridge_token("ws-1")
+        mock_session = AsyncMock()
+        mock_session.dispatch_browser_request = AsyncMock(
+            return_value={"status": 200, "body": "ok"},
+        )
         try:
             with patch.object(
-                wshandler,
-                "dispatch_browser_request",
-                new_callable=AsyncMock,
-                return_value={"status": 200, "body": "ok"},
-            ) as mock:
+                wshandler.state,
+                "get_session",
+                return_value=mock_session,
+            ):
                 resp = await client.post(
                     "/api/browser-delegate",
                     json={"action": "celebrate", "token": token},
                 )
             assert resp.status_code == 200
             assert resp.json()["body"] == "ok"
-            mock.assert_awaited_once_with("ws-1", {"action": "celebrate"})
+            mock_session.dispatch_browser_request.assert_awaited_once_with(
+                {"action": "celebrate"},
+            )
         finally:
             container.registry.revoke_bridge_token("ws-1")
 
@@ -837,6 +842,27 @@ class TestBrowserBridge:
             assert "No browser client" in resp.json()["detail"]
         finally:
             container.registry.revoke_bridge_token("ws-nosub")
+
+    async def test_dispatch_error_returns_502(self, client, user):
+        token = container.registry.create_bridge_token("ws-err")
+        mock_session = AsyncMock()
+        mock_session.dispatch_browser_request = AsyncMock(
+            return_value={
+                "error": "Browser client did not respond within timeout"
+            },
+        )
+        try:
+            with patch.object(
+                wshandler.state, "get_session", return_value=mock_session
+            ):
+                resp = await client.post(
+                    "/api/browser-delegate",
+                    json={"action": "fetch", "token": token},
+                )
+            assert resp.status_code == 502
+            assert "timeout" in resp.json()["detail"].lower()
+        finally:
+            container.registry.revoke_bridge_token("ws-err")
 
 
 # --- Volume routes ---

@@ -159,8 +159,52 @@ class WorkspaceSession:
         """Send message to browser subscribers only, removing dead ones."""
         return _broadcast_to_set(self.browser_subscribers, message)
 
+    async def dispatch_browser_request(
+        self, request: dict, timeout: float = 30.0
+    ) -> dict:
+        """Send a browser_request to browser subscribers and wait for response.
 
-class State:
+        Called by the /api/browser-delegate HTTP endpoint.  Only sends to
+        browser_subscribers (connections that sent ui_ready), not CLI.
+        """
+        request_id = str(uuid.uuid4())
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        state.pending_browser_requests[request_id] = future
+
+        if not self.browser_subscribers:
+            state.pending_browser_requests.pop(request_id, None)
+            return {"error": "No browser client connected to this workspace"}
+
+        message = {**request, "type": "browser_request", "id": request_id}
+        _log_ws_msg("BCAST", message)
+        delivered = self.broadcast_to_browsers(message)
+        if delivered == 0:
+            state.pending_browser_requests.pop(request_id, None)
+            return {"error": "No browser client connected to this workspace"}
+
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+            return result
+        except asyncio.TimeoutError:
+            state.pending_browser_requests.pop(request_id, None)
+            return {"error": "Browser client did not respond within timeout"}
+        except asyncio.CancelledError:
+            state.pending_browser_requests.pop(request_id, None)
+            raise
+
+    async def full_reset(self) -> None:
+        """Clean up all shared state for this workspace.
+
+        Called when a container is killed externally (idle timeout,
+        manual stop) so the next workspace_connect starts fresh.
+        """
+        await state.remove_session(self.workspace_id)
+        container.registry.remove_state(self.workspace_id)
+        logger.info("Reset workspace state for %s", self.workspace_id)
+
+
+class WebSocketState:
     """Module-level singleton holding mutable WebSocket handler state."""
 
     def __init__(self) -> None:
@@ -200,8 +244,36 @@ class State:
         self.sessions.pop(session.workspace_id, None)
         await session.reset()
 
+    async def reset_workspace(self, workspace_id: str) -> None:
+        """Clean up shared state for a workspace.
 
-state = State()
+        Called when a container is killed externally (idle timeout,
+        manual stop) so the next workspace_connect starts fresh.
+        Delegates to WorkspaceSession.full_reset if a session exists.
+        """
+        session = self.get_session(workspace_id)
+        if session:
+            await session.full_reset()
+        else:
+            container.registry.remove_state(workspace_id)
+            logger.info("Reset workspace state for %s", workspace_id)
+
+    def handle_browser_response(self, msg: dict) -> None:
+        """Resolve a pending browser-delegate request."""
+        request_id = msg.get("id")
+        if not request_id:
+            return
+        future = self.pending_browser_requests.pop(request_id, None)
+        if future and not future.done():
+            future.set_result(msg)
+        elif request_id:
+            logger.debug(
+                "Browser response for unknown/completed request %s",
+                request_id,
+            )
+
+
+state = WebSocketState()
 
 
 class Connection:
@@ -689,7 +761,7 @@ async def handle_websocket(ws: WebSocket) -> None:
             elif cmd == "heartbeat":
                 await conn.handle_heartbeat()
             elif cmd == "browser_response":
-                handle_browser_response(msg)
+                state.handle_browser_response(msg)
             else:
                 send_error(safe_ws, f"Unknown command: {cmd}")
 
@@ -705,61 +777,6 @@ async def handle_websocket(ws: WebSocket) -> None:
         # Container is intentionally left running — idle timeout will clean it up.
         # This allows instant reconnection when navigating back to the workspace.
         state.connections.pop(safe_ws, None)
-
-
-def handle_browser_response(msg: dict) -> None:
-    """Resolve a pending browser-delegate request."""
-    request_id = msg.get("id")
-    if not request_id:
-        return
-    future = state.pending_browser_requests.pop(request_id, None)
-    if future and not future.done():
-        future.set_result(msg)
-    elif request_id:
-        logger.debug(
-            "Browser response for unknown/completed request %s", request_id
-        )
-
-
-async def dispatch_browser_request(
-    workspace_id: str, request: dict, timeout: float = 30.0
-) -> dict:
-    """Send a browser_request to browser (Flutter) subscribers and wait for the response.
-
-    Called by the /api/browser-delegate HTTP endpoint. Holds the connection
-    open until a browser_response arrives or the timeout expires.
-    Only sends to browser_subscribers (connections that sent ui_ready),
-    not CLI connections which can't handle browser requests.
-    """
-    request_id = str(uuid.uuid4())
-    loop = asyncio.get_running_loop()
-    future: asyncio.Future = loop.create_future()
-    state.pending_browser_requests[request_id] = future
-
-    session = state.get_session(workspace_id)
-    if not session or not session.browser_subscribers:
-        state.pending_browser_requests.pop(request_id, None)
-        return {"error": "No browser client connected to this workspace"}
-
-    message = {
-        **request,
-        "type": "browser_request",
-        "id": request_id,
-    }
-    delivered = await _broadcast_to_browsers(workspace_id, message)
-    if delivered == 0:
-        state.pending_browser_requests.pop(request_id, None)
-        return {"error": "No browser client connected to this workspace"}
-
-    try:
-        result = await asyncio.wait_for(future, timeout=timeout)
-        return result
-    except asyncio.TimeoutError:
-        state.pending_browser_requests.pop(request_id, None)
-        return {"error": "Browser client did not respond within timeout"}
-    except asyncio.CancelledError:
-        state.pending_browser_requests.pop(request_id, None)
-        raise
 
 
 def _broadcast_to_set(subscribers: set[SafeWebSocket], message: dict) -> int:
@@ -785,33 +802,9 @@ def _broadcast_to_set(subscribers: set[SafeWebSocket], message: dict) -> int:
     return delivered
 
 
-async def _broadcast(workspace_id: str, message: dict) -> int:
-    """Send a message to all subscribers for a workspace."""
-    _log_ws_msg("BCAST", message)
-    session = state.get_session(workspace_id)
-    if not session:  # pragma: no cover
-        return 0
-    return session.broadcast(message)
-
-
-async def _broadcast_to_browsers(workspace_id: str, message: dict) -> int:
-    """Send a message to browser (Flutter) subscribers only."""
-    _log_ws_msg("BCAST", message)
-    session = state.get_session(workspace_id)
-    if not session:  # pragma: no cover
-        return 0
-    return session.broadcast_to_browsers(message)
-
-
 async def reset_workspace_state(workspace_id: str) -> None:
-    """Clean up shared state for a workspace.
-
-    Called when a container is killed externally (idle timeout,
-    manual stop) so the next workspace_connect starts fresh.
-    """
-    await state.remove_session(workspace_id)
-    container.registry.remove_state(workspace_id)
-    logger.info("Reset workspace state for %s", workspace_id)
+    """Thin wrapper for backward compatibility with external callers."""
+    await state.reset_workspace(workspace_id)
 
 
 def _send_event(

@@ -729,8 +729,13 @@ async def browser_delegate(body: BrowserDelegateRequest):
     workspace_id = container.registry.resolve_bridge_token(body.token)
     if workspace_id is None:
         raise HTTPException(status_code=403, detail="Invalid bridge token")
-    result = await wshandler.dispatch_browser_request(
-        workspace_id,
+    session = wshandler.state.get_session(workspace_id)
+    if not session:
+        raise HTTPException(
+            status_code=502,
+            detail="No browser client connected to this workspace",
+        )
+    result = await session.dispatch_browser_request(
         body.model_dump(exclude={"token"}),
     )
     if result.get("error"):

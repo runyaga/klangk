@@ -25,7 +25,6 @@ from klangk_backend.wshandler import (
     send_error,
     handle_websocket,
     reset_workspace_state,
-    _broadcast,
     _log_ws_msg,
     _SEND_QUEUE_SIZE,
 )
@@ -1387,9 +1386,9 @@ class TestBrowserBridge:
             ]
         )
         with patch.object(
-            wshandler,
+            wshandler.state,
             "handle_browser_response",
-            wraps=wshandler.handle_browser_response,
+            wraps=wshandler.state.handle_browser_response,
         ) as mock:
             await handle_websocket(ws)
         mock.assert_called_once()
@@ -1399,7 +1398,7 @@ class TestBrowserBridge:
         future = loop.create_future()
         wshandler.state.pending_browser_requests["req-1"] = future
 
-        wshandler.handle_browser_response(
+        wshandler.state.handle_browser_response(
             {"id": "req-1", "status": 200, "body": "hello"}
         )
 
@@ -1409,24 +1408,17 @@ class TestBrowserBridge:
 
     async def test_handle_browser_response_missing_id(self):
         # Should not raise
-        wshandler.handle_browser_response({})
+        wshandler.state.handle_browser_response({})
 
     async def test_handle_browser_response_unknown_id(self):
         # Should not raise
-        wshandler.handle_browser_response({"id": "unknown"})
-
-    async def test_dispatch_browser_request_no_session(self):
-        result = await wshandler.dispatch_browser_request(
-            "nonexistent-ws", {"action": "fetch", "url": "http://example.com"}
-        )
-        assert "error" in result
-        assert "No browser client" in result["error"]
+        wshandler.state.handle_browser_response({"id": "unknown"})
 
     async def test_dispatch_browser_request_no_subscribers(self):
-        wshandler.state.get_or_create_session("ws-empty")
+        session = wshandler.state.get_or_create_session("ws-empty")
         try:
-            result = await wshandler.dispatch_browser_request(
-                "ws-empty", {"action": "fetch", "url": "http://example.com"}
+            result = await session.dispatch_browser_request(
+                {"action": "fetch", "url": "http://example.com"}
             )
             assert "error" in result
             assert "No browser client" in result["error"]
@@ -1440,8 +1432,7 @@ class TestBrowserBridge:
         session.subscribers.add(mock_ws)
         # No browser_subscribers — CLI never sends ui_ready
         try:
-            result = await wshandler.dispatch_browser_request(
-                "ws-cli-only",
+            result = await session.dispatch_browser_request(
                 {"action": "fetch", "url": "http://example.com"},
             )
             assert "error" in result
@@ -1470,8 +1461,7 @@ class TestBrowserBridge:
 
         task = asyncio.create_task(respond_later())
         try:
-            result = await wshandler.dispatch_browser_request(
-                "ws-bridge",
+            result = await session.dispatch_browser_request(
                 {"action": "fetch", "url": "http://example.com"},
                 timeout=5.0,
             )
@@ -1490,8 +1480,7 @@ class TestBrowserBridge:
         session.subscribers.add(mock_ws)
         session.browser_subscribers.add(mock_ws)
         try:
-            result = await wshandler.dispatch_browser_request(
-                "ws-timeout",
+            result = await session.dispatch_browser_request(
                 {"action": "fetch", "url": "http://example.com"},
                 timeout=0.1,
             )
@@ -1504,6 +1493,9 @@ class TestBrowserBridge:
 class TestResetWorkspaceState:
     async def test_noop_for_unknown_workspace(self):
         await reset_workspace_state("ws-unknown")  # should not raise
+
+    async def test_remove_session_noop_for_unknown(self):
+        await wshandler.state.remove_session("nonexistent")  # should not raise
 
     async def test_removes_session_with_no_subscribers(self):
         """remove_session acquires lock and removes empty session."""
@@ -1622,29 +1614,25 @@ class TestWsDebugLogging:
         send_error(ws, "test error")
         ws.send_json.assert_called_once()
 
-    async def test_broadcast_logged_when_debug(self, monkeypatch):
-        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
-        session = wshandler.state.get_or_create_session("ws-debug-bcast")
+    async def test_broadcast_sends_to_subscribers(self):
+        session = wshandler.state.get_or_create_session("ws-bcast")
         mock_ws = _mock_ws()
         session.subscribers.add(mock_ws)
         try:
-            delivered = await _broadcast("ws-debug-bcast", {"type": "test"})
+            delivered = session.broadcast({"type": "test"})
             assert delivered == 1
         finally:
-            wshandler.state.sessions.pop("ws-debug-bcast", None)
+            wshandler.state.sessions.pop("ws-bcast", None)
 
-    async def test_broadcast_to_browsers_logged_when_debug(self, monkeypatch):
-        monkeypatch.setattr(wshandler, "_WS_DEBUG", True)
-        session = wshandler.state.get_or_create_session("ws-debug-browser")
+    async def test_broadcast_to_browsers_sends_to_browser_subscribers(self):
+        session = wshandler.state.get_or_create_session("ws-browser-bcast")
         mock_ws = _mock_ws()
         session.browser_subscribers.add(mock_ws)
         try:
-            delivered = await wshandler._broadcast_to_browsers(
-                "ws-debug-browser", {"type": "test"}
-            )
+            delivered = session.broadcast_to_browsers({"type": "test"})
             assert delivered == 1
         finally:
-            wshandler.state.sessions.pop("ws-debug-browser", None)
+            wshandler.state.sessions.pop("ws-browser-bcast", None)
 
 
 class TestLogWsMsg:
@@ -1689,7 +1677,7 @@ class TestBroadcastDeadSubscribers:
         session.subscribers.add(live_ws)
         session.subscribers.add(dead_ws)
         try:
-            delivered = await _broadcast("ws-dead-sub", {"type": "test"})
+            delivered = session.broadcast({"type": "test"})
             assert delivered == 1
             assert dead_ws not in session.subscribers
             assert live_ws in session.subscribers
@@ -1954,8 +1942,7 @@ class TestDispatchBrowserRequestCancelled:
             # Snapshot request IDs before so we can check ours was cleaned up
             before = set(wshandler.state.pending_browser_requests.keys())
             task = asyncio.create_task(
-                wshandler.dispatch_browser_request(
-                    "ws-cancel",
+                session.dispatch_browser_request(
                     {"action": "fetch"},
                     timeout=10.0,
                 )
@@ -1983,8 +1970,7 @@ class TestDispatchBrowserRequestDeadSubscribers:
         session.subscribers.add(dead_ws)
         session.browser_subscribers.add(dead_ws)
         try:
-            result = await wshandler.dispatch_browser_request(
-                "ws-all-dead",
+            result = await session.dispatch_browser_request(
                 {"action": "fetch", "url": "http://example.com"},
             )
             assert "error" in result
@@ -2042,7 +2028,7 @@ class TestSendQueueBehavior:
         session.subscribers.add(live_ws)
         session.subscribers.add(slow_ws)
         try:
-            delivered = await _broadcast("ws-slow-bcast", {"type": "test"})
+            delivered = session.broadcast({"type": "test"})
             assert delivered == 1
             assert slow_ws not in session.subscribers
             assert live_ws in session.subscribers
