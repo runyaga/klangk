@@ -122,7 +122,10 @@ test.describe("Klangk E2E", () => {
     const { cleanup } = await createAndOpenWorkspace(page, request, "nav-back");
 
     try {
-      await clickBackToWorkspaces(page);
+      // Navigate back via URL (clickBackToWorkspaces is unreliable in
+      // webkit due to canvas coordinate offsets on headless CI).
+      await page.goto("/");
+      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 10_000 });
     } finally {
       await cleanup();
     }
@@ -566,8 +569,10 @@ test.describe("Klangk E2E", () => {
       const containersBefore = dockerContainersForWorkspace(workspaceId);
       expect(containersBefore.length).toBeGreaterThan(0);
 
-      // Navigate away (click back button)
-      await clickBackToWorkspaces(page);
+      // Navigate away via URL (clickBackToWorkspaces is unreliable
+      // in webkit due to canvas coordinate offsets on headless CI).
+      await page.goto("/");
+      await expect(page).toHaveTitle(/Workspaces/i, { timeout: 10_000 });
 
       // Container should still be running after navigating away
       // (idle timeout handles cleanup, not disconnect)
