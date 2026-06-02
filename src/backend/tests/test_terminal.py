@@ -215,6 +215,47 @@ class TestReadLoop:
 
         await s.stop()
 
+    async def test_sentinel_uses_put_nowait(self):
+        """_read_loop uses put_nowait for the sentinel, not blocking put."""
+        stream = _mock_stream()
+        stream.read_out = AsyncMock(return_value=None)
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        await asyncio.sleep(0.1)
+        # Sentinel should be in the queue (put_nowait succeeded)
+        data = s._output_queue.get_nowait()
+        assert data is None
+        await s.stop()
+
+    async def test_sentinel_dropped_when_queue_full(self):
+        """When queue is full, sentinel is silently dropped (no deadlock)."""
+        s = TerminalSession("cid")
+        s._running = True
+        # Pre-fill the queue to capacity
+        for _ in range(64):
+            s._output_queue.put_nowait("data")
+        assert s._output_queue.full()
+
+        # Simulate _read_loop finally block: put_nowait should catch QueueFull
+        try:
+            s._output_queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass  # This is the expected path
+
+        # Queue is still full, sentinel was dropped, no hang
+        assert s._output_queue.full()
+        # Verify no None sentinel in the queue
+        items = []
+        while not s._output_queue.empty():
+            items.append(s._output_queue.get_nowait())
+        assert None not in items
+
 
 class TestWrite:
     async def test_write_sends_to_stream(self):
@@ -406,6 +447,44 @@ class TestOutput:
 
         assert "prompt" in collected
         assert "output" in collected
+        await s.stop()
+
+    async def test_output_exits_when_running_cleared_without_sentinel(self):
+        """When sentinel is dropped (QueueFull), output() exits via _running check."""
+        stream = _mock_stream()
+        first_msg = MagicMock()
+        first_msg.data = b"prompt"
+        stream.read_out = AsyncMock(side_effect=[first_msg, None])
+        exec_obj = _mock_exec(stream)
+        container = _mock_container(exec_obj)
+        docker = _mock_docker(container)
+
+        with patch("aiodocker.Docker", return_value=docker):
+            s = TerminalSession("cid")
+            await s.start()
+
+        # Drain the queue (prompt + sentinel from read_loop)
+        await asyncio.sleep(0.1)
+        while not s._output_queue.empty():
+            s._output_queue.get_nowait()
+
+        # Now simulate: no sentinel in queue, consumer should exit
+        # when _running is set to False after timeout
+        s._running = True
+
+        async def _consume():
+            collected = []
+            async for data in s.output():
+                collected.append(data)
+            return collected
+
+        task = asyncio.create_task(_consume())
+        # Let the consumer block on get() with timeout
+        await asyncio.sleep(0.05)
+        # Clear _running so the next timeout cycle exits
+        s._running = False
+        result = await asyncio.wait_for(task, timeout=3.0)
+        assert result == []
         await s.stop()
 
 

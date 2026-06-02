@@ -4,6 +4,8 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 
+from .util import BoundedOutputQueue
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,7 +15,7 @@ class ExecSession:
     def __init__(self, container_id: str):
         self.container_id = container_id
         self._proc: asyncio.subprocess.Process | None = None
-        self._output_queue: asyncio.Queue[bytes | None] = asyncio.Queue(
+        self._output_queue: BoundedOutputQueue[bytes] = BoundedOutputQueue(
             maxsize=64
         )
         self._running = False
@@ -74,9 +76,7 @@ class ExecSession:
                 OSError,
             ):  # pragma: no cover
                 pass
-        # Blocks until consumer drains a slot; no deadlock since
-        # consumer and producer are different tasks.
-        await self._output_queue.put(None)
+        self._output_queue.send_sentinel()
 
     @property
     def is_alive(self) -> bool:
@@ -107,7 +107,12 @@ class ExecSession:
     async def output(self) -> AsyncGenerator[bytes, None]:
         """Yield stdout data as it arrives."""
         while self._running:
-            data = await self._output_queue.get()
+            try:
+                data = await asyncio.wait_for(
+                    self._output_queue.get(), timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                continue
             if data is None:
                 break
             yield data

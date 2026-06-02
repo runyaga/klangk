@@ -8,6 +8,8 @@ from collections.abc import AsyncGenerator
 import aiodocker
 import aiodocker.exceptions
 
+from .util import BoundedOutputQueue
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class TerminalSession:
         self.container_id = container_id
         self._stream: aiodocker.stream.Stream | None = None
         self._exec: aiodocker.execs.Exec | None = None
-        self._output_queue: asyncio.Queue[str | None] = asyncio.Queue(
+        self._output_queue: BoundedOutputQueue[str] = BoundedOutputQueue(
             maxsize=64
         )
         self._running = False
@@ -128,9 +130,7 @@ class TerminalSession:
         except Exception:
             logger.exception("Error in terminal read loop")
         finally:
-            # Blocks until consumer drains a slot; no deadlock since
-            # consumer and producer are different tasks.
-            await self._output_queue.put(None)
+            self._output_queue.send_sentinel()
 
     @property
     def is_alive(self) -> bool:
@@ -165,7 +165,12 @@ class TerminalSession:
     async def output(self) -> AsyncGenerator[str, None]:
         """Yield terminal output as it arrives."""
         while self._running:
-            data = await self._output_queue.get()
+            try:
+                data = await asyncio.wait_for(
+                    self._output_queue.get(), timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                continue
             if data is None:
                 break
             yield data
