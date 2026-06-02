@@ -217,6 +217,16 @@ void main() {
       client.close();
     });
 
+    testWidgets('mic button hidden when speech unsupported', (tester) async {
+      final client = _MockWsClient();
+      await tester.pumpWidget(_buildTerminal(client));
+      await tester.pumpAndSettle();
+      // In VM test environment, isSpeechRecognitionSupported() returns false,
+      // so the mic button should not be present.
+      expect(find.byType(FloatingActionButton), findsNothing);
+      client.close();
+    });
+
     testWidgets('right-click with selection shows copy option', (tester) async {
       final client = _MockWsClient();
       await tester.pumpWidget(_buildTerminal(client));
