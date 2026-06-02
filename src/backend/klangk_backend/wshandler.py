@@ -27,6 +27,16 @@ class SlowClientError(Exception):
     """Raised when the outbound queue is full (client can't keep up)."""
 
 
+# Exceptions that indicate a dead or broken WebSocket connection.
+_WS_ERRORS = (
+    SlowClientError,
+    WebSocketDisconnect,
+    RuntimeError,
+    ConnectionError,
+    OSError,
+)
+
+
 class SafeWebSocket:
     """Bounded-queue WebSocket writer.
 
@@ -59,7 +69,7 @@ class SafeWebSocket:
                 await self._ws.send_json(msg)
         except asyncio.CancelledError:
             raise
-        except (WebSocketDisconnect, RuntimeError, ConnectionError, OSError):
+        except _WS_ERRORS:
             # Socket gone — nothing to do, cleanup handles the rest.
             pass
 
@@ -286,7 +296,7 @@ class Connection:
         self.container_id: str | None = None
         self.terminal_session: TerminalSession | None = None
         self.terminal_task: asyncio.Task | None = None
-        self.dockerexec: ExecSession | None = None
+        self.exec_session: ExecSession | None = None
         self.exec_task: asyncio.Task | None = None
         self.workspace: dict | None = None
         self._idle_cb = None
@@ -341,12 +351,7 @@ class Connection:
         async def on_idle(wid: str) -> None:
             try:
                 _send_event(ws, "container_stopped", "idle timeout")
-            except (
-                SlowClientError,
-                WebSocketDisconnect,
-                RuntimeError,
-                ConnectionError,
-            ):
+            except _WS_ERRORS:
                 pass
 
         self._idle_cb = on_idle
@@ -429,12 +434,7 @@ class Connection:
 
         try:
             await self.cleanup()
-        except (
-            WebSocketDisconnect,
-            RuntimeError,
-            OSError,
-            ConnectionError,
-        ) as e:
+        except _WS_ERRORS as e:
             logger.warning("Cleanup error during restart: %s", e)
 
         if workspace is None:
@@ -537,12 +537,12 @@ class Connection:
             return
         session = ExecSession(self.container_id)
         await session.start(command)
-        self.dockerexec = session
+        self.exec_session = session
         self.exec_task = asyncio.create_task(self.forward_exec_output(session))
         container.registry.record_activity(self.container_id)
 
     async def handle_exec_input(self, msg: dict) -> None:
-        session = self.dockerexec
+        session = self.exec_session
         if session is None or not session.is_alive:
             return
         import base64
@@ -557,7 +557,7 @@ class Connection:
         await session.write(raw)
 
     async def handle_exec_close_stdin(self) -> None:
-        session = self.dockerexec
+        session = self.exec_session
         if session is None:
             return
         await session.close_stdin()
@@ -586,8 +586,8 @@ class Connection:
             await session.stop()
 
     async def _claim_and_stop_exec(self) -> None:
-        session = self.dockerexec
-        self.dockerexec = None
+        session = self.exec_session
+        self.exec_session = None
         if session is not None:
             await session.stop()
 
@@ -627,13 +627,7 @@ class Connection:
             )
         except asyncio.CancelledError:  # pragma: no cover
             raise
-        except (
-            SlowClientError,
-            OSError,
-            WebSocketDisconnect,
-            RuntimeError,
-            ConnectionError,
-        ) as e:
+        except _WS_ERRORS as e:
             logger.error("Exec output forwarding error: %s", e)
         finally:
             await self._claim_and_stop_exec()
@@ -660,22 +654,11 @@ class Connection:
             _send_event(self.ws, "container_stopped")
         except asyncio.CancelledError:
             raise  # Normal cleanup, don't send event
-        except (
-            SlowClientError,
-            OSError,
-            WebSocketDisconnect,
-            RuntimeError,
-            ConnectionError,
-        ) as e:
+        except _WS_ERRORS as e:
             logger.error("Terminal output forwarding error: %s", e)
             try:
                 _send_event(self.ws, "container_stopped")
-            except (
-                SlowClientError,
-                WebSocketDisconnect,
-                RuntimeError,
-                ConnectionError,
-            ):
+            except _WS_ERRORS:
                 pass
         finally:
             await self._claim_and_stop_terminal()
@@ -790,12 +773,7 @@ def _broadcast_to_set(subscribers: set[SafeWebSocket], message: dict) -> int:
         try:
             sub_ws.send_json(message)
             delivered += 1
-        except (
-            SlowClientError,
-            WebSocketDisconnect,
-            RuntimeError,
-            ConnectionError,
-        ):
+        except _WS_ERRORS:
             dead.append(sub_ws)
     for sub_ws in dead:
         subscribers.discard(sub_ws)

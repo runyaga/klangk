@@ -1118,7 +1118,7 @@ class TestExecHandlers:
         ws = _mock_ws()
         conn = _base_conn(ws=ws)
         await conn.handle_exec_start({"command": ["ls"]})
-        assert conn.dockerexec is None
+        assert conn.exec_session is None
 
     async def test_exec_start_no_command(self):
         ws = _mock_ws()
@@ -1147,7 +1147,7 @@ class TestExecHandlers:
         ):
             with patch.object(container.registry, "record_activity"):
                 await conn.handle_exec_start({"command": ["ls"]})
-        assert conn.dockerexec is mock_session
+        assert conn.exec_session is mock_session
         assert conn.exec_task is not None
         conn.exec_task.cancel()
         try:
@@ -1162,7 +1162,7 @@ class TestExecHandlers:
         session.is_alive = True
         conn = _base_conn()
         conn.container_id = "cid"
-        conn.dockerexec = session
+        conn.exec_session = session
         data = base64.b64encode(b"hello").decode()
         with patch.object(container.registry, "record_activity"):
             await conn.handle_exec_input({"data": data})
@@ -1180,7 +1180,7 @@ class TestExecHandlers:
         session.is_alive = True
         conn = _base_conn()
         conn.container_id = "cid"
-        conn.dockerexec = session
+        conn.exec_session = session
         big_data = base64.b64encode(b"x" * 70000).decode()
         await conn.handle_exec_input({"data": big_data})
         session.write.assert_not_awaited()
@@ -1188,7 +1188,7 @@ class TestExecHandlers:
     async def test_exec_close_stdin(self):
         session = AsyncMock()
         conn = _base_conn()
-        conn.dockerexec = session
+        conn.exec_session = session
         await conn.handle_exec_close_stdin()
         session.close_stdin.assert_awaited_once()
 
@@ -1200,10 +1200,10 @@ class TestExecHandlers:
         session = AsyncMock()
         task = asyncio.create_task(asyncio.sleep(10))
         conn = _base_conn()
-        conn.dockerexec = session
+        conn.exec_session = session
         conn.exec_task = task
         await conn.handle_exec_stop()
-        assert conn.dockerexec is None
+        assert conn.exec_session is None
         assert conn.exec_task is None
 
     async def test_stop_exec_no_session(self):
@@ -1224,11 +1224,11 @@ class TestExecHandlers:
         session.output = fake_output
         conn = _base_conn(ws=ws)
         conn.container_id = "cid"
-        conn.dockerexec = session
+        conn.exec_session = session
         with patch.object(container.registry, "record_activity"):
             await conn.forward_exec_output(session)
         # Session claimed and stopped by finally block
-        assert conn.dockerexec is None
+        assert conn.exec_session is None
         session.stop.assert_awaited_once()
         calls = ws.send_json.call_args_list
         output_calls = [
@@ -1260,11 +1260,11 @@ class TestExecHandlers:
         task = asyncio.create_task(asyncio.sleep(10))
         ws = _mock_ws()
         conn = _base_conn(ws=ws)
-        conn.dockerexec = session
+        conn.exec_session = session
         conn.exec_task = task
         await conn.cleanup()
         session.stop.assert_awaited_once()
-        assert conn.dockerexec is None
+        assert conn.exec_session is None
 
 
 class TestExecDispatch:
