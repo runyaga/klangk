@@ -200,3 +200,68 @@ class TestExecSession:
         await session._read_task
         assert session._read_task.done()
         assert not session.is_alive
+
+    async def test_sentinel_uses_put_nowait(self):
+        """_read_stdout uses put_nowait for the sentinel."""
+        session = ExecSession("cid")
+        proc = _mock_proc(b"")
+        with patch(
+            "asyncio.create_subprocess_exec",
+            return_value=proc,
+        ):
+            await session.start(["true"])
+        await asyncio.sleep(0.1)
+        data = await session._output_queue.get()
+        assert data is None
+
+    async def test_sentinel_dropped_when_queue_full(self):
+        """When queue is full, sentinel is silently dropped (no deadlock)."""
+        session = ExecSession("cid")
+        session._running = True
+        # Pre-fill the queue to capacity
+        for _ in range(64):
+            session._output_queue.put_nowait(b"data")
+        assert session._output_queue.full()
+
+        # Simulate _read_stdout finally block: put_nowait catches QueueFull
+        try:
+            session._output_queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
+
+        # Queue still full, sentinel dropped, no hang
+        assert session._output_queue.full()
+        items = []
+        while not session._output_queue.empty():
+            items.append(session._output_queue.get_nowait())
+        assert None not in items
+
+    async def test_output_exits_when_running_cleared_without_sentinel(self):
+        """output() exits via _running check when sentinel is dropped."""
+        session = ExecSession("cid")
+        proc = _mock_proc(b"data")
+        with patch(
+            "asyncio.create_subprocess_exec",
+            return_value=proc,
+        ):
+            await session.start(["echo", "data"])
+
+        # Drain the queue
+        await asyncio.sleep(0.1)
+        while not session._output_queue.empty():
+            session._output_queue.get_nowait()
+
+        session._running = True
+
+        async def _consume():
+            collected = []
+            async for data in session.output():
+                collected.append(data)
+            return collected
+
+        task = asyncio.create_task(_consume())
+        await asyncio.sleep(0.05)
+        session._running = False
+        result = await asyncio.wait_for(task, timeout=3.0)
+        assert result == []
+        await session.stop()
