@@ -1749,6 +1749,58 @@ class TestAdminEndpoints:
         resp = await client.get("/admin/users", headers=headers)
         assert resp.status_code == 403
 
+    async def test_admin_create_user(self, client, admin_user):
+        headers = await self._admin_headers(client)
+        resp = await client.post(
+            "/admin/users",
+            headers=headers,
+            json={"email": "newuser@example.com", "password": "testpass123"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["email"] == "newuser@example.com"
+        assert resp.json()["status"] == "created"
+        # User should be verified and able to log in
+        login_resp = await client.post(
+            "/auth/login",
+            json={"email": "newuser@example.com", "password": "testpass123"},
+        )
+        assert login_resp.status_code == 200
+
+    async def test_admin_create_user_duplicate(self, client, admin_user, user):
+        headers = await self._admin_headers(client)
+        resp = await client.post(
+            "/admin/users",
+            headers=headers,
+            json={"email": "testuser@example.com", "password": "testpass"},
+        )
+        assert resp.status_code == 400
+        assert "already registered" in resp.json()["detail"]
+
+    async def test_admin_create_user_short_password(self, client, admin_user):
+        headers = await self._admin_headers(client)
+        resp = await client.post(
+            "/admin/users",
+            headers=headers,
+            json={"email": "short@example.com", "password": "ab"},
+        )
+        assert resp.status_code == 400
+        assert "Password" in resp.json()["detail"]
+
+    async def test_admin_create_user_requires_admin(self, client, user):
+        login_resp = await client.post(
+            "/auth/login",
+            json={"email": "testuser@example.com", "password": "testpass"},
+        )
+        headers = {
+            "Authorization": f"Bearer {login_resp.json()['access_token']}"
+        }
+        resp = await client.post(
+            "/admin/users",
+            headers=headers,
+            json={"email": "new@example.com", "password": "testpass123"},
+        )
+        assert resp.status_code == 403
+
     async def test_delete_user(self, client, admin_user, user):
         headers = await self._admin_headers(client)
         with (

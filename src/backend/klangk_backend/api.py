@@ -830,6 +830,30 @@ async def list_users(admin: dict = Depends(auth.require_role("admin"))):
     return await model.list_users()
 
 
+class AdminCreateUserRequest(BaseModel):
+    email: str
+    password: str
+
+
+@router.post("/admin/users")
+async def admin_create_user(
+    req: AdminCreateUserRequest,
+    admin: dict = Depends(auth.require_role("admin")),
+):
+    """Create a verified user directly (admin only, no email verification)."""
+    existing = await model.get_user_by_email(req.email)
+    if existing is not None:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    if len(req.password) < auth.MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {auth.MIN_PASSWORD_LENGTH} characters",
+        )
+    password_hash = auth.hash_password(req.password)
+    user = await model.create_user(req.email, password_hash, verified=True)
+    return {"id": user["id"], "email": user["email"], "status": "created"}
+
+
 @router.delete("/admin/users/{user_id}")
 async def delete_user(
     user_id: str, admin: dict = Depends(auth.require_role("admin"))

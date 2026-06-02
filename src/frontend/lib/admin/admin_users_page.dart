@@ -63,7 +63,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
 
     final auth = context.read<AuthService>();
     final resp = await auth.authPost(
-      '/auth/register',
+      '/admin/users',
       body: jsonEncode(result),
     );
     if (resp.statusCode == 200) {
