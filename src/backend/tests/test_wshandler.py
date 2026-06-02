@@ -17,28 +17,13 @@ from klangk_backend.util import (
     derive_hosting_info,
 )
 from klangk_backend.wshandler import (
+    Connection,
     SafeWebSocket,
     SlowClientError,
     WorkspaceSession,
     state,
-    start_workspace_container,
-    handle_workspace_connect,
-    handle_workspace_disconnect,
-    handle_restart_container,
-    handle_terminal_start,
-    handle_terminal_input,
-    handle_terminal_resize,
-    handle_terminal_stop,
-    forward_terminal_output,
-    cleanup_connection,
     send_error,
     handle_websocket,
-    handle_exec_start,
-    handle_exec_input,
-    handle_exec_close_stdin,
-    handle_exec_stop,
-    forward_exec_output,
-    stop_exec,
     reset_workspace_state,
     _broadcast,
     _log_ws_msg,
@@ -88,14 +73,12 @@ def _mock_terminal(alive=True):
     return t
 
 
-def _base_state(user=None):
-    return {
-        "user": user or {"id": "uid", "email": "testuser@example.com"},
-        "workspace_id": None,
-        "container_id": None,
-        "terminal_session": None,
-        "terminal_task": None,
-    }
+def _base_conn(user=None, ws=None):
+    if ws is None:
+        ws = _mock_ws()
+    if user is None:
+        user = {"id": "uid", "email": "testuser@example.com"}
+    return Connection(ws, user)
 
 
 # --- SafeWebSocket ---
@@ -309,37 +292,37 @@ class TestDeriveHostingInfo:
 class TestHandleTerminalInput:
     async def test_writes_data(self):
         t = _mock_terminal()
-        state = _base_state()
-        state["terminal_session"] = t
-        state["container_id"] = "cid"
+        conn = _base_conn()
+        conn.terminal_session = t
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
-        await handle_terminal_input(state, {"data": "ls\n"})
+        await conn.handle_terminal_input({"data": "ls\n"})
 
         t.write.assert_awaited_once_with("ls\n")
         container.registry.states.pop("ws", None)
 
     async def test_no_session(self):
-        state = _base_state()
-        await handle_terminal_input(state, {"data": "ls\n"})
-        assert state["terminal_session"] is None
+        conn = _base_conn()
+        await conn.handle_terminal_input({"data": "ls\n"})
+        assert conn.terminal_session is None
 
     async def test_dead_session(self):
         t = _mock_terminal(alive=False)
-        state = _base_state()
-        state["terminal_session"] = t
-        await handle_terminal_input(state, {"data": "ls\n"})
+        conn = _base_conn()
+        conn.terminal_session = t
+        await conn.handle_terminal_input({"data": "ls\n"})
         t.write.assert_not_awaited()
 
     async def test_oversized_input_dropped(self):
         t = _mock_terminal()
-        state = _base_state()
-        state["terminal_session"] = t
-        state["container_id"] = "cid"
+        conn = _base_conn()
+        conn.terminal_session = t
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         big_data = "x" * 70000
-        await handle_terminal_input(state, {"data": big_data})
+        await conn.handle_terminal_input({"data": big_data})
         t.write.assert_not_awaited()
         container.registry.states.pop("ws", None)
 
@@ -350,26 +333,26 @@ class TestHandleTerminalInput:
 class TestHandleTerminalResize:
     async def test_resize(self):
         t = _mock_terminal()
-        state = _base_state()
-        state["terminal_session"] = t
+        conn = _base_conn()
+        conn.terminal_session = t
 
-        await handle_terminal_resize(state, {"cols": 120, "rows": 40})
+        await conn.handle_terminal_resize({"cols": 120, "rows": 40})
 
         t.resize.assert_awaited_once_with(120, 40)
 
     async def test_resize_defaults(self):
         t = _mock_terminal()
-        state = _base_state()
-        state["terminal_session"] = t
+        conn = _base_conn()
+        conn.terminal_session = t
 
-        await handle_terminal_resize(state, {})
+        await conn.handle_terminal_resize({})
 
         t.resize.assert_awaited_once_with(80, 24)
 
     async def test_no_session(self):
-        state = _base_state()
-        await handle_terminal_resize(state, {"cols": 120, "rows": 40})
-        assert state["terminal_session"] is None
+        conn = _base_conn()
+        await conn.handle_terminal_resize({"cols": 120, "rows": 40})
+        assert conn.terminal_session is None
 
 
 # --- handle_terminal_stop ---
@@ -378,21 +361,21 @@ class TestHandleTerminalResize:
 class TestHandleTerminalStop:
     async def test_stops_session(self):
         t = _mock_terminal()
-        state = _base_state()
-        state["terminal_session"] = t
-        state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
+        conn = _base_conn()
+        conn.terminal_session = t
+        conn.terminal_task = asyncio.create_task(asyncio.sleep(10))
 
-        await handle_terminal_stop(state)
+        await conn.handle_terminal_stop()
 
         t.stop.assert_awaited_once()
-        assert state.get("terminal_session") is None
-        assert state["terminal_task"] is None
+        assert conn.terminal_session is None
+        assert conn.terminal_task is None
 
     async def test_no_session(self):
-        state = _base_state()
-        await handle_terminal_stop(state)
-        assert state.get("terminal_session") is None
-        assert state["terminal_task"] is None
+        conn = _base_conn()
+        await conn.handle_terminal_stop()
+        assert conn.terminal_session is None
+        assert conn.terminal_task is None
 
 
 # --- handle_terminal_start ---
@@ -401,8 +384,8 @@ class TestHandleTerminalStop:
 class TestHandleTerminalStart:
     async def test_starts_session(self):
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         with patch.object(wshandler, "TerminalSession") as MockTS:
@@ -415,7 +398,7 @@ class TestHandleTerminalStart:
 
             mock_session.output = fake_output
 
-            await handle_terminal_start(ws, state, {"cols": 100, "rows": 30})
+            await conn.handle_terminal_start({"cols": 100, "rows": 30})
             # Let the background task run
             await asyncio.sleep(0)
 
@@ -423,31 +406,31 @@ class TestHandleTerminalStart:
         mock_session.start.assert_awaited_once_with(
             100, 30, command_override=None
         )
-        assert state["terminal_session"] is mock_session
-        assert state["terminal_task"] is not None
+        assert conn.terminal_session is mock_session
+        assert conn.terminal_task is not None
         # Should have sent terminal_started ack
         ws.send_json.assert_called_with({"type": "terminal_started"})
 
         # Clean up
-        state["terminal_task"].cancel()
+        conn.terminal_task.cancel()
         try:
-            await state["terminal_task"]
+            await conn.terminal_task
         except asyncio.CancelledError:
             pass
         container.registry.states.pop("ws", None)
 
     async def test_passes_command_override(self):
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         mock_session = AsyncMock()
         mock_session.is_alive = True
         MockTS = MagicMock(return_value=mock_session)
         with patch("klangk_backend.wshandler.TerminalSession", MockTS):
-            await handle_terminal_start(
-                ws, state, {"cols": 80, "rows": 24, "commandOverride": "bash"}
+            await conn.handle_terminal_start(
+                {"cols": 80, "rows": 24, "commandOverride": "bash"}
             )
             # Let the background task run
             await asyncio.sleep(0)
@@ -456,17 +439,17 @@ class TestHandleTerminalStart:
             80, 24, command_override="bash"
         )
 
-        state["terminal_task"].cancel()
+        conn.terminal_task.cancel()
         try:
-            await state["terminal_task"]
+            await conn.terminal_task
         except asyncio.CancelledError:
             pass
         container.registry.states.pop("ws", None)
 
     async def test_start_failure_sends_error(self):
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         mock_session = AsyncMock()
@@ -475,7 +458,7 @@ class TestHandleTerminalStart:
         )
         MockTS = MagicMock(return_value=mock_session)
         with patch("klangk_backend.wshandler.TerminalSession", MockTS):
-            await handle_terminal_start(ws, state, {"cols": 80, "rows": 24})
+            await conn.handle_terminal_start({"cols": 80, "rows": 24})
             await asyncio.sleep(0)
 
         # Should have sent an error, not terminal_started
@@ -487,16 +470,16 @@ class TestHandleTerminalStart:
 
     async def test_cancellation_during_start_cleans_up(self):
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         mock_session = AsyncMock()
         mock_session.start = AsyncMock(side_effect=asyncio.CancelledError)
         MockTS = MagicMock(return_value=mock_session)
         with patch("klangk_backend.wshandler.TerminalSession", MockTS):
-            await handle_terminal_start(ws, state, {"cols": 80, "rows": 24})
-            task = state["terminal_task"]
+            await conn.handle_terminal_start({"cols": 80, "rows": 24})
+            task = conn.terminal_task
             with pytest.raises(asyncio.CancelledError):
                 await task
 
@@ -509,20 +492,20 @@ class TestHandleTerminalStart:
         the startup task stops the orphaned session and does not send
         terminal_started."""
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         container.registry.track_activity("cid", "ws")
 
         mock_session = AsyncMock()
 
         async def start_and_replace(*a, **kw):
             # Simulate stop_terminal replacing the session mid-start
-            state["terminal_session"] = AsyncMock()
+            conn.terminal_session = AsyncMock()
 
         mock_session.start = AsyncMock(side_effect=start_and_replace)
         MockTS = MagicMock(return_value=mock_session)
         with patch("klangk_backend.wshandler.TerminalSession", MockTS):
-            await handle_terminal_start(ws, state, {"cols": 80, "rows": 24})
+            await conn.handle_terminal_start({"cols": 80, "rows": 24})
             await asyncio.sleep(0)
 
         # The orphaned session must be stopped
@@ -534,9 +517,9 @@ class TestHandleTerminalStart:
 
     async def test_no_container(self):
         ws = _mock_ws()
-        state = _base_state()
-        await handle_terminal_start(ws, state, {})
-        assert state["terminal_session"] is None
+        conn = _base_conn(ws=ws)
+        await conn.handle_terminal_start({})
+        assert conn.terminal_session is None
 
 
 # --- forward_terminal_output ---
@@ -546,9 +529,9 @@ class TestForwardTerminalOutput:
     async def test_forwards_output(self):
         ws = _mock_ws()
         t = _mock_terminal()
-        state = _base_state()
-        state["container_id"] = "ctr-fwd"
-        state["terminal_session"] = t
+        conn = _base_conn(ws=ws)
+        conn.container_id = "ctr-fwd"
+        conn.terminal_session = t
         container.registry.track_activity("ctr-fwd", "ws-fwd")
 
         async def fake_output():
@@ -557,10 +540,10 @@ class TestForwardTerminalOutput:
 
         t.output = fake_output
 
-        await forward_terminal_output(ws, t, state)
+        await conn.forward_terminal_output(t)
 
         # Session claimed and stopped by finally block
-        assert state.get("terminal_session") is None
+        assert conn.terminal_session is None
         t.stop.assert_awaited_once()
         calls = ws.send_json.call_args_list
         assert calls[0][0][0] == {"type": "terminal_output", "data": "line1"}
@@ -575,7 +558,7 @@ class TestForwardTerminalOutput:
     async def test_cancelled_error_propagates(self):
         ws = _mock_ws()
         t = _mock_terminal()
-        state = _base_state()
+        conn = _base_conn(ws=ws)
 
         async def cancel_output():
             raise asyncio.CancelledError()
@@ -584,27 +567,27 @@ class TestForwardTerminalOutput:
         t.output = cancel_output
 
         with pytest.raises(asyncio.CancelledError):
-            await forward_terminal_output(ws, t, state)
+            await conn.forward_terminal_output(t)
 
     async def test_ws_error_logged(self):
         ws = _mock_ws()
         ws.send_json = MagicMock(side_effect=RuntimeError("ws closed"))
         t = _mock_terminal()
-        state = _base_state()
+        conn = _base_conn(ws=ws)
 
         async def fake_output():
             yield "data"
 
         t.output = fake_output
 
-        await forward_terminal_output(ws, t, state)
+        await conn.forward_terminal_output(t)
         # The error send_json was called (it raised, triggering the handler)
         assert ws.send_json.call_count >= 1
 
     async def test_ws_error_then_stop_event_also_fails(self):
         ws = _mock_ws()
         t = _mock_terminal()
-        state = _base_state()
+        conn = _base_conn(ws=ws)
 
         ws.send_json = MagicMock(side_effect=ConnectionError("ws dead"))
 
@@ -613,7 +596,7 @@ class TestForwardTerminalOutput:
 
         t.output = fake_output
 
-        await forward_terminal_output(ws, t, state)
+        await conn.forward_terminal_output(t)
         # Both sends failed — verify both were attempted
         assert ws.send_json.call_count == 2
 
@@ -638,26 +621,26 @@ class TestCleanupConnection:
     async def test_cleanup_last_subscriber_removes_session(self):
         ws = _mock_ws()
         t = _mock_terminal()
-        state = _base_state()
-        state["container_id"] = "ctr-full"
-        state["workspace_id"] = "ws-cleanup-1"
-        state["_idle_cb"] = lambda ws: None
-        state["terminal_session"] = t
-        state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
+        conn = _base_conn(ws=ws)
+        conn.container_id = "ctr-full"
+        conn.workspace_id = "ws-cleanup-1"
+        conn._idle_cb = lambda ws: None
+        conn.terminal_session = t
+        conn.terminal_task = asyncio.create_task(asyncio.sleep(10))
 
         container.registry.track_activity("ctr-full", "ws-cleanup-1")
         session = WorkspaceSession("ws-cleanup-1")
         session.subscribers.add(ws)
         wshandler.state.sessions["ws-cleanup-1"] = session
         container.registry.states["ws-cleanup-1"].idle_callbacks.append(
-            state["_idle_cb"]
+            conn._idle_cb
         )
 
-        await cleanup_connection(ws, state)
+        await conn.cleanup()
 
         t.stop.assert_awaited_once()
-        assert state["_idle_cb"] is None
-        assert state.get("terminal_session") is None
+        assert conn._idle_cb is None
+        assert conn.terminal_session is None
         # Session removed when last subscriber disconnects
         assert "ws-cleanup-1" not in wshandler.state.sessions
 
@@ -668,12 +651,12 @@ class TestCleanupConnection:
         ws = _mock_ws()
         other_ws = _mock_ws()
         t = _mock_terminal()
-        state = _base_state()
-        state["container_id"] = "ctr-shared"
-        state["workspace_id"] = "ws-cleanup-2"
-        state["_idle_cb"] = lambda ws: None
-        state["terminal_session"] = t
-        state["terminal_task"] = asyncio.create_task(asyncio.sleep(10))
+        conn = _base_conn(ws=ws)
+        conn.container_id = "ctr-shared"
+        conn.workspace_id = "ws-cleanup-2"
+        conn._idle_cb = lambda ws: None
+        conn.terminal_session = t
+        conn.terminal_task = asyncio.create_task(asyncio.sleep(10))
 
         container.registry.track_activity("ctr-shared", "ws-cleanup-2")
         session = WorkspaceSession("ws-cleanup-2")
@@ -681,10 +664,10 @@ class TestCleanupConnection:
         session.subscribers.add(other_ws)
         wshandler.state.sessions["ws-cleanup-2"] = session
         container.registry.states["ws-cleanup-2"].idle_callbacks.append(
-            state["_idle_cb"]
+            conn._idle_cb
         )
 
-        await cleanup_connection(ws, state)
+        await conn.cleanup()
 
         # Terminal for THIS connection should be stopped
         t.stop.assert_awaited_once()
@@ -699,9 +682,9 @@ class TestCleanupConnection:
 
     async def test_cleanup_minimal(self):
         ws = _mock_ws()
-        state = _base_state()
-        await cleanup_connection(ws, state)
-        assert state.get("terminal_session") is None
+        conn = _base_conn(ws=ws)
+        await conn.cleanup()
+        assert conn.terminal_session is None
 
 
 # --- handle_prompt ---
@@ -710,27 +693,27 @@ class TestCleanupConnection:
 class TestHandleWorkspaceConnect:
     async def test_missing_workspace_id(self):
         ws = _mock_ws()
-        state = _base_state()
-        await handle_workspace_connect(ws, state, {})
+        conn = _base_conn(ws=ws)
+        await conn.handle_workspace_connect({})
         assert "Missing" in ws.send_json.call_args[0][0]["message"]
 
     async def test_workspace_not_found(self, user):
         ws = _mock_ws()
-        state = _base_state(user=user)
-        await handle_workspace_connect(ws, state, {"workspaceId": "fake"})
+        conn = _base_conn(user=user, ws=ws)
+        await conn.handle_workspace_connect({"workspaceId": "fake"})
         assert "not found" in ws.send_json.call_args[0][0]["message"]
 
     async def test_connect_success(self, user):
         ws = _mock_ws()
         workspace = await ws_mod.create_workspace(user["id"], "test-ws")
-        state = _base_state(user=user)
+        conn = _base_conn(user=user, ws=ws)
 
-        async def fake_start(ws, state, wid, workspace):
-            state["container_id"] = "cid"
+        async def fake_start(wid, workspace):
+            conn.container_id = "cid"
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -740,8 +723,8 @@ class TestHandleWorkspaceConnect:
                 return_value=[9000, 9001],
             ),
         ):
-            await handle_workspace_connect(
-                ws, state, {"workspaceId": workspace["id"]}
+            await conn.handle_workspace_connect(
+                {"workspaceId": workspace["id"]}
             )
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
@@ -750,21 +733,21 @@ class TestHandleWorkspaceConnect:
         assert ready[0]["workspaceId"] == workspace["id"]
         assert ready[0]["defaultCommand"] is None
         # Integer timeout (default 30m) should show as "30m" not "30.0m"
-        assert "30m" in state["pending_status_msg"]
+        assert "30m" in conn.pending_status_msg
 
     async def test_connect_sends_default_command(self, user):
         ws = _mock_ws()
         workspace = await ws_mod.create_workspace(
             user["id"], "cmd-ws", default_command="pi"
         )
-        state = _base_state(user=user)
+        conn = _base_conn(user=user, ws=ws)
 
-        async def fake_start(ws, state, wid, workspace):
-            state["container_id"] = "cid"
+        async def fake_start(wid, workspace):
+            conn.container_id = "cid"
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -774,8 +757,8 @@ class TestHandleWorkspaceConnect:
                 return_value=[9000],
             ),
         ):
-            await handle_workspace_connect(
-                ws, state, {"workspaceId": workspace["id"]}
+            await conn.handle_workspace_connect(
+                {"workspaceId": workspace["id"]}
             )
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
@@ -786,19 +769,19 @@ class TestHandleWorkspaceConnect:
 class TestHandleWorkspaceDisconnect:
     async def test_disconnect(self):
         ws = _mock_ws()
-        state = _base_state()
-        state["container_id"] = "cid"
-        state["workspace_id"] = "ws-1"
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
+        conn.workspace_id = "ws-1"
 
         with patch.object(
             container.registry,
             "stop_and_remove_container",
             new_callable=AsyncMock,
         ):
-            await handle_workspace_disconnect(ws, state)
+            await conn.handle_workspace_disconnect()
 
-        assert state["workspace_id"] is None
-        assert state["container_id"] is None
+        assert conn.workspace_id is None
+        assert conn.container_id is None
 
 
 # --- handle_restart_container ---
@@ -807,7 +790,7 @@ class TestHandleWorkspaceDisconnect:
 class TestStartWorkspaceContainer:
     async def test_new_session(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
-        state = _base_state(user=user)
+        conn = _base_conn(user=user, ws=ws)
         workspace = await ws_mod.create_workspace(user["id"], "start-ws")
 
         async def fake_start(*a, **kw):
@@ -822,21 +805,19 @@ class TestStartWorkspaceContainer:
             ),
             patch("glob.glob", return_value=[]),
         ):
-            await start_workspace_container(
-                ws, state, workspace["id"], workspace
-            )
+            await conn.start_workspace_container(workspace["id"], workspace)
 
-        assert state["container_id"] == "cid-1"
-        assert state["workspace"] == workspace
+        assert conn.container_id == "cid-1"
+        assert conn.workspace == workspace
         assert workspace["id"] in wshandler.state.sessions
-        assert state["_idle_cb"] is not None
+        assert conn._idle_cb is not None
 
         wshandler.state.sessions.pop(workspace["id"], None)
         container.registry.states.pop(workspace["id"], None)
 
     async def test_idle_callback_ws_error(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
-        state = _base_state(user=user)
+        conn = _base_conn(user=user, ws=ws)
         workspace = await ws_mod.create_workspace(user["id"], "idle-ws")
 
         async def fake_start(*a, **kw):
@@ -851,13 +832,11 @@ class TestStartWorkspaceContainer:
             ),
             patch("glob.glob", return_value=[]),
         ):
-            await start_workspace_container(
-                ws, state, workspace["id"], workspace
-            )
+            await conn.start_workspace_container(workspace["id"], workspace)
 
         # Test idle callback when WS send fails
         ws.send_json = MagicMock(side_effect=RuntimeError("ws closed"))
-        idle_cb = state["_idle_cb"]
+        idle_cb = conn._idle_cb
         await idle_cb(workspace["id"])  # should not raise
         assert ws.send_json.call_count == 1
 
@@ -866,8 +845,8 @@ class TestStartWorkspaceContainer:
 
     async def test_clears_pending_status_msg(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
-        state = _base_state(user=user)
-        state["pending_status_msg"] = "stale message from prior connect"
+        conn = _base_conn(user=user, ws=ws)
+        conn.pending_status_msg = "stale message from prior connect"
         workspace = await ws_mod.create_workspace(user["id"], "pending-ws")
 
         async def fake_start(*a, **kw):
@@ -882,11 +861,9 @@ class TestStartWorkspaceContainer:
             ),
             patch("glob.glob", return_value=[]),
         ):
-            await start_workspace_container(
-                ws, state, workspace["id"], workspace
-            )
+            await conn.start_workspace_container(workspace["id"], workspace)
 
-        assert "pending_status_msg" not in state
+        assert conn.pending_status_msg is None
 
         wshandler.state.sessions.pop(workspace["id"], None)
         container.registry.states.pop(workspace["id"], None)
@@ -962,14 +939,15 @@ class TestHandleWebsocketDispatch:
             ]
         )
 
-        async def fake_start(ws_arg, state, wid, ws_obj):
-            state["workspace_id"] = wid
-            state["container_id"] = "cid-stop"
+        async def fake_start(self_arg, wid, ws_obj):
+            self_arg.workspace_id = wid
+            self_arg.container_id = "cid-stop"
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
+                autospec=True,
                 side_effect=fake_start,
             ),
             patch.object(
@@ -1051,9 +1029,9 @@ class TestHandleWebsocket:
         ws = _mock_raw_ws(query_params={"token": token})
         workspace = await ws_mod.create_workspace(user["id"], "ui-ready-ws")
 
-        async def fake_start(ws_arg, state, wid, ws_obj):
-            state["container_id"] = "cid"
-            state["workspace_id"] = wid
+        async def fake_start(self_arg, wid, ws_obj):
+            self_arg.container_id = "cid"
+            self_arg.workspace_id = wid
             wshandler.state.get_or_create_session(wid)
 
         ws.receive_text = AsyncMock(
@@ -1071,8 +1049,9 @@ class TestHandleWebsocket:
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
+                autospec=True,
                 side_effect=fake_start,
             ),
             patch.object(
@@ -1138,28 +1117,22 @@ class TestHandleWebsocket:
 class TestExecHandlers:
     async def test_exec_start_no_container(self):
         ws = _mock_ws()
-        state = {"container_id": None, "dockerexec": None, "exec_task": None}
-        await handle_exec_start(ws, state, {"command": ["ls"]})
-        assert state["dockerexec"] is None
+        conn = _base_conn(ws=ws)
+        await conn.handle_exec_start({"command": ["ls"]})
+        assert conn.dockerexec is None
 
     async def test_exec_start_no_command(self):
         ws = _mock_ws()
-        state = {
-            "container_id": "cid",
-            "dockerexec": None,
-            "exec_task": None,
-        }
-        await handle_exec_start(ws, state, {"command": []})
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
+        await conn.handle_exec_start({"command": []})
         ws.send_json.assert_called()
         assert "command" in ws.send_json.call_args[0][0].get("message", "")
 
     async def test_exec_start_success(self):
         ws = _mock_ws()
-        state = {
-            "container_id": "cid",
-            "dockerexec": None,
-            "exec_task": None,
-        }
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         mock_session = AsyncMock()
         mock_session.start = AsyncMock()
 
@@ -1174,12 +1147,12 @@ class TestExecHandlers:
             return_value=mock_session,
         ):
             with patch.object(container.registry, "record_activity"):
-                await handle_exec_start(ws, state, {"command": ["ls"]})
-        assert state["dockerexec"] is mock_session
-        assert state["exec_task"] is not None
-        state["exec_task"].cancel()
+                await conn.handle_exec_start({"command": ["ls"]})
+        assert conn.dockerexec is mock_session
+        assert conn.exec_task is not None
+        conn.exec_task.cancel()
         try:
-            await state["exec_task"]
+            await conn.exec_task
         except asyncio.CancelledError:
             pass
 
@@ -1188,50 +1161,55 @@ class TestExecHandlers:
 
         session = AsyncMock()
         session.is_alive = True
-        state = {
-            "container_id": "cid",
-            "dockerexec": session,
-        }
+        conn = _base_conn()
+        conn.container_id = "cid"
+        conn.dockerexec = session
         data = base64.b64encode(b"hello").decode()
         with patch.object(container.registry, "record_activity"):
-            await handle_exec_input(state, {"data": data})
+            await conn.handle_exec_input({"data": data})
         session.write.assert_awaited_with(b"hello")
 
     async def test_exec_input_no_session(self):
-        state = {"container_id": "cid", "dockerexec": None}
-        await handle_exec_input(state, {"data": ""})  # should not raise
+        conn = _base_conn()
+        conn.container_id = "cid"
+        await conn.handle_exec_input({"data": ""})  # should not raise
 
     async def test_exec_input_oversized_dropped(self):
         import base64
 
         session = AsyncMock()
         session.is_alive = True
-        state = {"container_id": "cid", "dockerexec": session}
+        conn = _base_conn()
+        conn.container_id = "cid"
+        conn.dockerexec = session
         big_data = base64.b64encode(b"x" * 70000).decode()
-        await handle_exec_input(state, {"data": big_data})
+        await conn.handle_exec_input({"data": big_data})
         session.write.assert_not_awaited()
 
     async def test_exec_close_stdin(self):
         session = AsyncMock()
-        state = {"dockerexec": session}
-        await handle_exec_close_stdin(state)
+        conn = _base_conn()
+        conn.dockerexec = session
+        await conn.handle_exec_close_stdin()
         session.close_stdin.assert_awaited_once()
 
     async def test_exec_close_stdin_no_session(self):
-        state = {"dockerexec": None}
-        await handle_exec_close_stdin(state)  # should not raise
+        conn = _base_conn()
+        await conn.handle_exec_close_stdin()  # should not raise
 
     async def test_exec_stop(self):
         session = AsyncMock()
         task = asyncio.create_task(asyncio.sleep(10))
-        state = {"dockerexec": session, "exec_task": task}
-        await handle_exec_stop(state)
-        assert state.get("dockerexec") is None
-        assert state["exec_task"] is None
+        conn = _base_conn()
+        conn.dockerexec = session
+        conn.exec_task = task
+        await conn.handle_exec_stop()
+        assert conn.dockerexec is None
+        assert conn.exec_task is None
 
     async def test_stop_exec_no_session(self):
-        state = {"dockerexec": None, "exec_task": None}
-        await stop_exec(state)  # should not raise
+        conn = _base_conn()
+        await conn.stop_exec()  # should not raise
 
     async def test_forward_exec_output(self):
         import base64
@@ -1245,11 +1223,13 @@ class TestExecHandlers:
             yield b"chunk2"
 
         session.output = fake_output
-        state = {"container_id": "cid", "dockerexec": session}
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
+        conn.dockerexec = session
         with patch.object(container.registry, "record_activity"):
-            await forward_exec_output(ws, session, state)
+            await conn.forward_exec_output(session)
         # Session claimed and stopped by finally block
-        assert state.get("dockerexec") is None
+        assert conn.dockerexec is None
         session.stop.assert_awaited_once()
         calls = ws.send_json.call_args_list
         output_calls = [
@@ -1270,28 +1250,22 @@ class TestExecHandlers:
 
         session.output = fake_output
         ws.send_json = MagicMock(side_effect=RuntimeError("ws dead"))
-        state = {"container_id": "cid"}
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         with patch.object(container.registry, "record_activity"):
-            await forward_exec_output(ws, session, state)
+            await conn.forward_exec_output(session)
         # Should not raise
 
     async def test_cleanup_connection_stops_exec(self):
         session = AsyncMock()
         task = asyncio.create_task(asyncio.sleep(10))
-        state = {
-            "user": {"email": "test"},
-            "workspace_id": None,
-            "container_id": None,
-            "terminal_session": None,
-            "terminal_task": None,
-            "dockerexec": session,
-            "exec_task": task,
-            "_idle_cb": None,
-        }
         ws = _mock_ws()
-        await cleanup_connection(ws, state)
+        conn = _base_conn(ws=ws)
+        conn.dockerexec = session
+        conn.exec_task = task
+        await conn.cleanup()
         session.stop.assert_awaited_once()
-        assert state.get("dockerexec") is None
+        assert conn.dockerexec is None
 
 
 class TestExecDispatch:
@@ -1307,7 +1281,7 @@ class TestExecDispatch:
             ]
         )
         with patch.object(
-            wshandler, "handle_exec_start", new_callable=AsyncMock
+            Connection, "handle_exec_start", new_callable=AsyncMock
         ) as mock:
             await handle_websocket(ws)
         mock.assert_awaited_once()
@@ -1324,7 +1298,7 @@ class TestExecDispatch:
             ]
         )
         with patch.object(
-            wshandler, "handle_exec_input", new_callable=AsyncMock
+            Connection, "handle_exec_input", new_callable=AsyncMock
         ) as mock:
             await handle_websocket(ws)
         mock.assert_awaited_once()
@@ -1341,7 +1315,7 @@ class TestExecDispatch:
             ]
         )
         with patch.object(
-            wshandler, "handle_exec_stop", new_callable=AsyncMock
+            Connection, "handle_exec_stop", new_callable=AsyncMock
         ) as mock:
             await handle_websocket(ws)
         mock.assert_awaited_once()
@@ -1358,7 +1332,7 @@ class TestExecDispatch:
             ]
         )
         with patch.object(
-            wshandler, "handle_exec_close_stdin", new_callable=AsyncMock
+            Connection, "handle_exec_close_stdin", new_callable=AsyncMock
         ) as mock:
             await handle_websocket(ws)
         mock.assert_awaited_once()
@@ -1375,7 +1349,7 @@ class TestExecDispatch:
             ]
         )
         with patch.object(
-            wshandler, "handle_heartbeat", new_callable=AsyncMock
+            Connection, "handle_heartbeat", new_callable=AsyncMock
         ) as mock:
             await handle_websocket(ws)
         mock.assert_awaited_once()
@@ -1383,20 +1357,21 @@ class TestExecDispatch:
 
 class TestHandleHeartbeat:
     async def test_records_activity(self):
-        state = {"container_id": "cid-hb"}
+        conn = _base_conn()
+        conn.container_id = "cid-hb"
         container.registry.track_activity("cid-hb", "ws-hb")
         container.registry.states["ws-hb"].last_activity = 0.0
 
-        await wshandler.handle_heartbeat(state)
+        await conn.handle_heartbeat()
 
         assert container.registry.states["ws-hb"].last_activity > 0.0
         container.registry.states.pop("ws-hb", None)
         container.registry._cid_to_wsid.pop("cid-hb", None)
 
     async def test_no_container_id(self):
-        state = {}
+        conn = _base_conn()
         # Should not raise
-        await wshandler.handle_heartbeat(state)
+        await conn.handle_heartbeat()
 
 
 class TestBrowserBridge:
@@ -1577,21 +1552,16 @@ class TestCleanupSubscriberRace:
         session.subscribers.add(ws1)
         wshandler.state.sessions["ws-race"] = session
 
-        state = _base_state()
-        state["workspace_id"] = "ws-race"
-        state["container_id"] = "cid-race"
-        state["_idle_cb"] = None
-        state["terminal_session"] = None
-        state["terminal_task"] = None
-        state["dockerexec"] = None
-        state["exec_task"] = None
+        conn = _base_conn(ws=ws1)
+        conn.workspace_id = "ws-race"
+        conn.container_id = "cid-race"
 
-        # Simulate: ws1 disconnects (cleanup_connection) while ws2 connects
+        # Simulate: ws1 disconnects (cleanup) while ws2 connects
         # (start_workspace_container adds ws2 under the lock).
         # We do this by adding ws2 after ws1's cleanup, verifying the session
         # and ws2 survive.
 
-        await cleanup_connection(ws1, state)
+        await conn.cleanup()
 
         # Session should be removed since ws1 was the last subscriber
         assert "ws-race" not in wshandler.state.sessions
@@ -1615,17 +1585,12 @@ class TestCleanupSubscriberRace:
         session.subscribers.add(ws2)
         wshandler.state.sessions["ws-conc"] = session
 
-        state1 = _base_state()
-        state1["workspace_id"] = "ws-conc"
-        state1["container_id"] = "cid-conc"
-        state1["_idle_cb"] = None
-        state1["terminal_session"] = None
-        state1["terminal_task"] = None
-        state1["dockerexec"] = None
-        state1["exec_task"] = None
+        conn1 = _base_conn(ws=ws1)
+        conn1.workspace_id = "ws-conc"
+        conn1.container_id = "cid-conc"
 
         # ws1 disconnects, ws2 remains
-        await cleanup_connection(ws1, state1)
+        await conn1.cleanup()
 
         # Session should still exist because ws2 is still subscribed
         assert "ws-conc" in wshandler.state.sessions
@@ -1735,26 +1700,26 @@ class TestBroadcastDeadSubscribers:
 class TestHandleRestartContainer:
     async def test_restart_not_connected(self):
         ws = _mock_ws()
-        state = _base_state()
-        await handle_restart_container(ws, state)
+        conn = _base_conn(ws=ws)
+        await conn.handle_restart_container()
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         assert any("Not connected" in str(c) for c in calls)
 
     async def test_restart_success(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
         workspace = await ws_mod.create_workspace(user["id"], "restart-ws")
-        state = _base_state(user=user)
-        state["workspace_id"] = workspace["id"]
-        state["container_id"] = "cid-old"
-        state["workspace"] = workspace
+        conn = _base_conn(user=user, ws=ws)
+        conn.workspace_id = workspace["id"]
+        conn.container_id = "cid-old"
+        conn.workspace = workspace
 
-        async def fake_start(ws_arg, st, wid, ws_obj):
-            st["container_id"] = "cid-new"
-            st["workspace_id"] = wid
+        async def fake_start(wid, ws_obj):
+            conn.container_id = "cid-new"
+            conn.workspace_id = wid
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -1770,7 +1735,7 @@ class TestHandleRestartContainer:
                 return_value=[9000],
             ),
         ):
-            await handle_restart_container(ws, state)
+            await conn.handle_restart_container()
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         restart_events = [
@@ -1792,10 +1757,10 @@ class TestHandleRestartContainer:
 
     async def test_restart_workspace_gone(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
-        state = _base_state(user=user)
-        state["workspace_id"] = "ws-gone"
-        state["container_id"] = "cid-gone"
-        state["workspace"] = None
+        conn = _base_conn(user=user, ws=ws)
+        conn.workspace_id = "ws-gone"
+        conn.container_id = "cid-gone"
+        conn.workspace = None
 
         with (
             patch.object(
@@ -1809,7 +1774,7 @@ class TestHandleRestartContainer:
                 new_callable=AsyncMock,
             ),
         ):
-            await handle_restart_container(ws, state)
+            await conn.handle_restart_container()
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         assert any("not found" in str(c) for c in calls)
@@ -1818,18 +1783,18 @@ class TestHandleRestartContainer:
         monkeypatch.setattr(container, "IDLE_TIMEOUT_SECONDS", 90)
         ws = _mock_ws(headers={"host": "localhost:8997"})
         workspace = await ws_mod.create_workspace(user["id"], "restart-frac")
-        state = _base_state(user=user)
-        state["workspace_id"] = workspace["id"]
-        state["container_id"] = "cid-frac"
-        state["workspace"] = workspace
+        conn = _base_conn(user=user, ws=ws)
+        conn.workspace_id = workspace["id"]
+        conn.container_id = "cid-frac"
+        conn.workspace = workspace
 
-        async def fake_start(ws_arg, st, wid, ws_obj):
-            st["container_id"] = "cid-frac-new"
-            st["workspace_id"] = wid
+        async def fake_start(wid, ws_obj):
+            conn.container_id = "cid-frac-new"
+            conn.workspace_id = wid
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -1845,7 +1810,7 @@ class TestHandleRestartContainer:
                 return_value=[],
             ),
         ):
-            await handle_restart_container(ws, state)
+            await conn.handle_restart_container()
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         ready = [
@@ -1861,26 +1826,26 @@ class TestHandleRestartContainer:
     async def test_restart_cleanup_error(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
         workspace = await ws_mod.create_workspace(user["id"], "restart-err")
-        state = _base_state(user=user)
-        state["workspace_id"] = workspace["id"]
-        state["container_id"] = "cid-err"
-        state["workspace"] = workspace
+        conn = _base_conn(user=user, ws=ws)
+        conn.workspace_id = workspace["id"]
+        conn.container_id = "cid-err"
+        conn.workspace = workspace
 
-        async def fail_cleanup(ws_arg, st):
+        async def fail_cleanup():
             raise RuntimeError("cleanup boom")
 
-        async def fake_start(ws_arg, st, wid, ws_obj):
-            st["container_id"] = "cid-new"
-            st["workspace_id"] = wid
+        async def fake_start(wid, ws_obj):
+            conn.container_id = "cid-new"
+            conn.workspace_id = wid
 
         with (
             patch.object(
-                wshandler,
-                "cleanup_connection",
+                Connection,
+                "cleanup",
                 side_effect=fail_cleanup,
             ),
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -1891,7 +1856,7 @@ class TestHandleRestartContainer:
                 return_value=[],
             ),
         ):
-            await handle_restart_container(ws, state)
+            await conn.handle_restart_container()
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         ready = [
@@ -1906,26 +1871,26 @@ class TestHandleRestartContainer:
     async def test_restart_cleanup_ws_disconnect(self, user):
         ws = _mock_ws(headers={"host": "localhost:8997"})
         workspace = await ws_mod.create_workspace(user["id"], "restart-disc")
-        state = _base_state(user=user)
-        state["workspace_id"] = workspace["id"]
-        state["container_id"] = "cid-disc"
-        state["workspace"] = workspace
+        conn = _base_conn(user=user, ws=ws)
+        conn.workspace_id = workspace["id"]
+        conn.container_id = "cid-disc"
+        conn.workspace = workspace
 
-        async def fail_cleanup(ws_arg, st):
+        async def fail_cleanup():
             raise WebSocketDisconnect()
 
-        async def fake_start(ws_arg, st, wid, ws_obj):
-            st["container_id"] = "cid-new"
-            st["workspace_id"] = wid
+        async def fake_start(wid, ws_obj):
+            conn.container_id = "cid-new"
+            conn.workspace_id = wid
 
         with (
             patch.object(
-                wshandler,
-                "cleanup_connection",
+                Connection,
+                "cleanup",
                 side_effect=fail_cleanup,
             ),
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -1936,7 +1901,7 @@ class TestHandleRestartContainer:
                 return_value=[],
             ),
         ):
-            await handle_restart_container(ws, state)
+            await conn.handle_restart_container()
 
         calls = [c[0][0] for c in ws.send_json.call_args_list]
         ready = [
@@ -1954,15 +1919,15 @@ class TestFractionalTimeout:
         monkeypatch.setattr(container, "IDLE_TIMEOUT_SECONDS", 90)
         ws = _mock_ws()
         workspace = await ws_mod.create_workspace(user["id"], "frac-ws")
-        state = _base_state(user=user)
+        conn = _base_conn(user=user, ws=ws)
 
-        async def fake_start(ws_arg, state, wid, workspace):
-            state["container_id"] = "cid"
-            state["container_status"] = "created"
+        async def fake_start(wid, workspace):
+            conn.container_id = "cid"
+            conn.container_status = "created"
 
         with (
             patch.object(
-                wshandler,
+                Connection,
                 "start_workspace_container",
                 side_effect=fake_start,
             ),
@@ -1972,11 +1937,11 @@ class TestFractionalTimeout:
                 return_value=[],
             ),
         ):
-            await handle_workspace_connect(
-                ws, state, {"workspaceId": workspace["id"]}
+            await conn.handle_workspace_connect(
+                {"workspaceId": workspace["id"]}
             )
 
-        assert "1.5m" in state["pending_status_msg"]
+        assert "1.5m" in conn.pending_status_msg
 
 
 class TestDispatchBrowserRequestCancelled:
@@ -2089,7 +2054,7 @@ class TestSendQueueBehavior:
         ws = _mock_ws()
         ws.send_json = MagicMock(side_effect=SlowClientError("full"))
         t = _mock_terminal()
-        state = _base_state()
+        conn = _base_conn(ws=ws)
 
         async def fake_output():
             yield "data"
@@ -2097,7 +2062,7 @@ class TestSendQueueBehavior:
         t.output = fake_output
 
         # Should not raise — SlowClientError is caught
-        await forward_terminal_output(ws, t, state)
+        await conn.forward_terminal_output(t)
 
     async def test_slow_client_in_exec_forwarding(self):
         """Exec forwarder handles SlowClientError gracefully."""
@@ -2109,7 +2074,8 @@ class TestSendQueueBehavior:
             yield b"data"
 
         session.output = fake_output
-        state = {"container_id": "cid"}
+        conn = _base_conn(ws=ws)
+        conn.container_id = "cid"
         with patch.object(container.registry, "record_activity"):
-            await forward_exec_output(ws, session, state)
+            await conn.forward_exec_output(session)
         # Should not raise

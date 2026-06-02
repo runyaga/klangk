@@ -60,7 +60,7 @@ class SafeWebSocket:
         except asyncio.CancelledError:
             raise
         except (WebSocketDisconnect, RuntimeError, ConnectionError, OSError):
-            # Socket gone — nothing to do, cleanup_connection handles the rest.
+            # Socket gone — nothing to do, cleanup handles the rest.
             pass
 
     async def stop_sender(self) -> None:
@@ -164,8 +164,8 @@ class State:
     """Module-level singleton holding mutable WebSocket handler state."""
 
     def __init__(self) -> None:
-        # Active connections: ws -> {user, workspace_id, container_id, ...}
-        self.connections: dict[SafeWebSocket, dict] = {}
+        # Active connections: ws -> Connection
+        self.connections: dict[SafeWebSocket, "Connection"] = {}
         # Active sessions keyed by workspace_id.
         self.sessions: dict[str, WorkspaceSession] = {}
         # Pending browser-delegate requests: request_id -> asyncio.Future
@@ -204,6 +204,433 @@ class State:
 state = State()
 
 
+class Connection:
+    """Per-WebSocket connection state and command handlers."""
+
+    def __init__(self, ws: SafeWebSocket, user: dict):
+        self.ws = ws
+        self.user = user
+        self.workspace_id: str | None = None
+        self.container_id: str | None = None
+        self.terminal_session: TerminalSession | None = None
+        self.terminal_task: asyncio.Task | None = None
+        self.dockerexec: ExecSession | None = None
+        self.exec_task: asyncio.Task | None = None
+        self.workspace: dict | None = None
+        self._idle_cb = None
+        self.pending_status_msg: str | None = None
+
+    async def start_workspace_container(
+        self, workspace_id: str, workspace: dict
+    ) -> None:
+        """Start/restart container for a workspace."""
+        host_path = str(
+            workspaces.get_workspace_host_path(self.user["id"], workspace_id)
+        )
+        home_path = str(
+            workspaces.get_home_host_path(self.user["id"], workspace_id)
+        )
+        cfg_path = str(
+            workspaces.get_config_host_path(self.user["id"], workspace_id)
+        )
+
+        hosting_hostname, hosting_proto, hosting_base_path = (
+            derive_hosting_info(self.ws.headers)
+        )
+        (
+            container_id,
+            container_status,
+        ) = await container.registry.start_container(
+            workspace_id,
+            host_path,
+            home_path,
+            workspace.get("container_id"),
+            num_ports=workspace.get(
+                "num_ports", container.DEFAULT_PORTS_PER_WORKSPACE
+            ),
+            hosting_hostname=hosting_hostname,
+            hosting_proto=hosting_proto,
+            hosting_base_path=hosting_base_path,
+            image=workspace.get("image"),
+            config_path=cfg_path,
+            extra_mounts=workspace.get("mounts"),
+            extra_env=workspace.get("env"),
+        )
+        self.container_status = container_status
+        self.workspace_id = workspace_id
+        self.container_id = container_id
+
+        session = state.get_or_create_session(workspace_id)
+        await session.add_subscriber(self.ws, container_id)
+
+        # Register idle timeout notification (per-connection)
+        ws = self.ws
+
+        async def on_idle(wid: str) -> None:
+            try:
+                _send_event(ws, "container_stopped", "idle timeout")
+            except (
+                SlowClientError,
+                WebSocketDisconnect,
+                RuntimeError,
+                ConnectionError,
+            ):
+                pass
+
+        self._idle_cb = on_idle
+        # No await between lock release and callback registration — the idle
+        # loop cannot interleave here in asyncio's single-threaded model.
+        # If an await is added before on_idle_stop, move registration inside the lock.
+        container.registry.on_idle_stop(workspace_id, on_idle)
+
+        # Cache workspace info for auto-restart
+        self.workspace = workspace
+
+        # Clear any stale pending_status_msg from a prior connect/restart.
+        self.pending_status_msg = None
+
+        logger.info("Container ready for workspace %s", workspace_id)
+
+    async def handle_workspace_connect(self, msg: dict) -> None:
+        workspace_id = msg.get("workspaceId")
+        if not workspace_id:
+            send_error(self.ws, "Missing workspaceId")
+            return
+
+        workspace = await workspaces.get_workspace(
+            workspace_id, self.user["id"]
+        )
+        if workspace is None:
+            send_error(self.ws, "Workspace not found")
+            return
+
+        # Disconnect from any current workspace
+        await self.handle_workspace_disconnect()
+
+        await self.start_workspace_container(workspace_id, workspace)
+
+        ports = await container.registry.get_workspace_ports(workspace_id)
+        status = getattr(self, "container_status", "created")
+        container_name, ports_str = _format_container_info(workspace_id, ports)
+        status_msg = {
+            "connected": f"Connected to running container {container_name}{ports_str}",
+            "restarted": f"Restarted stopped container {container_name}{ports_str}",
+            "created": f"Created new container {container_name}{ports_str}",
+        }.get(status, "Container ready")
+
+        status_msg += _format_idle_timeout(container.IDLE_TIMEOUT_SECONDS)
+
+        self.ws.send_json(
+            {
+                "type": "workspace_ready",
+                "workspaceId": workspace_id,
+                "ports": ports,
+                "defaultCommand": workspace.get("default_command"),
+            }
+        )
+        # Store status for when frontend sends ui_ready
+        self.pending_status_msg = status_msg
+        logger.info(
+            "User %s connected to workspace %s (ports %s)",
+            self.user["email"],
+            workspace_id,
+            ports,
+        )
+
+    async def handle_workspace_disconnect(self) -> None:
+        await self.cleanup()
+        self.workspace_id = None
+        self.container_id = None
+
+    async def handle_restart_container(self) -> None:
+        """Restart a stopped container (e.g., after idle timeout)."""
+        if not self.workspace_id:
+            send_error(self.ws, "Not connected to a workspace")
+            return
+
+        # Save before cleanup — cleanup clears state fields.
+        workspace_id = self.workspace_id
+        user = self.user
+        workspace = self.workspace
+
+        _send_event(self.ws, "container_restart", "Restarting container...")
+
+        try:
+            await self.cleanup()
+        except (
+            WebSocketDisconnect,
+            RuntimeError,
+            OSError,
+            ConnectionError,
+        ) as e:
+            logger.warning("Cleanup error during restart: %s", e)
+
+        if workspace is None:
+            workspace = await workspaces.get_workspace(
+                workspace_id, user["id"]
+            )
+        if workspace is None:
+            send_error(self.ws, "Workspace not found")
+            return
+
+        await self.start_workspace_container(workspace_id, workspace)
+        container.registry.record_activity(self.container_id)
+
+        ports = await container.registry.get_workspace_ports(workspace_id)
+        container_name, ports_str = _format_container_info(workspace_id, ports)
+        status_msg = f"Container restarted {container_name}{ports_str}"
+
+        timeout_mins = container.IDLE_TIMEOUT_SECONDS / 60
+        if timeout_mins == int(timeout_mins):
+            status_msg += f" — idle timeout: {int(timeout_mins)}m"
+        else:
+            status_msg += f" — idle timeout: {timeout_mins:.1f}m"
+
+        _send_event(self.ws, "container_ready", status_msg)
+
+        logger.info(
+            "Container restarted via restart_container command for workspace %s",
+            workspace_id,
+        )
+
+    async def handle_terminal_start(self, msg: dict) -> None:
+        if not self.container_id:
+            return
+        # Stop existing terminal if any
+        await self.stop_terminal()
+        cols = msg.get("cols", 80)
+        rows = msg.get("rows", 24)
+        command_override = msg.get("commandOverride")
+        session = TerminalSession(self.container_id)
+
+        # Store session immediately so stop_terminal can clean it up
+        # if another terminal_start arrives before this one finishes.
+        self.terminal_session = session
+        conn = self
+
+        async def _start_terminal() -> None:
+            try:
+                await session.start(
+                    cols, rows, command_override=command_override
+                )
+                # Check we're still the active session — stop_terminal may have
+                # replaced us while session.start() was awaited.
+                if conn.terminal_session is not session:
+                    await session.stop()
+                    return
+                conn.terminal_task = asyncio.create_task(
+                    conn.forward_terminal_output(session)
+                )
+                container.registry.record_activity(conn.container_id)
+                conn.ws.send_json({"type": "terminal_started"})
+            except asyncio.CancelledError:
+                await session.stop()
+                raise
+            except Exception as e:
+                await session.stop()
+                logger.exception("Terminal start failed: %s", e)
+                send_error(conn.ws, f"Terminal start failed: {e}")
+
+        self.terminal_task = asyncio.create_task(_start_terminal())
+
+    async def handle_terminal_input(self, msg: dict) -> None:
+        session = self.terminal_session
+        if session is None or not session.is_alive:
+            return
+        data = msg.get("data", "")
+        if len(data) > _MAX_INPUT_SIZE:
+            logger.warning(
+                "terminal_input too large (%d bytes), dropping", len(data)
+            )
+            return
+        container.registry.record_activity(self.container_id)
+        await session.write(data)
+
+    async def handle_terminal_resize(self, msg: dict) -> None:
+        session = self.terminal_session
+        if session is None:
+            return
+        await session.resize(msg.get("cols", 80), msg.get("rows", 24))
+
+    async def handle_terminal_stop(self) -> None:
+        await self.stop_terminal()
+
+    async def handle_exec_start(self, msg: dict) -> None:
+        if not self.container_id:
+            return
+        await self.stop_exec()
+        command = msg.get("command", [])
+        if not command:
+            send_error(self.ws, "exec_start requires a command list")
+            return
+        session = ExecSession(self.container_id)
+        await session.start(command)
+        self.dockerexec = session
+        self.exec_task = asyncio.create_task(self.forward_exec_output(session))
+        container.registry.record_activity(self.container_id)
+
+    async def handle_exec_input(self, msg: dict) -> None:
+        session = self.dockerexec
+        if session is None or not session.is_alive:
+            return
+        import base64
+
+        raw = base64.b64decode(msg.get("data", ""))
+        if len(raw) > _MAX_INPUT_SIZE:
+            logger.warning(
+                "exec_input too large (%d bytes), dropping", len(raw)
+            )
+            return
+        container.registry.record_activity(self.container_id)
+        await session.write(raw)
+
+    async def handle_exec_close_stdin(self) -> None:
+        session = self.dockerexec
+        if session is None:
+            return
+        await session.close_stdin()
+
+    async def handle_exec_stop(self) -> None:
+        await self.stop_exec()
+
+    async def handle_heartbeat(self) -> None:
+        if self.container_id is not None:
+            container.registry.record_activity(self.container_id)
+
+    async def handle_ui_ready(self) -> None:
+        if self.workspace_id:
+            sess = state.get_session(self.workspace_id)
+            if sess:
+                sess.browser_subscribers.add(self.ws)
+        status_msg = self.pending_status_msg
+        self.pending_status_msg = None
+        if status_msg:
+            _send_event(self.ws, "container_ready", status_msg)
+
+    async def _claim_and_stop_terminal(self) -> None:
+        session = self.terminal_session
+        self.terminal_session = None
+        if session is not None:
+            await session.stop()
+
+    async def _claim_and_stop_exec(self) -> None:
+        session = self.dockerexec
+        self.dockerexec = None
+        if session is not None:
+            await session.stop()
+
+    async def stop_exec(self) -> None:
+        task = self.exec_task
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            self.exec_task = None
+        await self._claim_and_stop_exec()
+
+    async def forward_exec_output(self, session: ExecSession) -> None:
+        """Forward exec stdout to the client via WebSocket as base64."""
+        import base64
+
+        try:
+            async for data in session.output():
+                self.ws.send_json(
+                    {
+                        "type": "exec_output",
+                        "data": base64.b64encode(data).decode("ascii"),
+                    }
+                )
+                if self.container_id:
+                    container.registry.record_activity(self.container_id)
+            # Process exited — send exit code
+            self.ws.send_json(
+                {
+                    "type": "exec_exit",
+                    "code": session.returncode
+                    if session.returncode is not None
+                    else 1,
+                }
+            )
+        except asyncio.CancelledError:  # pragma: no cover
+            raise
+        except (
+            SlowClientError,
+            OSError,
+            WebSocketDisconnect,
+            RuntimeError,
+            ConnectionError,
+        ) as e:
+            logger.error("Exec output forwarding error: %s", e)
+        finally:
+            await self._claim_and_stop_exec()
+
+    async def stop_terminal(self) -> None:
+        task = self.terminal_task
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            self.terminal_task = None
+        await self._claim_and_stop_terminal()
+
+    async def forward_terminal_output(self, session: TerminalSession) -> None:
+        """Forward terminal output to the frontend via WebSocket."""
+        try:
+            async for data in session.output():
+                self.ws.send_json({"type": "terminal_output", "data": data})
+                if self.container_id:
+                    container.registry.record_activity(self.container_id)
+            # Stream ended without cancellation — container likely died
+            _send_event(self.ws, "container_stopped")
+        except asyncio.CancelledError:
+            raise  # Normal cleanup, don't send event
+        except (
+            SlowClientError,
+            OSError,
+            WebSocketDisconnect,
+            RuntimeError,
+            ConnectionError,
+        ) as e:
+            logger.error("Terminal output forwarding error: %s", e)
+            try:
+                _send_event(self.ws, "container_stopped")
+            except (
+                SlowClientError,
+                WebSocketDisconnect,
+                RuntimeError,
+                ConnectionError,
+            ):
+                pass
+        finally:
+            await self._claim_and_stop_terminal()
+
+    async def cleanup(self) -> None:
+        # Remove idle callback
+        workspace_id = self.workspace_id
+        idle_cb = self._idle_cb
+        if workspace_id and idle_cb:
+            container.registry.remove_idle_callback(workspace_id, idle_cb)
+            self._idle_cb = None
+
+        await self.stop_terminal()
+        await self.stop_exec()
+
+        # Remove this connection from the workspace session's subscriber sets.
+        # If no subscribers remain, remove the session entirely. The container
+        # is NOT killed — idle timeout handles that.
+        session = state.get_session(workspace_id) if workspace_id else None
+        if session:
+            empty = await session.remove_subscriber(self.ws)
+            if empty:
+                # Lock is released by remove_subscriber, so use the
+                # lock-acquiring version.
+                await state.remove_session(workspace_id)
+
+
 async def handle_websocket(ws: WebSocket) -> None:
     """Main WebSocket handler."""
     # Authenticate via query param
@@ -220,15 +647,8 @@ async def handle_websocket(ws: WebSocket) -> None:
     await ws.accept()
     safe_ws = SafeWebSocket(ws)
     safe_ws.start_sender()
-    conn_state: dict = {
-        "user": user,
-        "container_id": None,
-        "terminal_session": None,
-        "terminal_task": None,
-        "dockerexec": None,
-        "exec_task": None,
-    }
-    state.connections[safe_ws] = conn_state
+    conn = Connection(safe_ws, user)
+    state.connections[safe_ws] = conn
 
     try:
         while True:
@@ -243,40 +663,31 @@ async def handle_websocket(ws: WebSocket) -> None:
 
             cmd = msg.get("cmd")
             if cmd == "workspace_connect":
-                await handle_workspace_connect(safe_ws, conn_state, msg)
+                await conn.handle_workspace_connect(msg)
             elif cmd == "workspace_disconnect":
-                await handle_workspace_disconnect(safe_ws, conn_state)
+                await conn.handle_workspace_disconnect()
             elif cmd == "ui_ready":
-                # Mark this connection as a browser (Flutter) client.
-                # CLI connections never send ui_ready.
-                wid = conn_state.get("workspace_id")
-                if wid:
-                    sess = state.get_session(wid)
-                    if sess:
-                        sess.browser_subscribers.add(safe_ws)
-                status_msg = conn_state.pop("pending_status_msg", None)
-                if status_msg:
-                    _send_event(safe_ws, "container_ready", status_msg)
+                await conn.handle_ui_ready()
             elif cmd == "terminal_start":
-                await handle_terminal_start(safe_ws, conn_state, msg)
+                await conn.handle_terminal_start(msg)
             elif cmd == "terminal_input":
-                await handle_terminal_input(conn_state, msg)
+                await conn.handle_terminal_input(msg)
             elif cmd == "terminal_resize":
-                await handle_terminal_resize(conn_state, msg)
+                await conn.handle_terminal_resize(msg)
             elif cmd == "terminal_stop":
-                await handle_terminal_stop(conn_state)
+                await conn.handle_terminal_stop()
             elif cmd == "restart_container":
-                await handle_restart_container(safe_ws, conn_state)
+                await conn.handle_restart_container()
             elif cmd == "exec_start":
-                await handle_exec_start(safe_ws, conn_state, msg)
+                await conn.handle_exec_start(msg)
             elif cmd == "exec_input":
-                await handle_exec_input(conn_state, msg)
+                await conn.handle_exec_input(msg)
             elif cmd == "exec_close_stdin":
-                await handle_exec_close_stdin(conn_state)
+                await conn.handle_exec_close_stdin()
             elif cmd == "exec_stop":
-                await handle_exec_stop(conn_state)
+                await conn.handle_exec_stop()
             elif cmd == "heartbeat":
-                await handle_heartbeat(conn_state)
+                await conn.handle_heartbeat()
             elif cmd == "browser_response":
                 handle_browser_response(msg)
             else:
@@ -290,291 +701,10 @@ async def handle_websocket(ws: WebSocket) -> None:
         logger.exception("WebSocket error: %s", e)
     finally:
         await safe_ws.stop_sender()
-        await cleanup_connection(safe_ws, conn_state)
+        await conn.cleanup()
         # Container is intentionally left running — idle timeout will clean it up.
         # This allows instant reconnection when navigating back to the workspace.
         state.connections.pop(safe_ws, None)
-
-
-async def start_workspace_container(
-    ws: SafeWebSocket, conn_state: dict, workspace_id: str, workspace: dict
-) -> None:
-    """Start/restart container for a workspace."""
-    user = conn_state["user"]
-    host_path = str(
-        workspaces.get_workspace_host_path(user["id"], workspace_id)
-    )
-    home_path = str(workspaces.get_home_host_path(user["id"], workspace_id))
-    cfg_path = str(workspaces.get_config_host_path(user["id"], workspace_id))
-
-    hosting_hostname, hosting_proto, hosting_base_path = derive_hosting_info(
-        ws.headers
-    )
-    (
-        container_id,
-        container_status,
-    ) = await container.registry.start_container(
-        workspace_id,
-        host_path,
-        home_path,
-        workspace.get("container_id"),
-        num_ports=workspace.get(
-            "num_ports", container.DEFAULT_PORTS_PER_WORKSPACE
-        ),
-        hosting_hostname=hosting_hostname,
-        hosting_proto=hosting_proto,
-        hosting_base_path=hosting_base_path,
-        image=workspace.get("image"),
-        config_path=cfg_path,
-        extra_mounts=workspace.get("mounts"),
-        extra_env=workspace.get("env"),
-    )
-    conn_state["container_status"] = container_status
-    conn_state["workspace_id"] = workspace_id
-    conn_state["container_id"] = container_id
-
-    session = state.get_or_create_session(workspace_id)
-    await session.add_subscriber(ws, container_id)
-
-    # Register idle timeout notification (per-connection)
-    async def on_idle(wid: str) -> None:
-        try:
-            _send_event(ws, "container_stopped", "idle timeout")
-        except (
-            SlowClientError,
-            WebSocketDisconnect,
-            RuntimeError,
-            ConnectionError,
-        ):
-            pass
-
-    conn_state["_idle_cb"] = on_idle
-    # No await between lock release and callback registration — the idle
-    # loop cannot interleave here in asyncio's single-threaded model.
-    # If an await is added before on_idle_stop, move registration inside the lock.
-    container.registry.on_idle_stop(workspace_id, on_idle)
-
-    # Cache workspace info for auto-restart
-    conn_state["workspace"] = workspace
-
-    # Clear any stale pending_status_msg from a prior connect/restart.
-    conn_state.pop("pending_status_msg", None)
-
-    logger.info("Container ready for workspace %s", workspace_id)
-
-
-async def handle_workspace_connect(
-    ws: SafeWebSocket, state: dict, msg: dict
-) -> None:
-    workspace_id = msg.get("workspaceId")
-    if not workspace_id:
-        send_error(ws, "Missing workspaceId")
-        return
-
-    user = state["user"]
-    workspace = await workspaces.get_workspace(workspace_id, user["id"])
-    if workspace is None:
-        send_error(ws, "Workspace not found")
-        return
-
-    # Disconnect from any current workspace
-    await handle_workspace_disconnect(ws, state)
-
-    await start_workspace_container(ws, state, workspace_id, workspace)
-
-    ports = await container.registry.get_workspace_ports(workspace_id)
-    status = state.get("container_status", "created")
-    container_name, ports_str = _format_container_info(workspace_id, ports)
-    status_msg = {
-        "connected": f"Connected to running container {container_name}{ports_str}",
-        "restarted": f"Restarted stopped container {container_name}{ports_str}",
-        "created": f"Created new container {container_name}{ports_str}",
-    }.get(status, "Container ready")
-
-    status_msg += _format_idle_timeout(container.IDLE_TIMEOUT_SECONDS)
-
-    ws.send_json(
-        {
-            "type": "workspace_ready",
-            "workspaceId": workspace_id,
-            "ports": ports,
-            "defaultCommand": workspace.get("default_command"),
-        }
-    )
-    # Store status for when frontend sends ui_ready
-    state["pending_status_msg"] = status_msg
-    logger.info(
-        "User %s connected to workspace %s (ports %s)",
-        state["user"]["email"],
-        workspace_id,
-        ports,
-    )
-
-
-async def handle_workspace_disconnect(ws: SafeWebSocket, state: dict) -> None:
-    await cleanup_connection(ws, state)
-    state["workspace_id"] = None
-    state["container_id"] = None
-
-
-async def handle_restart_container(ws: SafeWebSocket, state: dict) -> None:
-    """Restart a stopped container (e.g., after idle timeout)."""
-    workspace_id = state.get("workspace_id")
-    if not workspace_id:
-        send_error(ws, "Not connected to a workspace")
-        return
-
-    # Save before cleanup — cleanup_connection clears state fields.
-    user = state["user"]
-    workspace = state.get("workspace")
-
-    _send_event(ws, "container_restart", "Restarting container...")
-
-    try:
-        await cleanup_connection(ws, state)
-    except (WebSocketDisconnect, RuntimeError, OSError, ConnectionError) as e:
-        logger.warning("Cleanup error during restart: %s", e)
-
-    if workspace is None:
-        workspace = await workspaces.get_workspace(workspace_id, user["id"])
-    if workspace is None:
-        send_error(ws, "Workspace not found")
-        return
-
-    await start_workspace_container(ws, state, workspace_id, workspace)
-    container.registry.record_activity(state["container_id"])
-
-    ports = await container.registry.get_workspace_ports(workspace_id)
-    container_name, ports_str = _format_container_info(workspace_id, ports)
-    status_msg = f"Container restarted {container_name}{ports_str}"
-
-    timeout_mins = container.IDLE_TIMEOUT_SECONDS / 60
-    if timeout_mins == int(timeout_mins):
-        status_msg += f" — idle timeout: {int(timeout_mins)}m"
-    else:
-        status_msg += f" — idle timeout: {timeout_mins:.1f}m"
-
-    _send_event(ws, "container_ready", status_msg)
-
-    logger.info(
-        "Container restarted via restart_container command for workspace %s",
-        workspace_id,
-    )
-
-
-async def handle_terminal_start(
-    ws: SafeWebSocket, state: dict, msg: dict
-) -> None:
-    container_id = state.get("container_id")
-    if not container_id:
-        return
-    # Stop existing terminal if any
-    await stop_terminal(state)
-    cols = msg.get("cols", 80)
-    rows = msg.get("rows", 24)
-    command_override = msg.get("commandOverride")
-    session = TerminalSession(container_id)
-
-    # Store session immediately so stop_terminal can clean it up
-    # if another terminal_start arrives before this one finishes.
-    state["terminal_session"] = session
-
-    async def _start_terminal() -> None:
-        try:
-            await session.start(cols, rows, command_override=command_override)
-            # Check we're still the active session — stop_terminal may have
-            # replaced us while session.start() was awaited.
-            if state.get("terminal_session") is not session:
-                await session.stop()
-                return
-            state["terminal_task"] = asyncio.create_task(
-                forward_terminal_output(ws, session, state)
-            )
-            container.registry.record_activity(container_id)
-            ws.send_json({"type": "terminal_started"})
-        except asyncio.CancelledError:
-            await session.stop()
-            raise
-        except Exception as e:
-            await session.stop()
-            logger.exception("Terminal start failed: %s", e)
-            send_error(ws, f"Terminal start failed: {e}")
-
-    state["terminal_task"] = asyncio.create_task(_start_terminal())
-
-
-async def handle_terminal_input(state: dict, msg: dict) -> None:
-    session: TerminalSession | None = state.get("terminal_session")
-    if session is None or not session.is_alive:
-        return
-    data = msg.get("data", "")
-    if len(data) > _MAX_INPUT_SIZE:
-        logger.warning(
-            "terminal_input too large (%d bytes), dropping", len(data)
-        )
-        return
-    container.registry.record_activity(state["container_id"])
-    await session.write(data)
-
-
-async def handle_terminal_resize(state: dict, msg: dict) -> None:
-    session: TerminalSession | None = state.get("terminal_session")
-    if session is None:
-        return
-    await session.resize(msg.get("cols", 80), msg.get("rows", 24))
-
-
-async def handle_terminal_stop(state: dict) -> None:
-    await stop_terminal(state)
-
-
-async def handle_exec_start(ws: SafeWebSocket, state: dict, msg: dict) -> None:
-    container_id = state.get("container_id")
-    if not container_id:
-        return
-    await stop_exec(state)
-    command = msg.get("command", [])
-    if not command:
-        send_error(ws, "exec_start requires a command list")
-        return
-    session = ExecSession(container_id)
-    await session.start(command)
-    state["dockerexec"] = session
-    state["exec_task"] = asyncio.create_task(
-        forward_exec_output(ws, session, state)
-    )
-    container.registry.record_activity(container_id)
-
-
-async def handle_exec_input(state: dict, msg: dict) -> None:
-    session: ExecSession | None = state.get("dockerexec")
-    if session is None or not session.is_alive:
-        return
-    import base64
-
-    raw = base64.b64decode(msg.get("data", ""))
-    if len(raw) > _MAX_INPUT_SIZE:
-        logger.warning("exec_input too large (%d bytes), dropping", len(raw))
-        return
-    container.registry.record_activity(state["container_id"])
-    await session.write(raw)
-
-
-async def handle_exec_close_stdin(state: dict) -> None:
-    session: ExecSession | None = state.get("dockerexec")
-    if session is None:
-        return
-    await session.close_stdin()
-
-
-async def handle_exec_stop(state: dict) -> None:
-    await stop_exec(state)
-
-
-async def handle_heartbeat(state: dict) -> None:
-    container_id = state.get("container_id")
-    if container_id is not None:
-        container.registry.record_activity(container_id)
 
 
 def handle_browser_response(msg: dict) -> None:
@@ -632,117 +762,6 @@ async def dispatch_browser_request(
         raise
 
 
-async def _claim_and_stop(state: dict, key: str) -> None:
-    """Atomically remove a session from state and stop it.
-
-    dict.pop() under the GIL ensures only one caller claims the
-    session, preventing concurrent double-stop between forwarders
-    and stop functions.
-    """
-    session = state.pop(key, None)
-    if session is not None:
-        await session.stop()
-
-
-async def stop_exec(state: dict) -> None:
-    task = state.get("exec_task")
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        state["exec_task"] = None
-    await _claim_and_stop(state, "dockerexec")
-
-
-async def forward_exec_output(
-    ws: SafeWebSocket, session: ExecSession, state: dict
-) -> None:
-    """Forward exec stdout to the client via WebSocket as base64."""
-    import base64
-
-    try:
-        async for data in session.output():
-            ws.send_json(
-                {
-                    "type": "exec_output",
-                    "data": base64.b64encode(data).decode("ascii"),
-                }
-            )
-            container_id = state.get("container_id")
-            if container_id:
-                container.registry.record_activity(container_id)
-        # Process exited — send exit code
-        ws.send_json(
-            {
-                "type": "exec_exit",
-                "code": session.returncode
-                if session.returncode is not None
-                else 1,
-            }
-        )
-    except asyncio.CancelledError:  # pragma: no cover
-        raise
-    except (
-        SlowClientError,
-        OSError,
-        WebSocketDisconnect,
-        RuntimeError,
-        ConnectionError,
-    ) as e:
-        logger.error("Exec output forwarding error: %s", e)
-    finally:
-        await _claim_and_stop(state, "dockerexec")
-
-
-async def stop_terminal(state: dict) -> None:
-    task = state.get("terminal_task")
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        state["terminal_task"] = None
-    await _claim_and_stop(state, "terminal_session")
-
-
-async def forward_terminal_output(
-    ws: SafeWebSocket, session: TerminalSession, state: dict
-) -> None:
-    """Forward terminal output to the frontend via WebSocket."""
-    try:
-        async for data in session.output():
-            ws.send_json({"type": "terminal_output", "data": data})
-            container_id = state.get("container_id")
-            if container_id:
-                container.registry.record_activity(container_id)
-        # Stream ended without cancellation — container likely died
-        _send_event(ws, "container_stopped")
-    except asyncio.CancelledError:
-        raise  # Normal cleanup, don't send event
-    except (
-        SlowClientError,
-        OSError,
-        WebSocketDisconnect,
-        RuntimeError,
-        ConnectionError,
-    ) as e:
-        logger.error("Terminal output forwarding error: %s", e)
-        try:
-            _send_event(ws, "container_stopped")
-        except (
-            SlowClientError,
-            WebSocketDisconnect,
-            RuntimeError,
-            ConnectionError,
-        ):
-            pass
-    finally:
-        await _claim_and_stop(state, "terminal_session")
-
-
 def _broadcast_to_set(subscribers: set[SafeWebSocket], message: dict) -> int:
     """Send *message* to each socket in *subscribers*, removing dead ones.
 
@@ -782,29 +801,6 @@ async def _broadcast_to_browsers(workspace_id: str, message: dict) -> int:
     if not session:  # pragma: no cover
         return 0
     return session.broadcast_to_browsers(message)
-
-
-async def cleanup_connection(ws: SafeWebSocket, conn_state: dict) -> None:
-    # Remove idle callback
-    workspace_id = conn_state.get("workspace_id")
-    idle_cb = conn_state.get("_idle_cb")
-    if workspace_id and idle_cb:
-        container.registry.remove_idle_callback(workspace_id, idle_cb)
-        conn_state["_idle_cb"] = None
-
-    await stop_terminal(conn_state)
-    await stop_exec(conn_state)
-
-    # Remove this connection from the workspace session's subscriber sets.
-    # If no subscribers remain, remove the session entirely. The container
-    # is NOT killed — idle timeout handles that.
-    session = state.get_session(workspace_id) if workspace_id else None
-    if session:
-        empty = await session.remove_subscriber(ws)
-        if empty:
-            # Lock is released by remove_subscriber, so use the
-            # lock-acquiring version.
-            await state.remove_session(workspace_id)
 
 
 async def reset_workspace_state(workspace_id: str) -> None:
