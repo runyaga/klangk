@@ -819,21 +819,26 @@ class TestExtraMountsVolumeCreation:
         # Has leading /, so treated as bind mount
         mock_docker.volumes.get.assert_not_awaited()
 
-
-class TestAttachContainer:
-    async def test_attach(self):
+    async def test_bridge_token_revoked_on_creation_failure(self, workspace):
+        """If container creation fails, the bridge token is revoked."""
         mock_docker = _mock_docker()
-        mock_c = _mock_container("cid")
-        mock_docker.containers.get = AsyncMock(return_value=mock_c)
-
-        with patch.object(
-            container.registry, "get_docker", return_value=mock_docker
-        ):
-            stream = await container.registry.attach_container("cid")
-        mock_c.attach.assert_called_once_with(
-            stdin=True, stdout=True, stderr=True, stream=True
+        mock_docker.containers.create_or_replace = AsyncMock(
+            side_effect=RuntimeError("docker broke")
         )
-        assert stream is not None
+
+        with (
+            patch.object(
+                container.registry, "get_docker", return_value=mock_docker
+            ),
+            pytest.raises(RuntimeError, match="docker broke"),
+        ):
+            await container.registry.start_container(
+                workspace["id"], "/tmp/ws", "/tmp/home"
+            )
+
+        # No bridge tokens should remain for this workspace
+        for token, ws_id in container.registry._bridge_tokens.items():
+            assert ws_id != workspace["id"]
 
 
 class TestStopContainer:

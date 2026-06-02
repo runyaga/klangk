@@ -20,6 +20,7 @@ class ExecSession:
         )
         self._running = False
         self._read_task: asyncio.Task | None = None
+        self._returncode: int | None = None
 
     async def start(self, command: list[str]) -> None:
         """Start a command via docker exec with piped stdin/stdout."""
@@ -135,6 +136,10 @@ class ExecSession:
             self._read_task = None
 
         if self._proc:
+            # Save exit code before nulling _proc so returncode stays
+            # accessible after stop().
+            if self._proc.returncode is not None:
+                self._returncode = self._proc.returncode
             try:
                 self._proc.terminate()
                 await asyncio.wait_for(self._proc.wait(), timeout=5)
@@ -143,12 +148,14 @@ class ExecSession:
                     self._proc.kill()  # pragma: no cover
                 except (ProcessLookupError, OSError):  # pragma: no cover
                     pass
+            if self._proc.returncode is not None:
+                self._returncode = self._proc.returncode
             self._proc = None
         logger.info("Exec session stopped for container %s", self.container_id)
 
     @property
     def returncode(self) -> int | None:
         """Return the process exit code, or None if still running."""
-        if self._proc is None:
-            return None
-        return self._proc.returncode
+        if self._proc is not None:
+            return self._proc.returncode
+        return self._returncode

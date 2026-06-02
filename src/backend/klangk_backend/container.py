@@ -426,12 +426,18 @@ class ContainerRegistry:
             "Tty": False,
         }
 
-        container = await docker.containers.create_or_replace(
-            name=f"klangk-{INSTANCE_ID}-{workspace_id[:12]}",
-            config=config,
-        )
-        await container.start()
-        container_id = container.id
+        try:
+            created = await docker.containers.create_or_replace(
+                name=f"klangk-{INSTANCE_ID}-{workspace_id[:12]}",
+                config=config,
+            )
+            await created.start()
+        except Exception:
+            # Revoke the bridge token allocated above so a stale token
+            # doesn't linger for a workspace with no container.
+            self.revoke_bridge_token(workspace_id)
+            raise
+        container_id = created.id
 
         await model.update_workspace_container(workspace_id, container_id)
         self.track_activity(container_id, workspace_id)
@@ -443,17 +449,6 @@ class ContainerRegistry:
             host_ports,
         )
         return container_id, "created"
-
-    async def attach_container(
-        self, container_id: str
-    ) -> aiodocker.stream.Stream:
-        """Attach to container stdin/stdout for Pi RPC communication."""
-        docker = await self.get_docker()
-        container = await docker.containers.get(container_id)
-        stream = container.attach(
-            stdin=True, stdout=True, stderr=True, stream=True
-        )
-        return stream
 
     async def stop_and_remove_container(self, container_id: str) -> None:
         """Stop and remove a container."""
@@ -473,21 +468,25 @@ class ContainerRegistry:
             self.revoke_bridge_token(ws_id)
             self.states.pop(ws_id, None)
 
+    async def _notify_workspace_killed(self, workspace_id: str) -> None:
+        """Call the on_workspace_killed callback, logging any errors."""
+        if self.on_workspace_killed:
+            try:
+                await self.on_workspace_killed(workspace_id)
+            except Exception as e:
+                logger.error(
+                    "Workspace killed callback error for %s: %s",
+                    workspace_id,
+                    e,
+                )
+
     async def stop_user_containers(self, user_id: str) -> None:
         """Stop all containers for a user (called on logout)."""
         workspaces = await model.get_user_workspaces_with_containers(user_id)
         for ws in workspaces:
             if ws["container_id"]:
                 await self.stop_and_remove_container(ws["container_id"])
-                if self.on_workspace_killed:
-                    try:
-                        await self.on_workspace_killed(ws["id"])
-                    except Exception as e:  # pragma: no cover
-                        logger.error(
-                            "Workspace killed callback error for %s: %s",
-                            ws["id"],
-                            e,
-                        )
+                await self._notify_workspace_killed(ws["id"])
 
     # --- Idle cleanup loop ---
 
@@ -536,15 +535,7 @@ class ContainerRegistry:
                         except Exception as e:
                             logger.error("Idle callback error: %s", e)
                 await self.stop_and_remove_container(cid)
-                if self.on_workspace_killed:
-                    try:
-                        await self.on_workspace_killed(wid)
-                    except Exception as e:
-                        logger.error(
-                            "Workspace killed callback error for %s: %s",
-                            wid,
-                            e,
-                        )
+                await self._notify_workspace_killed(wid)
 
     def start_cleanup_loop(self) -> None:
         logger.info(

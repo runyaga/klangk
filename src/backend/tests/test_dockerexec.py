@@ -111,6 +111,21 @@ class TestExecSession:
         session = ExecSession("cid")
         assert session.returncode is None
 
+    async def test_returncode_survives_stop(self):
+        """returncode is still accessible after stop() nulls _proc."""
+        session = ExecSession("cid")
+        proc = _mock_proc(b"", returncode=7)
+        proc.wait = AsyncMock()
+        with patch(
+            "asyncio.create_subprocess_exec",
+            return_value=proc,
+        ):
+            await session.start(["exit", "7"])
+        await asyncio.sleep(0.1)
+        await session.stop()
+        assert session._proc is None
+        assert session.returncode == 7
+
     async def test_is_alive_false_when_no_proc(self):
         session = ExecSession("cid")
         assert not session.is_alive
