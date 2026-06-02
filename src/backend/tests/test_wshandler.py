@@ -1684,27 +1684,35 @@ class TestWsDebugLogging:
 
 class TestLogWsMsg:
     def test_terminal_output_truncated(self):
-        _log_ws_msg(
-            "RECV",
-            {"type": "terminal_output", "data": "x" * 200},
-            {"email": "test@example.com"},
-        )
+        with patch.object(wshandler, "_WS_DEBUG", True):
+            _log_ws_msg(
+                "RECV",
+                {"type": "terminal_output", "data": "x" * 200},
+                {"email": "test@example.com"},
+            )
 
     def test_terminal_input_truncated(self):
-        _log_ws_msg(
-            "SEND",
-            {"type": "terminal_input", "data": "y" * 50},
-        )
+        with patch.object(wshandler, "_WS_DEBUG", True):
+            _log_ws_msg(
+                "SEND",
+                {"type": "terminal_input", "data": "y" * 50},
+            )
 
     def test_other_message(self):
-        _log_ws_msg("RECV", {"type": "heartbeat"})
+        with patch.object(wshandler, "_WS_DEBUG", True):
+            _log_ws_msg("RECV", {"type": "heartbeat"})
 
     def test_other_message_with_user(self):
-        _log_ws_msg(
-            "RECV",
-            {"cmd": "workspace_connect", "workspaceId": "ws-1"},
-            {"email": "test@example.com"},
-        )
+        with patch.object(wshandler, "_WS_DEBUG", True):
+            _log_ws_msg(
+                "RECV",
+                {"cmd": "workspace_connect", "workspaceId": "ws-1"},
+                {"email": "test@example.com"},
+            )
+
+    def test_noop_when_debug_disabled(self):
+        with patch.object(wshandler, "_WS_DEBUG", False):
+            _log_ws_msg("RECV", {"type": "heartbeat"})
 
 
 class TestBroadcastDeadSubscribers:

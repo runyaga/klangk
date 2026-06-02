@@ -239,8 +239,7 @@ async def handle_websocket(ws: WebSocket) -> None:
                 send_error(safe_ws, "Invalid JSON")
                 continue
 
-            if _WS_DEBUG:
-                _log_ws_msg("RECV", msg, user)
+            _log_ws_msg("RECV", msg, user)
 
             cmd = msg.get("cmd")
             if cmd == "workspace_connect":
@@ -769,8 +768,7 @@ def _broadcast_to_set(subscribers: set[SafeWebSocket], message: dict) -> int:
 
 async def _broadcast(workspace_id: str, message: dict) -> int:
     """Send a message to all subscribers for a workspace."""
-    if _WS_DEBUG:
-        _log_ws_msg("BCAST", message)
+    _log_ws_msg("BCAST", message)
     session = state.get_session(workspace_id)
     if not session:  # pragma: no cover
         return 0
@@ -779,8 +777,7 @@ async def _broadcast(workspace_id: str, message: dict) -> int:
 
 async def _broadcast_to_browsers(workspace_id: str, message: dict) -> int:
     """Send a message to browser (Flutter) subscribers only."""
-    if _WS_DEBUG:
-        _log_ws_msg("BCAST", message)
+    _log_ws_msg("BCAST", message)
     session = state.get_session(workspace_id)
     if not session:  # pragma: no cover
         return 0
@@ -851,13 +848,14 @@ def _format_container_info(workspace_id: str, ports: list) -> tuple[str, str]:
 
 def send_error(ws: SafeWebSocket, message: str) -> None:
     msg = {"type": "error", "message": message}
-    if _WS_DEBUG:
-        _log_ws_msg("SEND", msg)
+    _log_ws_msg("SEND", msg)
     ws.send_json(msg)
 
 
 def _log_ws_msg(direction: str, msg: dict, user: dict | None = None) -> None:
     """Log a WebSocket message for debugging (KLANGK_WS_DEBUG=1)."""
+    if not _WS_DEBUG:
+        return
     msg_type = msg.get("type") or msg.get("cmd") or "?"
     # Truncate terminal_output/terminal_input data to avoid log spam
     if msg_type in ("terminal_output", "terminal_input"):
