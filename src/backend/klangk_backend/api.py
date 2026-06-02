@@ -659,7 +659,7 @@ async def list_files(
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     try:
-        return files.list_files(user["id"], workspace_id, path)
+        return files.list_files(workspace["user_id"], workspace_id, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -674,7 +674,7 @@ async def read_file(
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     try:
-        content = files.read_file(user["id"], workspace_id, path)
+        content = files.read_file(workspace["user_id"], workspace_id, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if content is None:
@@ -694,7 +694,7 @@ async def delete_file(
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     try:
-        deleted = files.delete_path(user["id"], workspace_id, path)
+        deleted = files.delete_path(workspace["user_id"], workspace_id, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError:
@@ -718,7 +718,7 @@ async def rename_file(
         raise HTTPException(status_code=404, detail="Workspace not found")
     try:
         renamed = files.rename_path(
-            user["id"], workspace_id, body.old_path, body.new_path
+            workspace["user_id"], workspace_id, body.old_path, body.new_path
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -741,7 +741,7 @@ async def download_file(
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     try:
-        resolved = files.resolve_path(user["id"], workspace_id, path)
+        resolved = files.resolve_path(workspace["user_id"], workspace_id, path)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not resolved.exists():
@@ -785,7 +785,7 @@ async def upload_file(
     content = await file.read()
     try:
         saved_path = files.write_file(
-            user["id"], workspace_id, filename, content
+            workspace["user_id"], workspace_id, filename, content
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
