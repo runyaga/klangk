@@ -110,6 +110,14 @@ class WorkspaceChatState extends State<WorkspaceChat> {
     }
   }
 
+  static Color _colorForEmail(String email) {
+    // Generate a stable, visually distinct color from the email hash.
+    // Use HSL with fixed saturation/lightness for readability on dark bg.
+    final hash = email.hashCode & 0x7fffffff;
+    final hue = (hash % 360).toDouble();
+    return HSLColor.fromAHSL(1.0, hue, 0.6, 0.7).toColor();
+  }
+
   void _sendMessage() {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
@@ -170,9 +178,9 @@ class WorkspaceChatState extends State<WorkspaceChat> {
                                   children: [
                                     TextSpan(
                                       text: '$email  ',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: KColors.accentBlue,
+                                        color: _colorForEmail(email),
                                         fontSize: 13,
                                       ),
                                     ),

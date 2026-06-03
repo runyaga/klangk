@@ -1452,6 +1452,23 @@ class TestExecDispatch:
             await handle_websocket(websocket)
         mock.assert_awaited_once()
 
+    async def test_dispatch_chat_delete(self, user):
+        from klangk_backend import auth as auth_mod
+
+        token = auth_mod.create_token(user["id"], user["email"])
+        websocket = _mock_raw_sock(query_params={"token": token})
+        websocket.receive_text = AsyncMock(
+            side_effect=[
+                json.dumps({"cmd": "chat_delete", "message_id": "x"}),
+                WebSocketDisconnect(),
+            ]
+        )
+        with patch.object(
+            Connection, "handle_chat_delete", new_callable=AsyncMock
+        ) as mock:
+            await handle_websocket(websocket)
+        mock.assert_awaited_once()
+
 
 class TestHandleHeartbeat:
     async def test_records_activity(self):
@@ -2454,7 +2471,7 @@ class TestChatSend:
 
         workspace = await ws_mod.create_workspace(user["id"], "chat-ws")
         await model.add_chat_message(
-            workspace["id"], "someone@test.com", "old message"
+            workspace["id"], "uid-other", "someone@test.com", "old message"
         )
 
         sock = _mock_sock()
@@ -2484,3 +2501,60 @@ class TestChatSend:
         assert len(history) == 1
         assert len(history[0]["messages"]) == 1
         assert history[0]["messages"][0]["message"] == "old message"
+
+
+class TestChatDelete:
+    async def test_chat_delete_broadcasts_update(self, user):
+        from klangk_backend import model
+
+        workspace = await ws_mod.create_workspace(user["id"], "chat-del-ws")
+        sock = _mock_sock()
+        conn = _base_conn(user=user, ws=sock)
+        conn.workspace_id = workspace["id"]
+        conn.container_id = "cid"
+
+        msg = await model.add_chat_message(
+            workspace["id"], user["id"], "u@test.com", "delete me"
+        )
+
+        session = WorkspaceSession(workspace["id"])
+        session.subscribers.add(sock)
+        wshandler.state.sessions[workspace["id"]] = session
+
+        await conn.handle_chat_delete({"message_id": msg["id"]})
+
+        calls = [c[0][0] for c in sock.send_json.call_args_list]
+        updated = [c for c in calls if c.get("type") == "chat_updated"]
+        assert len(updated) == 1
+        assert updated[0]["message_id"] == msg["id"]
+        assert updated[0]["message"] == "<message deleted by author>"
+
+        wshandler.state.sessions.pop(workspace["id"], None)
+
+    async def test_chat_delete_wrong_user_ignored(self, user):
+        from klangk_backend import model
+
+        workspace = await ws_mod.create_workspace(user["id"], "chat-del-ws2")
+        sock = _mock_sock()
+        conn = _base_conn(ws=sock)
+        conn.workspace_id = workspace["id"]
+
+        msg = await model.add_chat_message(
+            workspace["id"], "other-uid", "other@test.com", "not yours"
+        )
+
+        await conn.handle_chat_delete({"message_id": msg["id"]})
+        sock.send_json.assert_not_called()
+
+    async def test_chat_delete_no_workspace(self):
+        sock = _mock_sock()
+        conn = _base_conn(ws=sock)
+        await conn.handle_chat_delete({"message_id": "x"})
+        sock.send_json.assert_not_called()
+
+    async def test_chat_delete_no_message_id(self):
+        sock = _mock_sock()
+        conn = _base_conn(ws=sock)
+        conn.workspace_id = "ws"
+        await conn.handle_chat_delete({})
+        sock.send_json.assert_not_called()
