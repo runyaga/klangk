@@ -5,6 +5,7 @@ import 'auth/auth_service.dart';
 import 'auth/pending_redirect.dart';
 import 'theme/colors.dart';
 import 'admin/admin_users_page.dart';
+import 'auth/consent_page.dart';
 import 'auth/login_page.dart';
 import 'auth/verify_page.dart';
 import 'auth/forgot_password_page.dart';
@@ -59,11 +60,21 @@ class _KlangkAppState extends State<KlangkApp> {
       redirect: (context, state) {
         final isLoggedIn = auth.isLoggedIn;
         final loc = state.matchedLocation;
+
+        // Banner gate — blocks everything until accepted
+        if (auth.bannerRequired && loc != '/consent') {
+          return '/consent';
+        }
+        if (!auth.bannerRequired && loc == '/consent') {
+          return '/login';
+        }
+
         final publicRoutes = {
           '/login',
           '/verify',
           '/forgot-password',
-          '/reset-password'
+          '/reset-password',
+          '/consent',
         };
         if (!isLoggedIn && !publicRoutes.contains(loc)) {
           if (loc != '/' && loc != '/workspaces') {
@@ -81,6 +92,10 @@ class _KlangkAppState extends State<KlangkApp> {
         GoRoute(
           path: '/',
           redirect: (_, __) => '/workspaces',
+        ),
+        GoRoute(
+          path: '/consent',
+          builder: (context, state) => const ConsentPage(),
         ),
         GoRoute(
           path: '/login',

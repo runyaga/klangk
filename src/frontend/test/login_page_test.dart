@@ -15,14 +15,35 @@ void main() {
     testBaseUrlOverride = 'http://localhost:8997';
     SharedPreferences.setMockInitialValues({});
     testAuthHttpClientOverride = null;
+    testConfigHttpClientOverride = null;
     pendingRedirect = null;
   });
 
   tearDown(() {
     testBaseUrlOverride = null;
     testAuthHttpClientOverride = null;
+    testConfigHttpClientOverride = null;
     pendingRedirect = null;
   });
+
+  // Provide a mock config client that returns no banner by default,
+  // so login page tests don't need to worry about the AuthService config fetch.
+  http.Client _configClient({bool registrationEnabled = true}) {
+    return MockClient((request) async {
+      if (request.url.path.contains('/api/config')) {
+        return http.Response(
+          jsonEncode({
+            'soliplex_url': '',
+            'registration_enabled': registrationEnabled,
+            'login_banner_title': '',
+            'login_banner': '',
+          }),
+          200,
+        );
+      }
+      return http.Response('Not found', 404);
+    });
+  }
 
   Widget buildLoginPage() {
     return ChangeNotifierProvider(
@@ -490,6 +511,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Invalid credentials'), findsOneWidget);
+    });
+
+    testWidgets('hides register toggle when registration disabled',
+        (tester) async {
+      testConfigHttpClientOverride = _configClient(registrationEnabled: false);
+
+      await tester.pumpWidget(buildLoginPage());
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Create one'), findsNothing);
+      expect(find.text('Log In'), findsWidgets);
     });
   });
 }

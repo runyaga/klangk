@@ -10,6 +10,9 @@ import 'pending_redirect.dart';
 import '../utils/page_title.dart';
 import '../widgets/klangk_logo.dart';
 
+/// Override for testing — set to intercept HTTP calls in _loadConfig.
+http.Client? testConfigHttpClientOverride;
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key}); // coverage:ignore-line
 
@@ -35,9 +38,9 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _loadConfig() async {
-    // coverage:ignore-start
     try {
-      final response = await http.get(Uri.parse('${baseUrl}/api/config'));
+      final client = testConfigHttpClientOverride ?? http.Client();
+      final response = await client.get(Uri.parse('${baseUrl}/api/config'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (mounted) {
@@ -46,8 +49,8 @@ class _LoginPageState extends State<LoginPage> {
           });
         }
       }
-    } catch (_) {}
-  } // coverage:ignore-end
+    } catch (_) {} // coverage:ignore-line
+  }
 
   @override
   void dispose() {

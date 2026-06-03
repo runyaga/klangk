@@ -18,6 +18,22 @@ void main() {
     testAuthHttpClientOverride = null;
   });
 
+  /// Mock client that returns empty config for /api/config and 404 otherwise.
+  http.Client _emptyConfigClient() {
+    return MockClient((request) async {
+      if (request.url.path.contains('/api/config')) {
+        return http.Response(
+          jsonEncode({
+            'login_banner_title': '',
+            'login_banner': '',
+          }),
+          200,
+        );
+      }
+      return http.Response('Not found', 404);
+    });
+  }
+
   group('AuthService initial state', () {
     test('starts not logged in', () {
       final service = AuthService();
@@ -27,6 +43,7 @@ void main() {
     });
 
     test('loads token from SharedPreferences', () async {
+      testAuthHttpClientOverride = _emptyConfigClient();
       SharedPreferences.setMockInitialValues({'klangk_jwt': 'saved-token'});
       final service = AuthService();
       await Future.delayed(Duration.zero);
@@ -36,11 +53,132 @@ void main() {
     });
 
     test('notifies listeners on initialization', () async {
+      testAuthHttpClientOverride = _emptyConfigClient();
       bool notified = false;
       final service = AuthService();
       service.addListener(() => notified = true);
       await Future.delayed(Duration.zero);
       expect(notified, isTrue);
+    });
+  });
+
+  group('AuthService banner', () {
+    http.Client _bannerClient({
+      String bannerTitle = '',
+      String bannerText = '',
+    }) {
+      return MockClient((request) async {
+        if (request.url.path.contains('/api/config')) {
+          return http.Response(
+            jsonEncode({
+              'login_banner_title': bannerTitle,
+              'login_banner': bannerText,
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+    }
+
+    test('loads banner from /api/config', () async {
+      testAuthHttpClientOverride = _bannerClient(
+        bannerTitle: 'Notice',
+        bannerText: 'You must accept.',
+      );
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerTitle, 'Notice');
+      expect(service.bannerText, 'You must accept.');
+      expect(service.bannerRequired, isTrue);
+      expect(service.bannerAccepted, isFalse);
+    });
+
+    test('bannerRequired is false when no banner text', () async {
+      testAuthHttpClientOverride = _bannerClient();
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerRequired, isFalse);
+    });
+
+    test('previously accepted banner sets bannerAccepted', () async {
+      const bannerText = 'Accept this.';
+      SharedPreferences.setMockInitialValues({
+        'klangk_banner_accepted': bannerText.hashCode.toString(),
+      });
+      testAuthHttpClientOverride = _bannerClient(bannerText: bannerText);
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerAccepted, isTrue);
+      expect(service.bannerRequired, isFalse);
+    });
+
+    test('changed banner text requires re-acceptance', () async {
+      SharedPreferences.setMockInitialValues({
+        'klangk_banner_accepted': 'old-text'.hashCode.toString(),
+      });
+      testAuthHttpClientOverride = _bannerClient(bannerText: 'new-text');
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerAccepted, isFalse);
+      expect(service.bannerRequired, isTrue);
+    });
+
+    test('acceptBanner persists and notifies', () async {
+      testAuthHttpClientOverride = _bannerClient(bannerText: 'Accept me.');
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerRequired, isTrue);
+
+      bool notified = false;
+      service.addListener(() => notified = true);
+
+      await service.acceptBanner();
+
+      expect(service.bannerAccepted, isTrue);
+      expect(service.bannerRequired, isFalse);
+      expect(notified, isTrue);
+
+      // Verify persisted in SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      expect(
+        prefs.getString('klangk_banner_accepted'),
+        'Accept me.'.hashCode.toString(),
+      );
+    });
+
+    test('acceptBanner is no-op when banner text is empty', () async {
+      testAuthHttpClientOverride = _bannerClient();
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      await service.acceptBanner();
+      expect(service.bannerAccepted, isFalse);
+    });
+
+    test('config fetch failure is silent', () async {
+      testAuthHttpClientOverride = MockClient((request) async {
+        throw Exception('Network error');
+      });
+
+      final service = AuthService();
+      await Future.delayed(Duration.zero);
+
+      expect(service.bannerTitle, '');
+      expect(service.bannerText, '');
+      expect(service.bannerRequired, isFalse);
+      expect(service.initialized, isTrue);
     });
   });
 

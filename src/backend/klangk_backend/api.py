@@ -85,6 +85,8 @@ if resolve_env_secret("KLANGK_TEST_MODE"):  # pragma: no cover
 # --- Config endpoint ---
 
 SOLIPLEX_URL = resolve_env_secret("SOLIPLEX_URL", "")
+LOGIN_BANNER_TITLE = resolve_env_secret("KLANGK_LOGIN_BANNER_TITLE", "")
+LOGIN_BANNER = resolve_env_secret("KLANGK_LOGIN_BANNER", "")
 
 
 @router.get("/api/config")
@@ -92,6 +94,8 @@ async def get_config():
     return {
         "soliplex_url": SOLIPLEX_URL,
         "registration_enabled": auth.registration_enabled(),
+        "login_banner_title": LOGIN_BANNER_TITLE,
+        "login_banner": LOGIN_BANNER,
     }
 
 

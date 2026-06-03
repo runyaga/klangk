@@ -60,7 +60,19 @@ class TestConfig:
     async def test_get_config(self, client):
         resp = await client.get("/api/config")
         assert resp.status_code == 200
-        assert "soliplex_url" in resp.json()
+        data = resp.json()
+        assert "soliplex_url" in data
+        assert "login_banner_title" in data
+        assert "login_banner" in data
+
+    async def test_get_config_banner_fields(self, client, monkeypatch):
+        monkeypatch.setattr(api, "LOGIN_BANNER_TITLE", "Notice")
+        monkeypatch.setattr(api, "LOGIN_BANNER", "You must accept terms.")
+        resp = await client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["login_banner_title"] == "Notice"
+        assert data["login_banner"] == "You must accept terms."
 
 
 # --- Auth routes ---

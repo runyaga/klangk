@@ -16,11 +16,18 @@ class AuthService extends ChangeNotifier {
   String? _token;
   bool _loading = false;
   bool _initialized = false;
+  String _bannerTitle = '';
+  String _bannerText = '';
+  bool _bannerAccepted = false;
 
   String? get token => _token;
   bool get isLoggedIn => _token != null;
   bool get loading => _loading;
   bool get initialized => _initialized;
+  String get bannerTitle => _bannerTitle;
+  String get bannerText => _bannerText;
+  bool get bannerAccepted => _bannerAccepted;
+  bool get bannerRequired => _bannerText.isNotEmpty && !_bannerAccepted;
 
   /// Decode the JWT payload.
   Map<String, dynamic>? get _payload {
@@ -53,7 +60,32 @@ class AuthService extends ChangeNotifier {
   Future<void> _loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString(_tokenKey);
+
+    try {
+      final client = testAuthHttpClientOverride ?? http.Client();
+      final resp = await client.get(Uri.parse('$_baseUrl/api/config'));
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        _bannerTitle = (data['login_banner_title'] as String?) ?? '';
+        _bannerText = (data['login_banner'] as String?) ?? '';
+      }
+    } catch (_) {} // coverage:ignore-line
+
+    if (_bannerText.isNotEmpty) {
+      final acceptedHash = prefs.getString('klangk_banner_accepted');
+      _bannerAccepted = acceptedHash == _bannerText.hashCode.toString();
+    }
+
     _initialized = true;
+    notifyListeners();
+  }
+
+  Future<void> acceptBanner() async {
+    if (_bannerText.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        'klangk_banner_accepted', _bannerText.hashCode.toString());
+    _bannerAccepted = true;
     notifyListeners();
   }
 
