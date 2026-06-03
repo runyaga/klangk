@@ -54,17 +54,17 @@ class _ItsTimeOverlayState extends State<_ItsTimeOverlay> {
   }
 
   void _createVideo() {
-    // Asset URL in Flutter web build
-    final assetUrl = 'assets/packages/klangk_plugin_itstime/assets/itstime.mp4';
-    final js =
-        '''
+    final js = '''
       (function() {
         if (document.getElementById('itstime-overlay')) return;
+        var base = document.querySelector('base');
+        var baseHref = base ? base.getAttribute('href') || '/' : '/';
+        var assetUrl = baseHref + 'assets/packages/klangk_plugin_itstime/assets/itstime.mp4';
         var overlay = document.createElement('div');
         overlay.id = 'itstime-overlay';
         overlay.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;cursor:pointer;';
         var video = document.createElement('video');
-        video.src = '$assetUrl';
+        video.src = assetUrl;
         video.autoplay = true;
         video.style.cssText = 'max-width:80vw;max-height:80vh;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.8);';
         overlay.appendChild(video);
