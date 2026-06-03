@@ -9,7 +9,7 @@ import '../theme/colors.dart';
 class IdeLayout extends StatefulWidget {
   final Widget fileViewer;
   final Widget terminal;
-  final WorkspaceChat? chat;
+  final Widget? chat;
   final Widget? debug;
   final GlobalKey<ContainerTerminalState>? terminalKey;
   final GlobalKey<FileViewerPanelState>? fileViewerKey;
