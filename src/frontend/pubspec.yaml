@@ -12,6 +12,11 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.0
   xterm: ^4.0.0
+  # flterm 0.0.3 requires Dart 3.12 / Flutter 3.44 (uses the private-named-
+  # parameters language feature), so the frontend builds with the host's
+  # Flutter, not the nix one (3.41). See scripts/flutterbuildweb.sh.
+  flterm: ^0.0.3
+  libghostty: ^0.0.9
   google_fonts: ^8.1.0
   web_socket_channel: ^3.0.0
   http: ^1.2.0
@@ -36,3 +41,17 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/fonts/
+    - assets/libghostty-wasm32-freestanding.wasm
+
+  fonts:
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
+    - family: Noto Emoji
+      fonts:
+        - asset: assets/fonts/NotoEmoji-Regular.ttf

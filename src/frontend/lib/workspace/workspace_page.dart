@@ -14,7 +14,7 @@ import '../widgets/app_bar_actions.dart';
 import '../widgets/app_bar_title.dart';
 import '../file_viewer/file_viewer_panel.dart';
 import '../layout/ide_layout.dart';
-import '../terminal/container_terminal.dart';
+import '../terminal/ghostty_terminal.dart';
 import '../browser/browser_delegate.dart';
 import '../chat/workspace_chat.dart';
 import '../debug/debug_panel.dart';
@@ -29,7 +29,7 @@ class WorkspacePage extends StatefulWidget {
 }
 
 class _WorkspacePageState extends State<WorkspacePage> {
-  final _terminalKey = GlobalKey<ContainerTerminalState>();
+  final _terminalKey = GlobalKey<GhosttyTerminalState>();
   final _fileViewerKey = GlobalKey<FileViewerPanelState>();
   final _chatKey = GlobalKey<WorkspaceChatState>();
   bool _connecting = true;
@@ -243,7 +243,7 @@ class _WorkspacePageState extends State<WorkspacePage> {
               workspaceId: widget.workspaceId,
               authToken: authToken,
             ),
-            terminal: ContainerTerminal(key: _terminalKey, wsClient: wsClient),
+            terminal: GhosttyTerminal(key: _terminalKey, wsClient: wsClient),
             chat: WorkspaceChat(key: _chatKey, wsClient: wsClient),
             terminalKey: _terminalKey,
             fileViewerKey: _fileViewerKey,

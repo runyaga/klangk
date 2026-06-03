@@ -10,7 +10,24 @@ if [ -f "$KLANGK_PLUGINS_DIR/plugins.yaml" ] && [ ! -f "$KLANGK_PLUGINS_DIR/plug
 fi
 
 python3 scripts/import_dart_plugins.py
-cd src/frontend && flutter --disable-analytics && flutter pub get && flutter build web --release --base-href=/ --no-wasm-dry-run --no-web-resources-cdn
+
+# The frontend depends on flterm >=0.0.3, which requires Dart 3.12 / Flutter
+# 3.44 (private-named-parameters language feature). The nix toolchain ships
+# Flutter 3.41 / Dart 3.11, so the web build runs against a host Flutter.
+# Override the binary with KLANGK_WEB_FLUTTER (e.g. /opt/homebrew/bin/flutter);
+# defaults to whatever `flutter` is on PATH.
+FLUTTER="${KLANGK_WEB_FLUTTER:-flutter}"
+DART_VER="$("$FLUTTER" --version 2>/dev/null | grep -oiE 'Dart (SDK version: )?[0-9]+\.[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+if [ -n "$DART_VER" ]; then
+  IFS=. read -r DMAJ DMIN _ <<<"$DART_VER"
+  if [ "$DMAJ" -lt 3 ] || { [ "$DMAJ" -eq 3 ] && [ "$DMIN" -lt 12 ]; }; then
+    echo "ERROR: $FLUTTER ships Dart $DART_VER, but flterm >=0.0.3 needs Dart >=3.12." >&2
+    echo "       Set KLANGK_WEB_FLUTTER to a Flutter 3.44+ install (e.g. host Homebrew)." >&2
+    exit 1
+  fi
+fi
+
+cd src/frontend && "$FLUTTER" --disable-analytics && "$FLUTTER" pub get && "$FLUTTER" build web --release --base-href=/ --no-wasm-dry-run --no-web-resources-cdn
 rm -f build/web/flutter_service_worker.js
 
 # Cache-busting: append a content hash to flutter_bootstrap.js reference
