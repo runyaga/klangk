@@ -63,15 +63,23 @@ void main() {
       client.dispose();
     });
 
-    Widget buildChat() {
+    Widget buildChat({
+      AuthService? authService,
+      ValueChanged<int>? onUnreadChanged,
+      GlobalKey<WorkspaceChatState>? chatKey,
+    }) {
       return ChangeNotifierProvider(
-        create: (_) => AuthService(),
+        create: (_) => authService ?? AuthService(),
         child: MaterialApp(
           home: Scaffold(
             body: SizedBox(
               width: 800,
               height: 600,
-              child: WorkspaceChat(wsClient: client),
+              child: WorkspaceChat(
+                key: chatKey,
+                wsClient: client,
+                onUnreadChanged: onUnreadChanged,
+              ),
             ),
           ),
         ),
@@ -170,6 +178,246 @@ void main() {
 
       // Widget should still be rendered without errors
       expect(find.byType(WorkspaceChat), findsOneWidget);
+    });
+
+    testWidgets('chat_updated replaces message text in place', (tester) async {
+      await tester.pumpWidget(buildChat());
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-1',
+          'user_email': 'alice@test.com',
+          'message': 'original text',
+          'created_at': '2026-01-01 00:00:00',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      // Verify original text is rendered in a TextSpan
+      bool hasOriginal = false;
+      for (final rt in tester.widgetList<RichText>(find.byType(RichText))) {
+        final span = rt.text;
+        if (span is TextSpan && span.children != null) {
+          for (final child in span.children!) {
+            if (child is TextSpan && child.text == 'original text') {
+              hasOriginal = true;
+            }
+          }
+        }
+      }
+      expect(hasOriginal, isTrue);
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_updated',
+          'message_id': 'msg-1',
+          'message': '<message deleted by author>',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      // Original text should be gone, replaced text should appear
+      bool hasDeleted = false;
+      bool stillHasOriginal = false;
+      for (final rt in tester.widgetList<RichText>(find.byType(RichText))) {
+        final span = rt.text;
+        if (span is TextSpan && span.children != null) {
+          for (final child in span.children!) {
+            if (child is TextSpan && child.text == 'original text') {
+              stillHasOriginal = true;
+            }
+            if (child is TextSpan &&
+                child.text == '<message deleted by author>') {
+              hasDeleted = true;
+            }
+          }
+        }
+      }
+      expect(stillHasOriginal, isFalse);
+      expect(hasDeleted, isTrue);
+    });
+
+    testWidgets('delete button shown for own messages', (tester) async {
+      final fakeJwt = base64Url.encode(utf8.encode('{"alg":"HS256"}')) +
+          '.' +
+          base64Url.encode(
+              utf8.encode('{"sub":"test-uid","email":"test@test.com"}')) +
+          '.sig';
+      SharedPreferences.setMockInitialValues({'klangk_jwt': fakeJwt});
+      final auth = AuthService();
+      await tester.runAsync(() => Future.delayed(Duration.zero));
+
+      await tester.pumpWidget(buildChat(authService: auth));
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-own',
+          'user_id': 'test-uid',
+          'user_email': 'test@test.com',
+          'message': 'my message',
+          'created_at': '2026-01-01 00:00:00',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      expect(find.byIcon(Icons.close), findsOneWidget);
+    });
+
+    testWidgets('delete button calls sendChatDelete', (tester) async {
+      final fakeJwt = base64Url.encode(utf8.encode('{"alg":"HS256"}')) +
+          '.' +
+          base64Url.encode(
+              utf8.encode('{"sub":"test-uid","email":"test@test.com"}')) +
+          '.sig';
+      SharedPreferences.setMockInitialValues({'klangk_jwt': fakeJwt});
+      final auth = AuthService();
+      await tester.runAsync(() => Future.delayed(Duration.zero));
+
+      await tester.pumpWidget(buildChat(authService: auth));
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-del',
+          'user_id': 'test-uid',
+          'user_email': 'test@test.com',
+          'message': 'delete me',
+          'created_at': '2026-01-01 00:00:00',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+
+      final msgs = channel._sink.sent
+          .map((s) => jsonDecode(s as String) as Map<String, dynamic>)
+          .toList();
+      final delMsgs = msgs.where((m) => m['cmd'] == 'chat_delete').toList();
+      expect(delMsgs.length, 1);
+      expect(delMsgs[0]['message_id'], 'msg-del');
+    });
+
+    testWidgets('deleted message shown in italic without delete button',
+        (tester) async {
+      final fakeJwt = base64Url.encode(utf8.encode('{"alg":"HS256"}')) +
+          '.' +
+          base64Url.encode(
+              utf8.encode('{"sub":"test-uid","email":"test@test.com"}')) +
+          '.sig';
+      SharedPreferences.setMockInitialValues({'klangk_jwt': fakeJwt});
+      final auth = AuthService();
+      await tester.runAsync(() => Future.delayed(Duration.zero));
+
+      await tester.pumpWidget(buildChat(authService: auth));
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-deleted',
+          'user_id': 'test-uid',
+          'user_email': 'test@test.com',
+          'message': '<message deleted by author>',
+          'created_at': '2026-01-01 00:00:00',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      // No delete button for already-deleted messages
+      expect(find.byIcon(Icons.close), findsNothing);
+
+      // Verify italic style via RichText TextSpan
+      final richTexts = tester.widgetList<RichText>(find.byType(RichText));
+      bool foundItalic = false;
+      for (final rt in richTexts) {
+        final span = rt.text;
+        if (span is TextSpan && span.children != null) {
+          for (final child in span.children!) {
+            if (child is TextSpan &&
+                child.text == '<message deleted by author>' &&
+                child.style?.fontStyle == FontStyle.italic) {
+              foundItalic = true;
+            }
+          }
+        }
+      }
+      expect(foundItalic, isTrue);
+    });
+
+    testWidgets('formats timestamp for this-week messages', (tester) async {
+      await tester.pumpWidget(buildChat());
+
+      // Send a message dated yesterday (within this week but not today)
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final utcYesterday = yesterday.toUtc();
+      final ts =
+          '${utcYesterday.year}-${utcYesterday.month.toString().padLeft(2, '0')}-${utcYesterday.day.toString().padLeft(2, '0')} '
+          '${utcYesterday.hour.toString().padLeft(2, '0')}:${utcYesterday.minute.toString().padLeft(2, '0')}:${utcYesterday.second.toString().padLeft(2, '0')}';
+
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-week',
+          'user_email': 'user@test.com',
+          'message': 'yesterday msg',
+          'created_at': ts,
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      // Verify a day-of-week abbreviation is rendered (Mon, Tue, etc.)
+      final dayAbbrevs = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      final allText = <String>[];
+      for (final textWidget in tester.widgetList<Text>(find.byType(Text))) {
+        if (textWidget.data != null) allText.add(textWidget.data!);
+      }
+      final hasDayAbbrev =
+          allText.any((t) => dayAbbrevs.any((d) => t.contains(d)));
+      expect(hasDayAbbrev, isTrue);
+    });
+
+    testWidgets('setVisible clears unread count', (tester) async {
+      final unreadCounts = <int>[];
+      final chatKey = GlobalKey<WorkspaceChatState>();
+
+      await tester.pumpWidget(buildChat(
+        onUnreadChanged: (count) => unreadCounts.add(count),
+        chatKey: chatKey,
+      ));
+
+      // Send a message while not visible (default _isVisible is false)
+      await tester.runAsync(() async {
+        channel.serverSend({
+          'type': 'chat_message',
+          'id': 'msg-unread',
+          'user_email': 'user@test.com',
+          'message': 'unread msg',
+          'created_at': '2026-01-01 00:00:00',
+        });
+        await Future.delayed(Duration.zero);
+        await Future.delayed(Duration.zero);
+      });
+      await tester.pump();
+
+      expect(unreadCounts, [1]);
+
+      // Now set visible — should clear unread
+      chatKey.currentState!.setVisible(true);
+      expect(unreadCounts, [1, 0]);
     });
   });
 }

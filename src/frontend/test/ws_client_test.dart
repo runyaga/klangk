@@ -482,10 +482,32 @@ void main() {
       expect(messages[1]['message'], 'second');
     });
 
+    test('chat_updated routed to chatMessages stream', () async {
+      final messages = <Map<String, dynamic>>[];
+      client.chatMessages.listen(messages.add);
+
+      channel.serverSend({
+        'type': 'chat_updated',
+        'message_id': 'msg-1',
+        'message': '<message deleted by author>',
+      });
+      await Future.delayed(Duration.zero);
+
+      expect(messages.length, 1);
+      expect(messages[0]['type'], 'chat_updated');
+      expect(messages[0]['message_id'], 'msg-1');
+    });
+
     test('sendChatMessage sends correct command', () {
       client.sendChatMessage('hello world');
       final msg = jsonDecode(channel.sentMessages.last as String);
       expect(msg, {'cmd': 'chat_send', 'message': 'hello world'});
+    });
+
+    test('sendChatDelete sends correct command', () {
+      client.sendChatDelete('msg-42');
+      final msg = jsonDecode(channel.sentMessages.last as String);
+      expect(msg, {'cmd': 'chat_delete', 'message_id': 'msg-42'});
     });
 
     test('chatMessages stream is broadcast', () {
