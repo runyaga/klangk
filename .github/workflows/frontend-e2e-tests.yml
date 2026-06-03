@@ -2,6 +2,15 @@ name: Flutter E2E Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      project:
+        description: "Playwright project (chromium|firefox|webkit); blank = all"
+        required: false
+        default: ""
+      grep:
+        description: "-g pattern to filter tests; blank = all"
+        required: false
+        default: ""
   schedule:
     - cron: "15 * * * *"
 
@@ -58,7 +67,10 @@ jobs:
       - name: Run E2E tests
         run: |
           . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
-          devenv shell -- test-frontend-e2e
+          ARGS=()
+          if [ -n "${{ inputs.project }}" ]; then ARGS+=(--project="${{ inputs.project }}" --no-deps); fi
+          if [ -n "${{ inputs.grep }}" ]; then ARGS+=(-g "${{ inputs.grep }}"); fi
+          devenv shell -- test-frontend-e2e "${ARGS[@]}"
 
       - name: Upload test results
         if: always()
