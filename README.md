@@ -92,6 +92,8 @@ All settings can be overridden in `.env`. Defaults are provided in `devenv.nix` 
 | `KLANGK_DEFAULT_PASSWORD`     |                                | Auto-seeded password on startup (omit to generate random)          |
 | `KLANGK_MIN_PASSWORD_LENGTH`  | `4`                            | Minimum password length                                            |
 | `KLANGK_DISABLE_REGISTRATION` |                                | Set to `true` to block signups and hide the registration link      |
+| `KLANGK_LOGIN_BANNER_TITLE`   |                                | Title for consent banner page (e.g., company name)                 |
+| `KLANGK_LOGIN_BANNER`         |                                | Consent banner text; blocks all access until accepted (`file:` OK) |
 
 ### Ports
 
