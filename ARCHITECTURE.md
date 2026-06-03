@@ -70,7 +70,7 @@ In CI, `devenv processes up -d` starts nginx before E2E tests run.
 - JWT tokens (24hr expiry, secret configurable via KLANGK_JWT_SECRET) with token blocklist for logout, roles claim in JWT payload
 - Role-based access control: `roles` and `user_roles` tables, `require_role()` FastAPI dependency for endpoint protection
 - Default user auto-seeded on startup with admin role (configurable via KLANGK_DEFAULT_USER/PASSWORD in .env)
-- Admin user management: list/add/edit/delete users, toggle roles, user data archived to tar.xz on deletion, self-deletion prevented
+- Admin user management: list/add/edit/delete users, toggle roles, user data archived to tar.xz on deletion, self-deletion prevented. Admin create-user endpoint (`POST /admin/users`) creates verified users directly without email verification.
 - Open registration with email verification (test mode auto-verifies for E2E tests)
 - Login rejects unverified accounts
 - Login brute-force protection: failed attempts tracked per email in SQLite; `KLANGK_LOGIN_LOCKOUT_FAILURES=N` failures within `KLANGK_LOGIN_LOCKOUT_WINDOW=S` (default 300s) triggers a `KLANGK_LOGIN_LOCKOUT_DURATION=D` (default 900s) lockout (429 with remaining seconds). Disabled by default (N=0).
@@ -81,10 +81,12 @@ In CI, `devenv processes up -d` starts nginx before E2E tests run.
 
 - Multiple workspaces per user
 - Each workspace gets its own Docker container + bind-mounted directory
+- **Workspace sharing**: owners can grant access to other users via the edit dialog (autocomplete user search) or API (`POST /workspaces/{id}/members`). Shared users connect to the same container and see the workspace in a "Shared with Me" section on their workspace list. File API resolves paths using the owner's directory. Shared member avatars (first letter of email) shown on workspace cards.
 - URL-based workspace routing (survives page reload via hash URL reading)
 - Deep link preservation: unauthenticated visits to protected URLs redirect to login with a `?redirect=` param, then return to the original URL after successful login
 - Workspace name and logged-in user email shown in app bar, browser tab title
 - Containers stay alive after disconnect — idle timeout handles cleanup
+- On logout, containers are only stopped if no other users are actively connected to shared workspaces
 - Container lifecycle visible in debug panel
 
 ### Pi Agent Integration
@@ -102,7 +104,7 @@ In CI, `devenv processes up -d` starts nginx before E2E tests run.
 - `/bin/sh` symlinked to `/bin/bash` in the base image so Pi's bash tool supports bashisms (`source`, etc.)
 - System prompt (`src/docker/system-prompt.md`) copied into image at build time. Instructs the agent to: create virtualenvs for Python projects, run `npm init` for Node projects, background long-running servers, always use `get_hosted_url` for fresh URLs, show full URLs as link text, and warn users that container restarts kill running processes
 - 30-minute idle timeout (configurable via `KLANGK_IDLE_TIMEOUT_SECONDS`) with automatic container stop, debug notification, and terminal overlay with restart button. Activity is recorded on user actions (prompt, steer, terminal input) and on every Pi event (tool calls, text streaming), so containers stay alive during long-running LLM requests as long as events are flowing. Stuck tool executions (e.g., foreground server) produce no events and will eventually time out.
-- All user containers stopped on logout and backend shutdown
+- Containers stopped on logout only if no other users are actively connected; backend shutdown stops all containers
 - Read-only root filesystem (`ReadonlyRootfs: True`) — the agent cannot modify system files or install packages outside the workspace. Writable paths:
   - `/home/klangk` — bind mount to host (`$KLANGK_DATA_DIR/workspaces/<user>/home/<workspace>/`). Contains `work/` subdirectory for user files, plus dotfiles (`.bashrc`, `.vimrc`, `.gitconfig`), bash history, and Pi sessions. All persist across container restarts. Pi agent config (`.pi/agent/`) is cleaned and regenerated each start.
   - `/tmp` — tmpfs (scratch space)
@@ -451,24 +453,24 @@ Pi extensions inside the container can delegate actions to the browser via the b
 
 ### How it works
 
-Extensions POST to `http://host.docker.internal:<nginx_port>/api/browser-delegate` with a bridge token (set as `KLANGK_BRIDGE_TOKEN` in the container env). The backend resolves the token to a workspace, relays the request to the Flutter client over the existing WebSocket, and returns the browser's response as the HTTP response.
+Extensions POST to `http://host.docker.internal:<nginx_port>/api/browser-delegate` with a bridge token. Each terminal exec session gets its own per-connection bridge token injected via the Docker exec environment (`KLANGK_BRIDGE_TOKEN`), overriding any container-level env. The backend resolves the token to the specific browser connection that owns the terminal and relays the request over the existing WebSocket. Only a response from that specific connection is accepted (preventing spoofing from other tabs or users sharing the same workspace).
 
 ### Flow
 
 ```text
 LLM calls tool → Pi extension execute()
   → HTTP POST to /api/browser-delegate {action, token, ...}
-  → Backend resolves token → workspace_id
-  → WebSocket message: {"type":"browser_request","id":"...","action":"..."}
+  → Backend resolves token → (workspace_id, target_connection)
+  → WebSocket message to target only: {"type":"browser_request","id":"...","action":"..."}
   → Flutter BrowserDelegate handles action (fetch, celebrate, etc.)
   → WebSocket message: {"cmd":"browser_response","id":"...","data":"..."}
-  → Backend returns HTTP response to extension
+  → Backend verifies sender matches target, returns HTTP response to extension
   → Extension returns result to LLM
 ```
 
 Built-in actions: `fetch` (HTTP request with browser cookies). All other actions are dispatched to the `ToolPluginRegistry` which routes to Dart plugin handlers registered by `klangk/` subdirectories.
 
-Bridge tokens are per-workspace UUIDs, created on container start, revoked on stop. The `@klangk/bridge` npm package provides `browserFetch()`, `browserAction()`, and `isBridgeAvailable()` helpers for extension authors.
+Bridge tokens are per-connection UUIDs, created when a terminal session starts, revoked on connection cleanup or terminal restart. The `@klangk/bridge` npm package provides `browserFetch()`, `browserAction()`, and `isBridgeAvailable()` helpers for extension authors.
 
 ### Current client-side tools
 
