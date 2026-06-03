@@ -62,8 +62,8 @@ class _KlangkAppState extends State<KlangkApp> {
         final loc = state.matchedLocation;
 
         // Banner gate — blocks everything until accepted
-        if (auth.bannerRequired && loc != '/consent') {
-          return '/consent';
+        if (auth.bannerRequired) {
+          return loc == '/consent' ? null : '/consent';
         }
         if (!auth.bannerRequired && loc == '/consent') {
           return '/login';
