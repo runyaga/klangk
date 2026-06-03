@@ -28,7 +28,7 @@ async def seed_default_user() -> None:
 
     import bcrypt
 
-    email = resolve_env_secret("KLANGK_DEFAULT_USER", "admin")
+    email = resolve_env_secret("KLANGK_DEFAULT_USER", "admin@example.com")
     password = resolve_env_secret("KLANGK_DEFAULT_PASSWORD")
     existing = await model.get_user_by_email(email)
     if existing is None:
