@@ -422,6 +422,64 @@ class TestHandleTerminalStart:
         container.registry.revoke_bridge_token("ws")
         container.registry.states.pop("ws", None)
 
+    async def test_restart_revokes_old_bridge_token(self):
+        """Starting a second terminal revokes the previous bridge token."""
+        sock = _mock_sock()
+        conn = _base_conn(ws=sock)
+        conn.container_id = "cid"
+        conn.workspace_id = "ws"
+        container.registry.track_activity("cid", "ws")
+
+        with patch.object(wshandler, "TerminalSession") as MockTS:
+            mock_session = _mock_terminal()
+            MockTS.return_value = mock_session
+
+            async def fake_output():
+                return
+                yield
+
+            mock_session.output = fake_output
+
+            # First terminal start
+            await conn.handle_terminal_start({"cols": 80, "rows": 24})
+            await asyncio.sleep(0)
+            first_token = conn._bridge_token
+            assert first_token is not None
+            assert (
+                container.registry.resolve_bridge_token(first_token)
+                is not None
+            )
+
+            # Cancel the first terminal task
+            conn.terminal_task.cancel()
+            try:
+                await conn.terminal_task
+            except asyncio.CancelledError:
+                pass
+
+            # Second terminal start — should revoke first token
+            await conn.handle_terminal_start({"cols": 80, "rows": 24})
+            await asyncio.sleep(0)
+            second_token = conn._bridge_token
+            assert second_token is not None
+            assert second_token != first_token
+
+            # Old token should be revoked
+            assert container.registry.resolve_bridge_token(first_token) is None
+            # New token should be valid
+            assert (
+                container.registry.resolve_bridge_token(second_token)
+                is not None
+            )
+
+            conn.terminal_task.cancel()
+            try:
+                await conn.terminal_task
+            except asyncio.CancelledError:
+                pass
+        container.registry.revoke_bridge_token("ws")
+        container.registry.states.pop("ws", None)
+
     async def test_passes_command_override(self):
         sock = _mock_sock()
         conn = _base_conn(ws=sock)

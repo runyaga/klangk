@@ -820,11 +820,10 @@ class BrowserDelegateRequest(BaseModel):
 async def browser_delegate(body: BrowserDelegateRequest):
     """Bridge endpoint for Pi extensions to delegate actions to the browser.
 
-    The container calls this endpoint with a bridge token (set as
-    KLANGK_BRIDGE_TOKEN in the container env). The backend resolves the
-    token to a workspace_id (and optionally a specific browser connection),
-    relays the request to the Flutter client over WebSocket, and returns
-    the browser's response.
+    Each terminal exec session gets a per-connection bridge token
+    (injected via the exec environment).  The backend resolves the
+    token to the specific browser connection that owns the terminal
+    and relays the request over WebSocket.
     """
     resolved = container.registry.resolve_bridge_token(body.token)
     if resolved is None:

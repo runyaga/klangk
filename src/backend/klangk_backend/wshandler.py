@@ -532,9 +532,10 @@ class Connection:
         command_override = msg.get("commandOverride")
         session = TerminalSession(self.container_id)
 
-        # Create a per-connection bridge token so browser-delegate
-        # requests from this terminal route to the specific browser
-        # that owns this connection.
+        # Revoke any existing bridge token from a previous terminal
+        # session before creating a new one to avoid leaking entries.
+        if self._bridge_token:
+            container.registry.revoke_connection_token(self.sock)
         bridge_token = container.registry.create_bridge_token(
             self.workspace_id, sock=self.sock
         )
@@ -565,9 +566,13 @@ class Connection:
                 conn.sock.send_json({"type": "terminal_started"})
             except asyncio.CancelledError:
                 await session.stop()
+                container.registry.revoke_connection_token(conn.sock)
+                conn._bridge_token = None
                 raise
             except Exception as e:
                 await session.stop()
+                container.registry.revoke_connection_token(conn.sock)
+                conn._bridge_token = None
                 logger.exception("Terminal start failed: %s", e)
                 send_error(conn.sock, f"Terminal start failed: {e}")
 
