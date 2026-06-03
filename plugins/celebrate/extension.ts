@@ -17,9 +17,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Non-destructive terminal fallback for when the Klangk UI isn't connected.
+// Renders in the ALTERNATE screen buffer with autowrap disabled, so it overlays
+// without scrolling or clobbering the user's real terminal content; on exit the
+// original screen is restored exactly.
 async function ansiConfetti(): Promise<void> {
-  const cols = parseInt(process.env.COLUMNS || "80", 10);
-  const rows = parseInt(process.env.LINES || "24", 10);
+  const cols =
+    process.stdout.columns ?? parseInt(process.env.COLUMNS || "80", 10);
+  const rows = process.stdout.rows ?? parseInt(process.env.LINES || "24", 10);
   const particles: { x: number; y: number; ch: string; dy: number }[] = [];
 
   for (let i = 0; i < 40; i++) {
@@ -31,46 +36,36 @@ async function ansiConfetti(): Promise<void> {
     });
   }
 
-  // Save cursor, hide it
-  process.stdout.write("\x1b[s\x1b[?25l");
-
-  for (let frame = 0; frame < 30; frame++) {
-    // Clear previous positions
-    for (const p of particles) {
-      const row = Math.floor(p.y);
-      if (row >= 1 && row <= rows) {
-        process.stdout.write(`\x1b[${row};${p.x + 1}H `);
+  // Enter alt buffer, hide cursor, disable autowrap, clear.
+  process.stdout.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J");
+  try {
+    for (let frame = 0; frame < 30; frame++) {
+      // Clear previous positions
+      for (const p of particles) {
+        const row = Math.floor(p.y);
+        if (row >= 1 && row <= rows) {
+          process.stdout.write(`\x1b[${row};${p.x + 1}H `);
+        }
       }
-    }
-
-    // Update positions
-    for (const p of particles) {
-      p.y += p.dy;
-      p.x += Math.random() < 0.5 ? -1 : 1;
-      p.x = Math.max(0, Math.min(cols - 1, p.x));
-    }
-
-    // Draw new positions
-    for (const p of particles) {
-      const row = Math.floor(p.y);
-      if (row >= 1 && row <= rows) {
-        process.stdout.write(`\x1b[${row};${p.x + 1}H${p.ch}`);
+      // Update positions
+      for (const p of particles) {
+        p.y += p.dy;
+        p.x += Math.random() < 0.5 ? -1 : 1;
+        p.x = Math.max(0, Math.min(cols - 1, p.x));
       }
+      // Draw new positions
+      for (const p of particles) {
+        const row = Math.floor(p.y);
+        if (row >= 1 && row <= rows) {
+          process.stdout.write(`\x1b[${row};${p.x + 1}H${p.ch}`);
+        }
+      }
+      await sleep(80);
     }
-
-    await sleep(80);
+  } finally {
+    // Re-enable autowrap, show cursor, leave alt buffer (restores screen exactly).
+    process.stdout.write("\x1b[?7h\x1b[?25h\x1b[?1049l");
   }
-
-  // Clear all particles
-  for (const p of particles) {
-    const row = Math.floor(p.y);
-    if (row >= 1 && row <= rows) {
-      process.stdout.write(`\x1b[${row};${p.x + 1}H `);
-    }
-  }
-
-  // Restore cursor, show it
-  process.stdout.write("\x1b[u\x1b[?25h");
 }
 
 export default function (pi: any) {
@@ -89,6 +84,8 @@ export default function (pi: any) {
       _onUpdate: any,
       _ctx: any,
     ) {
+      // Primary path: the Flutter ConfettiOverlay in the Klangk UI, triggered
+      // through the browser bridge.
       try {
         const resp = await fetch(`${BRIDGE_URL}/api/browser-delegate`, {
           method: "POST",
@@ -106,10 +103,10 @@ export default function (pi: any) {
           };
         }
       } catch {
-        // Bridge unreachable — fall through to ANSI
+        // Bridge unreachable — fall through to the non-destructive ANSI overlay.
       }
 
-      // No browser connected or bridge failed — ANSI fallback
+      // Fallback: alt-screen ANSI confetti (never scrolls/mangles the terminal).
       try {
         await ansiConfetti();
         return {

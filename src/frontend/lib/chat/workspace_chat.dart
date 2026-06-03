@@ -5,7 +5,7 @@ import '../ws/ws_client.dart';
 import '../theme/colors.dart';
 import '../auth/auth_service.dart';
 import '../utils/web_helpers_stub.dart'
-    if (dart.library.html) '../utils/web_helpers_web.dart';
+    if (dart.library.js_interop) '../utils/web_helpers_web.dart';
 import 'package:provider/provider.dart';
 
 /// Per-workspace real-time chat panel.

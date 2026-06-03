@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../terminal/container_terminal.dart';
+import '../terminal/ghostty_terminal.dart';
 import '../file_viewer/file_viewer_panel.dart';
 import '../chat/workspace_chat.dart';
 import '../theme/colors.dart';
@@ -11,7 +11,7 @@ class IdeLayout extends StatefulWidget {
   final Widget terminal;
   final Widget? chat;
   final Widget? debug;
-  final GlobalKey<ContainerTerminalState>? terminalKey;
+  final GlobalKey<GhosttyTerminalState>? terminalKey;
   final GlobalKey<FileViewerPanelState>? fileViewerKey;
   final GlobalKey<WorkspaceChatState>? chatKey;
 
