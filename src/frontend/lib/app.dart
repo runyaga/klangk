@@ -153,6 +153,7 @@ class _KlangkAppState extends State<KlangkApp> {
     appBarTheme: const AppBarTheme(
       backgroundColor: KColors.bgAppBar,
       foregroundColor: KColors.textPrimary,
+      centerTitle: false,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
