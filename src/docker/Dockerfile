@@ -17,6 +17,12 @@ COPY --from=plugin-tools / /opt/klangk/plugin-tools/
 COPY --from=plugin-extensions / /opt/klangk/pi-agent/extensions/
 COPY builtin-extensions/ /opt/klangk/pi-agent/extensions/
 
+# Herdr: terminal-based agent runtime (persistent sessions, pane API)
+ARG HERDR_VERSION=0.6.6
+RUN curl -fsSL -o /usr/local/bin/herdr \
+    "https://github.com/ogulcancelik/herdr/releases/download/v${HERDR_VERSION}/herdr-linux-x86_64" \
+    && chmod +x /usr/local/bin/herdr
+
 # Entrypoint, system prompt, bash defaults (change frequently during dev)
 COPY system-prompt.md /opt/klangk/system-prompt.md
 COPY entrypoint.sh /opt/klangk/entrypoint.sh
