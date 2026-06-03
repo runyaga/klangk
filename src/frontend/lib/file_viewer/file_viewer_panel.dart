@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import '../ws/ws_client.dart';
 import 'package:klangk_plugin_api/klangk_plugin_api.dart';
 import '../utils/web_helpers_stub.dart'
-    if (dart.library.html) '../utils/web_helpers_web.dart';
+    if (dart.library.js_interop) '../utils/web_helpers_web.dart';
 import 'file_upload.dart';
 import '../utils/suppress_browser_menu.dart';
 

@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../ws/ws_client.dart';
 import '../utils/web_helpers_stub.dart'
-    if (dart.library.html) '../utils/web_helpers_web.dart';
+    if (dart.library.js_interop) '../utils/web_helpers_web.dart';
 
 /// libghostty-backed terminal, a drop-in alternative to [ContainerTerminal]
 /// (the `xterm` widget). Same public surface — `{key, wsClient}` plus a

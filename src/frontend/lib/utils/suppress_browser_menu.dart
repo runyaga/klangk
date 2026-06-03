@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
-import 'web_helpers_stub.dart' if (dart.library.html) 'web_helpers_web.dart';
+import 'web_helpers_stub.dart'
+    if (dart.library.js_interop) 'web_helpers_web.dart';
 
 /// Suppresses the browser's native context menu within this widget's area.
 class SuppressBrowserContextMenu extends StatelessWidget {

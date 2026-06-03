@@ -1,34 +1,39 @@
-import 'dart:html' as html;
+import 'dart:async';
+import 'dart:js_interop';
+import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
+import 'package:web/web.dart' as web;
 
 /// Open a URL in a new browser tab.
 void openUrl(String url) {
-  html.window.open(url, '_blank');
+  web.window.open(url, '_blank');
 }
 
 /// Download bytes as a file via a temporary blob URL.
 void downloadBytes(List<int> bytes, String filename) {
-  final blob = html.Blob([bytes]);
-  final blobUrl = html.Url.createObjectUrlFromBlob(blob);
-  final anchor = html.AnchorElement(href: blobUrl)..download = filename;
+  final parts = [Uint8List.fromList(bytes).toJS].toJS;
+  final blob = web.Blob(parts);
+  final blobUrl = web.URL.createObjectURL(blob);
+  final anchor = web.HTMLAnchorElement()
+    ..href = blobUrl
+    ..download = filename;
   anchor.click();
-  html.Url.revokeObjectUrl(blobUrl);
+  web.URL.revokeObjectURL(blobUrl);
 }
 
 /// Briefly suppress the browser context menu (for right-click handling).
 void suppressContextMenuBriefly() {
-  void suppress(html.Event e) {
+  final handler = ((web.Event e) {
     e.preventDefault();
-  }
-
-  html.document.addEventListener('contextmenu', suppress);
+  }).toJS;
+  web.document.addEventListener('contextmenu', handler);
   Future.delayed(const Duration(milliseconds: 100), () {
-    html.document.removeEventListener('contextmenu', suppress);
+    web.document.removeEventListener('contextmenu', handler);
   });
 }
 
 /// Get the browser's location hash fragment.
-String getLocationHash() => html.window.location.hash;
+String getLocationHash() => web.window.location.hash;
 
 /// Web implementation — suppresses native browser context menu on right-click.
 Widget buildSuppressor(Widget child) {

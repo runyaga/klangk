@@ -6,7 +6,7 @@ import 'app.dart';
 import 'auth/auth_service.dart';
 import 'ws/ws_client.dart';
 import 'utils/web_helpers_stub.dart'
-    if (dart.library.html) 'utils/web_helpers_web.dart';
+    if (dart.library.js_interop) 'utils/web_helpers_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
