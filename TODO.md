@@ -54,6 +54,7 @@
 
 ## Soliplex Integration
 
+- **Soliplex plugin should use all credentials if they exist**: The soliplex plugin currently uses a single set of credentials. It should detect and use all available credentials (e.g., multiple API keys or accounts) when present.
 - **Prevent soliplex tools from being called for non-Soliplex queries**: The LLM calls `soliplex_list_rooms` speculatively for general knowledge questions. Update the soliplex extension's tool description to make it clear it's only for querying Soliplex knowledge bases.
 
 ## Docker
@@ -78,4 +79,5 @@
 - **E2E: use UI instead of API for setup/teardown**: E2E tests currently use the API directly to upload files, delete workspaces, etc. These should use the UI instead to better test real user flows and catch UI-level regressions.
 - **E2E: "navigate to workspace" flaky timeout**: The "navigate to workspace and see IDE layout" test intermittently fails with "Container did not become ready within 120s". The `openWorkspace` helper listens for `container_ready` on the WebSocket, but sometimes the WebSocket connection or container startup takes too long. Investigate whether the WebSocket listener is missing the event (race between `page.goto` and `page.on('websocket')`) or if container startup is genuinely slow.
 
+- **E2E: logout in one tab should not log out another**: Write a Flutter E2E test that opens two browser contexts (tabs) logged into the same account, navigates both to the same workspace, clicks logout in one, and asserts that the other tab remains connected (terminal still works, no redirect to login). Currently untested — logout may be clearing shared state (e.g., revoking the JWT) that affects all sessions for that user.
 - **E2E: frontend teardown leaves nginx running**: The frontend E2E global teardown (`global-teardown.ts`) kills the backend server but doesn't reliably kill the nginx LLM proxy process. The leftover nginx holds port 18995, causing CLI E2E tests to fail with "address already in use" if run after frontend E2E tests in the same session.
