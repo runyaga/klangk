@@ -118,6 +118,62 @@ test.describe("Klangk E2E", () => {
     }
   });
 
+  test("terminal pastes via keyboard shortcut (native paste event)", async ({
+    page,
+    request,
+  }) => {
+    // Regression: on Firefox, paste went through Flutter's Clipboard.getData
+    // (navigator.clipboard.readText), which returns nothing for externally
+    // copied text, so Ctrl/Cmd+V silently failed. The fix reads the browser's
+    // native `paste` event instead. This exercises the real keypress path so
+    // it catches a regression on any browser.
+    const termReady = waitForTerminalReady(page);
+    const { workspaceId, headers, cleanup } = await createAndOpenWorkspace(
+      page,
+      request,
+      "term-paste",
+    );
+    await termReady;
+
+    try {
+      // chromium needs explicit clipboard permission; firefox/webkit don't
+      // support granting it and don't need it for the paste-event read.
+      try {
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+      } catch {
+        /* unsupported on firefox/webkit — fine */
+      }
+
+      const cmd = "echo playwright-paste-test > /home/klangk/work/.paste-test";
+      await page.evaluate((t) => navigator.clipboard.writeText(t), cmd);
+
+      const { width, height } = vp(page);
+      const f = fv(page);
+      await f.click({
+        position: { x: width / 2, y: height / 2 },
+        force: true,
+      });
+      await page.waitForTimeout(1000);
+      // ControlOrMeta → Cmd on macOS, Ctrl elsewhere (CI is Linux).
+      await page.keyboard.press("ControlOrMeta+KeyV");
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Enter");
+
+      await waitForFile(request, workspaceId, "work/.paste-test", headers);
+      const readResp = await request.get(
+        `${API_BASE}/workspaces/${workspaceId}/files/content?path=work/.paste-test`,
+        { headers },
+      );
+      expect(readResp.ok()).toBeTruthy();
+      const data = await readResp.json();
+      expect(data.content).toContain("playwright-paste-test");
+    } finally {
+      await cleanup();
+    }
+  });
+
   test("navigate back to workspaces", async ({ page, request }) => {
     const { cleanup } = await createAndOpenWorkspace(page, request, "nav-back");
 
