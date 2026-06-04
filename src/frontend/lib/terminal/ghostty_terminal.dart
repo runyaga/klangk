@@ -75,12 +75,23 @@ class GhosttyTerminalState extends State<GhosttyTerminal> {
     // Paste arrives via the browser's native `paste` event (works on Firefox
     // too, unlike Clipboard.getData). Only consume it when the terminal is
     // focused, so pastes into other inputs (e.g. chat) are left untouched.
-    _removePasteListener = installPasteListener((text) {
-      if (!_focusNode.hasFocus) return false;
-      _terminal.paste(text);
-      return true;
-    });
+    _removePasteListener = installPasteListener(routeNativePaste);
     _loadFont();
+  }
+
+  /// Handles a payload from a browser `paste` event. Only routes it into
+  /// the terminal when the terminal has focus; otherwise leaves the event
+  /// alone so other inputs paste normally. Returns whether the paste was
+  /// consumed.
+  ///
+  /// Public + @visibleForTesting so the focus-gated logic is reachable from
+  /// VM tests; in production this is only invoked from the DOM listener
+  /// installed by [installPasteListener].
+  @visibleForTesting
+  bool routeNativePaste(String text) {
+    if (!_focusNode.hasFocus) return false;
+    _terminal.paste(text);
+    return true;
   }
 
   // flterm measures cell width by laying out 'M' in [_fontFamily]; if the font
