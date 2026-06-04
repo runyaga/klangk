@@ -3,17 +3,10 @@ name: Backend Tests
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "src/backend/**"
-      - ".github/workflows/backend-tests.yml"
-  push:
     branches: [main]
-    paths:
-      - "src/backend/**"
-      - ".github/workflows/backend-tests.yml"
 
 jobs:
-  test:
+  test-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
