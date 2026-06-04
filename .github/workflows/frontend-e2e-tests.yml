@@ -11,6 +11,8 @@ on:
         description: "-g pattern to filter tests; blank = all"
         required: false
         default: ""
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "15 * * * *"
 
@@ -29,7 +31,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" != "schedule" ]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -44,7 +46,7 @@ jobs:
             gh run cancel ${{ github.run_id }}
           fi
 
-  test:
+  test-flutter-e2e:
     needs: check
     if: needs.check.outputs.should_run == 'true'
     runs-on: ubuntu-latest
