@@ -1,4 +1,4 @@
-ARG WORKSPACE_BASE_IMAGE=ghcr.io/mcdonc/klangk/klangk-workspace-base:2026.08.13-8febe27
+ARG WORKSPACE_BASE_IMAGE=ghcr.io/runyaga/klangk/klangk-workspace-base:2026.08.19-1b27613
 FROM $WORKSPACE_BASE_IMAGE
 
 # Install Pi coding agent globally. This layer is expensive (~30s) and
