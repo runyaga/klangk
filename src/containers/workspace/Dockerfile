@@ -4,7 +4,7 @@
 # the platform via --platform. Bumped automatically by the auto-PR opened by
 # .github/workflows/image-workspace-base.yml after each base-image build
 # (the PR rewrites this line with the new repo@digest reference).
-ARG WORKSPACE_BASE_IMAGE=ghcr.io/mcdonc/klangk/klangk-workspace-base@sha256:6b5dda95c510d300369e2b808685b2ac31ac7d4506ace90092fe35ab18fbc9bb
+ARG WORKSPACE_BASE_IMAGE=ghcr.io/runyaga/klangk/klangk-workspace-base@sha256:8864f8f61525d5c74cc3dca4b41b3ed33623c2eb851eeea33f6797345439863d
 FROM $WORKSPACE_BASE_IMAGE
 
 # Install Pi coding agent globally. The tarball is fetched directly from the
